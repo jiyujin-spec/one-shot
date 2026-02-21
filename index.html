@@ -319,7 +319,6 @@
             display: block
         }
 
-        /* Pass purchase button */
         .pass-purchase {
             display: flex;
             align-items: center;
@@ -1001,9 +1000,8 @@
             if (!state.lastRecordDate) { state.streak = 0; return }
             var diff = daysBetween(state.lastRecordDate, today);
             if (diff === 2 && state.passCount > 0) {
-                // Yesterday was missed but user has a pass → auto-rescue
                 state.passCount--;
-                state.lastRecordDate = getAppDate(new Date(Date.now() - 86400000)); // backfill yesterday
+                state.lastRecordDate = getAppDate(new Date(Date.now() - 86400000));
                 saveState();
                 showToast('🎟️ パスを使用してストリークを維持しました');
             } else if (diff >= 2) {
@@ -1036,7 +1034,6 @@
             if (Notification.permission === 'default') {
                 Notification.requestPermission();
             }
-            // Clear existing
             clearTimeout(window._notifyTimer);
             if (!state.notifyTime) return;
             var parts = state.notifyTime.split(':');
@@ -1049,7 +1046,7 @@
                 if (Notification.permission === 'granted' && state.lastRecordDate !== getAppDate()) {
                     new Notification('One Shot', { body: '今日の記録がまだです。5秒で始めよう！', icon: '📷' });
                 }
-                scheduleNotification(); // re-schedule for next day
+                scheduleNotification();
             }, ms);
         }
 
@@ -1155,29 +1152,31 @@
 
         function openCamera() {
             showScreen('camera');
-            resetCameraUI();
+            resetCameraStates();
             initCamera().then(function () { drawLoop() }).catch(function (e) { showToast('カメラエラー: ' + e.message, true); closeCamera() });
         }
 
         function flipCamera() {
             currentFacing = (currentFacing === 'environment') ? 'user' : 'environment';
-            var wasRecording = isRecording;
-            if (wasRecording) return; // don't flip mid-recording
-            if (camStream) { camStream.getTracks().forEach(function (t) { t.stop() }) }
-            if (animFrame) { cancelAnimationFrame(animFrame); animFrame = null }
-            initCamera().then(function () { drawLoop() }).catch(function (e) {
-                showToast('カメラ切替エラー', true);
-                currentFacing = (currentFacing === 'environment') ? 'user' : 'environment';
-                initCamera().then(function () { drawLoop() });
-            });
+            if (isRecording) return;
+            openCamera();
         }
 
-        function resetCameraUI() {
+        function resetCameraStates() {
+            if (mediaRec && mediaRec.state !== 'inactive') { try { mediaRec.stop() } catch (e) { } }
+            if (animFrame) { cancelAnimationFrame(animFrame); animFrame = null }
+            isRecording = false; isFrozen = false; frozenReady = false; chunks = [];
+            if (preparedBlob) { try { URL.revokeObjectURL(preparedBlob) } catch (e) { } preparedBlob = null }
             document.getElementById('camControls').style.display = 'flex';
             document.getElementById('previewControls').style.display = 'none';
             document.getElementById('camTimer').style.display = 'none';
             document.getElementById('shutterBtn').classList.remove('recording');
-            isRecording = false; isFrozen = false; frozenReady = false; chunks = []; preparedBlob = null;
+        }
+
+        function retryRecording() {
+            showToast('撮り直します...');
+            resetCameraStates();
+            openCamera();
         }
 
         function drawLoop() {
@@ -1185,42 +1184,28 @@
             if (!isFrozen) {
                 var vw = videoEl.videoWidth, vh = videoEl.videoHeight;
                 if (vw && vh) {
-                    var targetRatio = 9 / 16, srcRatio = vw / vh;
-                    var sx = 0, sy = 0, sw = vw, sh = vh;
-                    if (srcRatio > targetRatio) { sw = vh * targetRatio; sx = (vw - sw) / 2 }
-                    else { sh = vw / targetRatio; sy = (vh - sh) / 2 }
-                    ctx.filter = 'none';
-                    ctx.drawImage(videoEl, sx, sy, sw, sh, 0, 0, 1080, 1920);
+                    var targetRatio = 9 / 16, srcRatio = vw / vh, sx = 0, sy = 0, sw = vw, sh = vh;
+                    if (srcRatio > targetRatio) { sw = vh * targetRatio; sx = (vw - sw) / 2 } else { sh = vw / targetRatio; sy = (vh - sh) / 2 }
+                    ctx.filter = 'none'; ctx.drawImage(videoEl, sx, sy, sw, sh, 0, 0, 1080, 1920);
                 }
                 if (isRecording) {
                     var elapsed = (Date.now() - recStart) / 1000;
-                    // Countdown: 3→2→1→0 over 3 seconds
                     var countdown = Math.max(0, Math.ceil(3 - elapsed));
                     var timer = document.getElementById('camTimer');
-                    timer.style.display = 'block';
-                    timer.textContent = countdown;
+                    timer.style.display = 'block'; timer.textContent = countdown;
                     if (elapsed >= 3) {
                         timer.textContent = '0';
-                        // FREEZE
-                        offCtx.filter = 'none';
-                        offCtx.drawImage(canvas, 0, 0);
+                        offCtx.filter = 'none'; offCtx.drawImage(canvas, 0, 0);
                         filtCtx.filter = 'brightness(0.7) contrast(1.3) saturate(0.6)';
-                        filtCtx.drawImage(offCanvas, 0, 0);
-                        filtCtx.filter = 'none';
-                        drawOverlayOn(filtCtx);
-                        isFrozen = true; frozenReady = true;
+                        filtCtx.drawImage(offCanvas, 0, 0); filtCtx.filter = 'none';
+                        drawOverlayOn(filtCtx); isFrozen = true; frozenReady = true;
                     }
                 }
             }
             if (isFrozen && frozenReady) {
-                ctx.filter = 'none';
-                ctx.drawImage(filtCanvas, 0, 0);
+                ctx.filter = 'none'; ctx.drawImage(filtCanvas, 0, 0);
                 var elapsed2 = (Date.now() - recStart) / 1000;
-                // After freeze, show remaining time
-                var remain = Math.max(0, Math.ceil(5 - elapsed2));
-                var timer2 = document.getElementById('camTimer');
-                timer2.style.display = 'block';
-                timer2.textContent = '✓';
+                var timer2 = document.getElementById('camTimer'); timer2.style.display = 'block'; timer2.textContent = '✓';
                 if (elapsed2 >= 5) { stopRecording(); return }
             }
             animFrame = requestAnimationFrame(drawLoop);
@@ -1254,34 +1239,23 @@
         function startRecording() {
             if (isRecording) return;
             isRecording = true; isFrozen = false; frozenReady = false; chunks = []; preparedBlob = null;
-            recStart = Date.now();
-            document.getElementById('shutterBtn').classList.add('recording');
+            recStart = Date.now(); document.getElementById('shutterBtn').classList.add('recording');
             var types = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm;codecs=vp8', 'video/webm', 'video/mp4'];
             var mime = ''; for (var i = 0; i < types.length; i++) { try { if (MediaRecorder.isTypeSupported(types[i])) { mime = types[i]; break } } catch (e) { } }
             var canvasStream = canvas.captureStream(30);
             if (camStream) { var at = camStream.getAudioTracks(); for (var j = 0; j < at.length; j++)canvasStream.addTrack(at[j]) }
             try {
-                var opts = mime ? { mimeType: mime } : {};
-                mediaRec = new MediaRecorder(canvasStream, opts);
+                mediaRec = new MediaRecorder(canvasStream, mime ? { mimeType: mime } : {});
                 mediaRec.ondataavailable = function (e) { if (e.data && e.data.size > 0) chunks.push(e.data) };
-                mediaRec.onstop = function () {
-                    var mt = (mediaRec && mediaRec.mimeType) ? mediaRec.mimeType : (mime || 'video/webm');
-                    preparedBlob = new Blob(chunks, { type: mt });
-                    onRecordingComplete();
-                };
-                mediaRec.onerror = function () { showToast('録画エラー', true) };
+                mediaRec.onstop = function () { preparedBlob = new Blob(chunks, { type: mediaRec.mimeType }); onRecordingComplete() };
                 mediaRec.start();
-            } catch (e) { showToast('録画開始エラー: ' + e.message, true); isRecording = false; document.getElementById('shutterBtn').classList.remove('recording') }
+            } catch (e) { showToast('開始エラー', true); isRecording = false }
         }
 
         function stopRecording() {
-            isRecording = false;
-            document.getElementById('shutterBtn').classList.remove('recording');
+            isRecording = false; document.getElementById('shutterBtn').classList.remove('recording');
             document.getElementById('camTimer').style.display = 'none';
-            if (mediaRec && mediaRec.state !== 'inactive') {
-                try { mediaRec.requestData() } catch (e) { }
-                setTimeout(function () { try { if (mediaRec.state !== 'inactive') mediaRec.stop() } catch (e) { } }, 200);
-            }
+            if (mediaRec && mediaRec.state !== 'inactive') { try { mediaRec.requestData(); setTimeout(function () { mediaRec.stop() }, 200) } catch (e) { } }
         }
 
         function onRecordingComplete() {
@@ -1289,43 +1263,26 @@
             document.getElementById('previewControls').style.display = 'flex';
         }
 
-        function retryRecording() {
-            // Stay in camera, just reset and restart preview
-            isFrozen = false; frozenReady = false; chunks = []; preparedBlob = null;
-            document.getElementById('camControls').style.display = 'flex';
-            document.getElementById('previewControls').style.display = 'none';
-            document.getElementById('camTimer').style.display = 'none';
-            document.getElementById('shutterBtn').classList.remove('recording');
-            isRecording = false;
-            // Camera stream is still alive, just restart draw loop
-            if (!animFrame) drawLoop();
-        }
-
         async function saveRecording() {
             try {
-                if (!preparedBlob || preparedBlob.size < 100) { showToast('録画データなし', true); return }
+                if (!preparedBlob || preparedBlob.size < 100) { showToast('データなし', true); return }
                 var today = getAppDate(), dayNum = state.streak + 1;
                 await saveVideoToDB(preparedBlob, today, dayNum);
-                recordToday();
-                showToast('✓ DAY ' + state.streak + ' 保存完了！');
-                closeCameraOnly();
-                showScreen('home');
-            } catch (e) { showToast('保存失敗: ' + e.message, true) }
+                recordToday(); showToast('✓ DAY ' + state.streak + ' 保存完了！');
+                closeCameraOnly(); showScreen('home');
+            } catch (e) { showToast('保存失敗', true) }
         }
 
         function closeCameraOnly() {
             if (animFrame) { cancelAnimationFrame(animFrame); animFrame = null }
             if (camStream) { camStream.getTracks().forEach(function (t) { t.stop() }); camStream = null }
             isRecording = false; isFrozen = false; frozenReady = false;
-            document.getElementById('camTimer').style.display = 'none';
         }
 
         function closeCamera() { closeCameraOnly(); showScreen('home') }
 
-        // ===== INIT =====
         (async function () {
-            loadState();
-            try { await openDB() } catch (e) { }
+            loadState(); try { await openDB() } catch (e) { }
             var n = new Date(); calYear = n.getFullYear(); calMonth = n.getMonth();
             if (!state.onboarded) showScreen('onboarding');
             else { showScreen('home'); scheduleNotification() }
