@@ -1,0 +1,2245 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+        content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#0A0A0A">
+    <title>One Shot - ワンショット</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        /* ===== CSS Variables ===== */
+        :root {
+            --bg-primary: #0A0A0A;
+            --bg-secondary: #151515;
+            --bg-card: #1A1A1A;
+            --text-primary: #FFFFFF;
+            --text-secondary: #A0A0A0;
+            --text-muted: #606060;
+            --accent: #E53935;
+            --accent-glow: rgba(229, 57, 53, 0.4);
+            --success: #4CAF50;
+            --warning: #FF9800;
+            --glass: rgba(255, 255, 255, 0.08);
+            --glass-border: rgba(255, 255, 255, 0.1);
+            --safe-top: env(safe-area-inset-top, 0px);
+            --safe-bottom: env(safe-area-inset-bottom, 0px);
+        }
+
+        /* ===== Reset & Base ===== */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        html,
+        body {
+            height: 100%;
+            overflow: hidden;
+            background: #000000;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            color: var(--text-primary);
+            line-height: 1.4;
+        }
+
+        /* ===== App Container (PC Centered) ===== */
+        #app {
+            max-width: 480px;
+            width: 100%;
+            height: 100%;
+            margin: 0 auto;
+            background: var(--bg-primary);
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* ===== Main Content Area ===== */
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            padding-top: var(--safe-top);
+        }
+
+        /* ===== Screens ===== */
+        .screen {
+            display: none;
+            flex-direction: column;
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .screen.active {
+            display: flex;
+        }
+
+        .screen-scrollable {
+            flex: 1;
+            overflow-y: auto;
+            overflow-x: hidden;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        /* ===== Fixed Tab Bar ===== */
+        .tab-bar {
+            display: flex;
+            background: var(--bg-secondary);
+            border-top: 1px solid var(--glass-border);
+            padding: 0.5rem 1rem;
+            padding-bottom: calc(0.5rem + var(--safe-bottom));
+            flex-shrink: 0;
+        }
+
+        .tab-item {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.25rem;
+            padding: 0.5rem;
+            background: transparent;
+            border: none;
+            color: var(--text-muted);
+            font-size: 0.7rem;
+            font-family: inherit;
+            cursor: pointer;
+            transition: color 0.2s;
+        }
+
+        .tab-item.active {
+            color: var(--accent);
+        }
+
+        .tab-icon {
+            font-size: 1.5rem;
+        }
+
+        .tab-label {
+            font-weight: 600;
+        }
+
+        /* ===== Onboarding Screen ===== */
+        #onboarding {
+            padding: 2rem 1.5rem;
+            justify-content: center;
+            background: linear-gradient(180deg, var(--bg-primary) 0%, var(--bg-secondary) 100%);
+            overflow-y: auto;
+        }
+
+        .onboarding-header {
+            text-align: center;
+            margin-bottom: 3rem;
+        }
+
+        .onboarding-header h1 {
+            font-size: 2.5rem;
+            font-weight: 900;
+            letter-spacing: -0.02em;
+            margin-bottom: 0.5rem;
+        }
+
+        .onboarding-header p {
+            color: var(--text-secondary);
+            font-size: 1rem;
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+            margin-bottom: 0.5rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 1rem;
+            background: var(--glass);
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            color: var(--text-primary);
+            font-size: 1.1rem;
+            font-family: inherit;
+            outline: none;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        .form-input:focus {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px var(--accent-glow);
+        }
+
+        .form-input::placeholder {
+            color: var(--text-muted);
+        }
+
+        .notification-times {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+
+        .time-chip {
+            flex: 1;
+            min-width: 80px;
+            padding: 0.75rem 1rem;
+            background: var(--glass);
+            border: 1px solid var(--glass-border);
+            border-radius: 10px;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-align: center;
+        }
+
+        .time-chip.active {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: white;
+        }
+
+        .time-chip input {
+            background: transparent;
+            border: none;
+            color: inherit;
+            font-size: inherit;
+            font-family: inherit;
+            text-align: center;
+            width: 100%;
+            outline: none;
+        }
+
+        /* ===== Buttons ===== */
+        .btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            padding: 1rem 2rem;
+            border: none;
+            border-radius: 14px;
+            font-size: 1.1rem;
+            font-weight: 700;
+            font-family: inherit;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: var(--accent);
+            color: white;
+            box-shadow: 0 4px 20px var(--accent-glow);
+        }
+
+        .btn-primary:active {
+            transform: scale(0.98);
+        }
+
+        .btn-secondary {
+            background: var(--glass);
+            color: var(--text-primary);
+            border: 1px solid var(--glass-border);
+        }
+
+        .btn-ghost {
+            background: transparent;
+            color: var(--text-secondary);
+        }
+
+        /* ===== Home Screen ===== */
+        #home {
+            padding: 1.5rem;
+        }
+
+        .home-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+        }
+
+        .home-title {
+            font-size: 1.5rem;
+            font-weight: 800;
+        }
+
+        .settings-btn {
+            width: 44px;
+            height: 44px;
+            background: var(--glass);
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            color: var(--text-primary);
+            font-size: 1.2rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* Streak Card */
+        .streak-card {
+            background: linear-gradient(135deg, var(--bg-card) 0%, var(--bg-secondary) 100%);
+            border: 1px solid var(--glass-border);
+            border-radius: 20px;
+            padding: 2rem;
+            text-align: center;
+            margin-bottom: 1.5rem;
+        }
+
+        .streak-label {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            margin-bottom: 0.5rem;
+        }
+
+        .streak-count {
+            font-size: 5rem;
+            font-weight: 900;
+            line-height: 1;
+            background: linear-gradient(135deg, var(--text-primary) 0%, var(--text-secondary) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .streak-unit {
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: var(--text-secondary);
+            margin-top: 0.5rem;
+        }
+
+        .goal-display {
+            margin-top: 1.5rem;
+            padding-top: 1.5rem;
+            border-top: 1px solid var(--glass-border);
+        }
+
+        .goal-text {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        /* Pass Display */
+        .pass-display {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: var(--glass);
+            border: 1px solid var(--glass-border);
+            border-radius: 14px;
+            padding: 1rem 1.25rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .pass-info {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .pass-icon {
+            font-size: 1.5rem;
+        }
+
+        .pass-label {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+        }
+
+        .pass-count {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: var(--warning);
+        }
+
+        .pass-buy-btn {
+            padding: 0.5rem 1rem;
+            background: var(--warning);
+            border: none;
+            border-radius: 8px;
+            color: #000;
+            font-size: 0.85rem;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        /* Record Button */
+        .record-section {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 1rem;
+        }
+
+        .record-btn {
+            width: 140px;
+            height: 140px;
+            border-radius: 50%;
+            background: var(--accent);
+            border: 6px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 0 40px var(--accent-glow), inset 0 0 30px rgba(0, 0, 0, 0.2);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+            position: relative;
+        }
+
+        .record-btn::before {
+            content: '';
+            width: 50px;
+            height: 50px;
+            background: white;
+            border-radius: 8px;
+            transition: all 0.2s;
+        }
+
+        .record-btn:active {
+            transform: scale(0.95);
+        }
+
+        .record-hint {
+            font-size: 0.9rem;
+            color: var(--text-muted);
+        }
+
+        .today-status {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.75rem 1.25rem;
+            background: var(--success);
+            border-radius: 20px;
+            color: white;
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+
+        .today-status.pending {
+            background: var(--glass);
+            color: var(--text-secondary);
+        }
+
+        /* Nav Bar (Legacy - replaced by tab-bar) */
+        .nav-bar {
+            display: none;
+        }
+
+        .nav-item {
+            display: none;
+        }
+
+        .nav-icon {
+            font-size: 1.5rem;
+        }
+
+        /* ===== Camera Screen ===== */
+        #camera {
+            background: #000;
+        }
+
+        .camera-header {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem;
+            padding-top: calc(1rem + var(--safe-top));
+            z-index: 10;
+        }
+
+        .camera-close {
+            width: 44px;
+            height: 44px;
+            background: var(--glass);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: none;
+            border-radius: 50%;
+            color: white;
+            font-size: 1.5rem;
+            cursor: pointer;
+        }
+
+        .camera-timer {
+            font-size: 2rem;
+            font-weight: 900;
+            color: white;
+            text-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .camera-timer.visible {
+            opacity: 1;
+        }
+
+        #video-preview {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        /* Overlay Elements */
+        .overlay-elements {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            pointer-events: none;
+            padding: 1rem;
+            padding-top: calc(4rem + var(--safe-top));
+            padding-bottom: calc(6rem + var(--safe-bottom));
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        .overlay-top {
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .overlay-streak {
+            font-size: 1.5rem;
+            font-weight: 900;
+            color: white;
+            text-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+        }
+
+        .overlay-date {
+            font-size: 1rem;
+            font-weight: 600;
+            color: white;
+            text-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+            text-align: right;
+        }
+
+        .overlay-goal {
+            text-align: center;
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: white;
+            text-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+            background: rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            padding: 0.75rem 1.5rem;
+            border-radius: 30px;
+            align-self: center;
+        }
+
+        .camera-controls {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 2rem;
+            padding-bottom: calc(2rem + var(--safe-bottom));
+        }
+
+        .camera-capture-btn {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            background: white;
+            border: 4px solid rgba(255, 255, 255, 0.4);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            cursor: pointer;
+            transition: all 0.2s;
+            position: relative;
+        }
+
+        .camera-capture-btn.recording {
+            background: var(--accent);
+        }
+
+        .camera-capture-btn.recording::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 24px;
+            height: 24px;
+            background: white;
+            border-radius: 4px;
+        }
+
+        /* ===== Preview Screen ===== */
+        #preview {
+            background: #000;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+
+        #preview-video {
+            width: 100%;
+            max-height: calc(100% - 80px);
+            object-fit: contain;
+        }
+
+        .preview-controls {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            display: flex;
+            gap: 1rem;
+            padding: 1.5rem;
+            padding-bottom: calc(1.5rem + var(--safe-bottom));
+            background: linear-gradient(transparent, rgba(0, 0, 0, 0.8));
+        }
+
+        .preview-controls .btn {
+            flex: 1;
+        }
+
+        /* ===== Calendar Screen ===== */
+
+        .calendar-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+        }
+
+        .calendar-title {
+            font-size: 1.25rem;
+            font-weight: 700;
+        }
+
+        .calendar-nav {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .calendar-nav-btn {
+            width: 36px;
+            height: 36px;
+            background: var(--glass);
+            border: 1px solid var(--glass-border);
+            border-radius: 8px;
+            color: var(--text-primary);
+            font-size: 1rem;
+            cursor: pointer;
+        }
+
+        .calendar-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 4px;
+        }
+
+        .calendar-day-header {
+            text-align: center;
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            padding: 0.5rem 0;
+        }
+
+        .calendar-day {
+            aspect-ratio: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: var(--glass);
+            border: 1px solid var(--glass-border);
+            border-radius: 8px;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .calendar-day.empty {
+            background: transparent;
+            border: none;
+            cursor: default;
+        }
+
+        .calendar-day.today {
+            border-color: var(--accent);
+        }
+
+        .calendar-day.recorded {
+            background: var(--success);
+            border-color: var(--success);
+            color: white;
+        }
+
+        .calendar-day.passed {
+            background: var(--warning);
+            border-color: var(--warning);
+            color: #000;
+        }
+
+        .calendar-day.missed {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: white;
+        }
+
+        .calendar-day-thumb {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            opacity: 0.7;
+        }
+
+        .calendar-day-num {
+            position: relative;
+            z-index: 1;
+            font-weight: 600;
+        }
+
+        /* ===== Video Modal ===== */
+        .video-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.95);
+            z-index: 100;
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .video-modal.active {
+            display: flex;
+        }
+
+        .video-modal-close {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            width: 44px;
+            height: 44px;
+            background: var(--glass);
+            border: none;
+            border-radius: 50%;
+            color: white;
+            font-size: 1.5rem;
+            cursor: pointer;
+            z-index: 101;
+        }
+
+        .video-modal video {
+            max-width: 100%;
+            max-height: 80vh;
+            border-radius: 12px;
+        }
+
+        /* ===== Settings Screen ===== */
+        #settings {
+            padding: 1.5rem;
+            overflow-y: auto;
+        }
+
+        .settings-header {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .settings-back {
+            width: 44px;
+            height: 44px;
+            background: var(--glass);
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            color: var(--text-primary);
+            font-size: 1.2rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .settings-title {
+            font-size: 1.5rem;
+            font-weight: 700;
+        }
+
+        .settings-section {
+            margin-bottom: 2rem;
+        }
+
+        .settings-section-title {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 1rem;
+        }
+
+        .settings-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 1rem;
+            background: var(--glass);
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            margin-bottom: 0.5rem;
+        }
+
+        .settings-item-label {
+            font-size: 1rem;
+            font-weight: 500;
+        }
+
+        .settings-item input[type="text"],
+        .settings-item input[type="time"] {
+            background: var(--bg-primary);
+            border: 1px solid var(--glass-border);
+            border-radius: 8px;
+            padding: 0.5rem 0.75rem;
+            color: var(--text-primary);
+            font-size: 1rem;
+            font-family: inherit;
+            text-align: right;
+        }
+
+        .toggle-switch {
+            width: 52px;
+            height: 28px;
+            background: var(--text-muted);
+            border-radius: 14px;
+            position: relative;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .toggle-switch.active {
+            background: var(--success);
+        }
+
+        .toggle-switch::after {
+            content: '';
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            width: 24px;
+            height: 24px;
+            background: white;
+            border-radius: 50%;
+            transition: transform 0.2s;
+        }
+
+        .toggle-switch.active::after {
+            transform: translateX(24px);
+        }
+
+        .danger-btn {
+            width: 100%;
+            padding: 1rem;
+            background: var(--accent);
+            border: none;
+            border-radius: 12px;
+            color: white;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        /* ===== Animations ===== */
+        @keyframes pulse {
+
+            0%,
+            100% {
+                transform: scale(1);
+            }
+
+            50% {
+                transform: scale(1.05);
+            }
+        }
+
+        @keyframes recording-pulse {
+
+            0%,
+            100% {
+                box-shadow: 0 0 0 0 var(--accent-glow);
+            }
+
+            50% {
+                box-shadow: 0 0 0 20px transparent;
+            }
+        }
+
+        .recording .camera-capture-btn {
+            animation: recording-pulse 1s infinite;
+        }
+
+        /* ===== Hidden Canvas ===== */
+        #composite-canvas {
+            display: none;
+        }
+
+        /* ===== History List ===== */
+        .history-section {
+            margin-top: 1.5rem;
+        }
+
+        .history-section-title {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 1rem;
+        }
+
+        #history-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .history-item {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            padding: 0.75rem 1rem;
+            background: var(--glass);
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .history-item:hover {
+            background: rgba(255, 255, 255, 0.12);
+        }
+
+        .history-date {
+            display: flex;
+            align-items: baseline;
+            gap: 0.25rem;
+        }
+
+        .history-date-num {
+            font-size: 1rem;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        .history-date-day {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        .history-info {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 0.125rem;
+        }
+
+        .history-streak {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--success);
+        }
+
+        .history-goal {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .history-play-btn {
+            width: 36px;
+            height: 36px;
+            background: var(--accent);
+            border: none;
+            border-radius: 50%;
+            color: white;
+            font-size: 1rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .history-empty {
+            text-align: center;
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            padding: 2rem 1rem;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="app">
+        <!-- ===== Onboarding Screen ===== -->
+        <div id="onboarding" class="screen active">
+            <div class="onboarding-header">
+                <h1>One Shot</h1>
+                <p>成功までの1コマを5秒で記録</p>
+            </div>
+
+            <div class="form-group">
+                <label>習慣にしたい目標</label>
+                <input type="text" class="form-input" id="goal-input" placeholder="例: # 朝の読書 15分">
+            </div>
+
+            <div class="form-group">
+                <label>通知タイミング</label>
+                <div class="notification-times">
+                    <div class="time-chip active" data-time="morning">
+                        <span>朝</span>
+                    </div>
+                    <div class="time-chip active" data-time="evening">
+                        <span>夜</span>
+                    </div>
+                    <div class="time-chip" data-time="custom">
+                        <input type="time" id="custom-time" value="20:00">
+                    </div>
+                </div>
+            </div>
+
+            <button class="btn btn-primary" id="start-btn" style="margin-top: 2rem;">
+                はじめる →
+            </button>
+        </div>
+
+        <!-- ===== Home Screen ===== -->
+        <div id="home" class="screen">
+            <div class="screen-scrollable" style="padding: 1.5rem;">
+                <div class="home-header">
+                    <div class="home-title">One Shot</div>
+                    <button class="settings-btn" id="settings-open-btn">⚙️</button>
+                </div>
+
+                <div class="streak-card">
+                    <div class="streak-label">継続日数</div>
+                    <div class="streak-count" id="streak-display">0</div>
+                    <div class="streak-unit">DAYS</div>
+                    <div class="goal-display">
+                        <div class="goal-text" id="goal-display"># 朝の読書 15分</div>
+                    </div>
+                </div>
+
+                <div class="pass-display">
+                    <div class="pass-info">
+                        <span class="pass-icon">🎟️</span>
+                        <div>
+                            <div class="pass-label">パス残数</div>
+                            <div class="pass-count" id="pass-count">1</div>
+                        </div>
+                    </div>
+                    <button class="pass-buy-btn" id="buy-pass-btn">+100円で追加</button>
+                </div>
+
+                <div class="record-section">
+                    <div class="today-status pending" id="today-status">
+                        まだ今日の記録がありません
+                    </div>
+                    <button class="record-btn" id="record-open-btn"></button>
+                    <div class="record-hint">タップして5秒動画を撮影</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== Camera Screen ===== -->
+        <div id="camera" class="screen">
+            <div class="camera-header">
+                <button class="camera-close" id="camera-close-btn">✕</button>
+                <div class="camera-timer" id="camera-timer">5</div>
+                <div style="width: 44px;"></div>
+            </div>
+
+            <video id="video-preview" autoplay playsinline muted></video>
+
+            <div class="overlay-elements">
+                <div class="overlay-top">
+                    <div class="overlay-streak" id="overlay-streak">DAY 1</div>
+                    <div class="overlay-date" id="overlay-date">2026.02.08<br>22:20</div>
+                </div>
+                <div class="overlay-goal" id="overlay-goal"># 朝の読書 15分</div>
+            </div>
+
+            <div class="camera-controls">
+                <button class="camera-capture-btn" id="camera-capture-btn"></button>
+            </div>
+        </div>
+
+        <!-- ===== Preview Screen ===== -->
+        <div id="preview" class="screen">
+            <video id="preview-video" autoplay loop playsinline muted></video>
+
+            <div class="overlay-elements">
+                <div class="overlay-top">
+                    <div class="overlay-streak" id="preview-overlay-streak">DAY 1</div>
+                    <div class="overlay-date" id="preview-overlay-date">2026.02.08<br>22:20</div>
+                </div>
+                <div class="overlay-goal" id="preview-overlay-goal"># 朝の読書 15分</div>
+            </div>
+
+            <div class="preview-controls">
+                <button class="btn btn-secondary" id="retake-btn">撮り直す</button>
+                <button class="btn btn-primary" id="save-btn">保存する</button>
+            </div>
+        </div>
+
+        <!-- ===== Calendar Screen ===== -->
+        <div id="calendar-screen" class="screen">
+            <div class="screen-scrollable" style="padding: 1.5rem;">
+                <div class="calendar-header">
+                    <div class="calendar-title" id="calendar-title">2026年 2月</div>
+                    <div class="calendar-nav">
+                        <button class="calendar-nav-btn" id="cal-prev">◀</button>
+                        <button class="calendar-nav-btn" id="cal-next">▶</button>
+                    </div>
+                </div>
+
+                <div class="calendar-grid" id="calendar-grid"></div>
+
+                <!-- History List -->
+                <div class="history-section">
+                    <div class="history-section-title">履歴</div>
+                    <div id="history-list"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== Settings Screen ===== -->
+        <div id="settings" class="screen">
+            <div class="settings-header">
+                <button class="settings-back" id="settings-back-btn">←</button>
+                <div class="settings-title">設定</div>
+            </div>
+
+            <div class="settings-section">
+                <div class="settings-section-title">目標</div>
+                <div class="settings-item">
+                    <span class="settings-item-label">目標名</span>
+                    <input type="text" id="settings-goal" value="# 朝の読書 15分">
+                </div>
+            </div>
+
+            <div class="settings-section">
+                <div class="settings-section-title">通知</div>
+                <div class="settings-item">
+                    <span class="settings-item-label">朝の通知 (8:00)</span>
+                    <div class="toggle-switch active" id="notify-morning"></div>
+                </div>
+                <div class="settings-item">
+                    <span class="settings-item-label">夜の通知 (21:00)</span>
+                    <div class="toggle-switch active" id="notify-evening"></div>
+                </div>
+                <div class="settings-item">
+                    <span class="settings-item-label">カスタム通知</span>
+                    <input type="time" id="settings-custom-time" value="20:00">
+                </div>
+            </div>
+
+            <div class="settings-section">
+                <div class="settings-section-title">パス</div>
+                <div class="settings-item">
+                    <span class="settings-item-label">無料パス残数</span>
+                    <span id="settings-pass-count">1</span>
+                </div>
+                <div class="settings-item">
+                    <span class="settings-item-label">パスを使用してストリーク維持</span>
+                    <button class="btn btn-secondary" id="use-pass-btn"
+                        style="padding: 0.5rem 1rem; font-size: 0.85rem;">使用</button>
+                </div>
+            </div>
+
+            <div class="settings-section">
+                <div class="settings-section-title">データ</div>
+                <button class="danger-btn" id="reset-data-btn">すべてのデータをリセット</button>
+            </div>
+        </div>
+
+        <!-- ===== Video Modal ===== -->
+        <div class="video-modal" id="video-modal">
+            <button class="video-modal-close" id="modal-close-btn">✕</button>
+            <video id="modal-video" controls playsinline></video>
+        </div>
+
+        <!-- ===== Fixed Tab Bar ===== -->
+        <div class="tab-bar" id="main-tab-bar">
+            <button class="tab-item active" data-screen="home">
+                <span class="tab-icon">📹</span>
+                <span class="tab-label">Today</span>
+            </button>
+            <button class="tab-item" data-screen="calendar-screen">
+                <span class="tab-icon">📅</span>
+                <span class="tab-label">History</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Hidden Canvas for Composite -->
+    <canvas id="composite-canvas"></canvas>
+
+    <script>
+        // ===== App State =====
+        const APP = {
+            goal: '',
+            streak: 0,
+            passes: 1,
+            lastRecordDate: null,
+            lastPassGrant: null,
+            notifications: {
+                morning: true,
+                evening: true,
+                customTime: '20:00'
+            },
+            currentCalendarDate: new Date(),
+            records: {}, // { 'YYYY-MM-DD': { videoBlob, timestamp, streak } }
+            isRecording: false,
+            mediaRecorder: null,
+            recordedChunks: [],
+            videoStream: null,
+            canvasProcessor: null
+        };
+
+        // ===== Canvas Processor (Core Logic) =====
+        class CanvasProcessor {
+            constructor(videoElement, canvasElement) {
+                this.video = videoElement;
+                this.canvas = canvasElement;
+                this.ctx = canvasElement.getContext('2d', { alpha: false });
+                this.isActive = false;
+                this.startTime = 0;
+                this.frozenFrame = null;
+                this.animationFrameId = null;
+
+                // Overlay assets configuration
+                this.overlayConfig = {
+                    reticleSize: 40,
+                    reticleThickness: 4,
+                    reticleColor: '#FFFFFF',
+                    gradientHeightRatio: 0.35
+                };
+            }
+
+            start() {
+                this.isActive = true;
+                this.startTime = Date.now();
+                this.frozenFrame = null;
+
+                // Set canvas size to match video stream resolution
+                const track = this.video.srcObject.getVideoTracks()[0];
+                const settings = track.getSettings();
+                this.canvas.width = settings.width || this.video.videoWidth;
+                this.canvas.height = settings.height || this.video.videoHeight;
+
+                this.loop();
+            }
+
+            stop() {
+                this.isActive = false;
+                if (this.animationFrameId) {
+                    cancelAnimationFrame(this.animationFrameId);
+                }
+            }
+
+            loop() {
+                if (!this.isActive) return;
+
+                const now = Date.now();
+                const elapsed = now - this.startTime;
+
+                // Clear canvas
+                this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
+                if (elapsed < 3000) {
+                    // === Phase 1: Live Video (0-3s) ===
+                    this.ctx.filter = 'none';
+                    this.ctx.drawImage(this.video, 0, 0, this.canvas.width, this.canvas.height);
+                } else {
+                    // === Phase 2: Frozen & Processed (3-5s) ===
+
+                    // Capture freeze frame once
+                    if (!this.frozenFrame) {
+                        // Draw current frame to canvas first to capture it
+                        this.ctx.drawImage(this.video, 0, 0, this.canvas.width, this.canvas.height);
+                        // Create a bitmap or generic offscreen canvas could work, 
+                        // but since we are drawing every frame, we can just stop drawing the video
+                        // and draw the *last drawn content* if we had saved it.
+                        // Better: Draw the video one last time to an offscreen canvas.
+                        this.frozenFrame = document.createElement('canvas');
+                        this.frozenFrame.width = this.canvas.width;
+                        this.frozenFrame.height = this.canvas.height;
+                        const fCtx = this.frozenFrame.getContext('2d');
+                        fCtx.drawImage(this.video, 0, 0, this.canvas.width, this.canvas.height);
+                    }
+
+                    // Draw the frozen frame with filters
+                    // Filter: brightness(70%) contrast(130%) saturate(60%)
+                    this.ctx.filter = 'brightness(70%) contrast(130%) saturate(60%)';
+                    this.ctx.drawImage(this.frozenFrame, 0, 0, this.canvas.width, this.canvas.height);
+                    this.ctx.filter = 'none'; // Reset filter for overlays
+
+                    // Draw Overlays
+                    this.drawOverlays();
+                }
+
+                this.animationFrameId = requestAnimationFrame(() => this.loop());
+            }
+
+            drawOverlays() {
+                const w = this.canvas.width;
+                const h = this.canvas.height;
+                const ctx = this.ctx;
+
+                // 1. Bottom Gradient (Black -> Transparent)
+                // Note: The prompt says "black to transparent linear gradient at bottom 30%"
+                // Usually this means transparent at top of the gradient area, black at bottom.
+                const gradientH = h * this.overlayConfig.gradientHeightRatio;
+                const gradient = ctx.createLinearGradient(0, h - gradientH, 0, h);
+                gradient.addColorStop(0, 'rgba(0,0,0,0)');
+                gradient.addColorStop(1, 'rgba(0,0,0,1)'); // Solid black at bottom
+
+                ctx.fillStyle = gradient;
+                ctx.fillRect(0, h - gradientH, w, gradientH);
+
+                // 2. L-shaped Reticles (Corners)
+                ctx.strokeStyle = this.overlayConfig.reticleColor;
+                ctx.lineWidth = this.overlayConfig.reticleThickness;
+                ctx.lineCap = 'square';
+
+                const rSize = this.overlayConfig.reticleSize;
+                const padding = 40; // Padding from edges
+
+                ctx.beginPath();
+                // Top-Left
+                ctx.moveTo(padding, padding + rSize);
+                ctx.lineTo(padding, padding);
+                ctx.lineTo(padding + rSize, padding);
+
+                // Top-Right
+                ctx.moveTo(w - padding - rSize, padding);
+                ctx.lineTo(w - padding, padding);
+                ctx.lineTo(w - padding, padding + rSize);
+
+                // Bottom-Right
+                ctx.moveTo(w - padding, h - padding - rSize);
+                ctx.lineTo(w - padding, h - padding);
+                ctx.lineTo(w - padding - rSize, h - padding);
+
+                // Bottom-Left
+                ctx.moveTo(padding + rSize, h - padding);
+                ctx.lineTo(padding, h - padding);
+                ctx.lineTo(padding, h - padding - rSize);
+
+                ctx.stroke();
+
+                // 3. Text Metadata
+                // Font setup
+                const dateObj = new Date();
+                const dayStr = `DAY ${APP.streak + 1}`;
+                const { date, time } = formatDateForOverlay(dateObj); // Use helper
+                const goalStr = APP.goal || '# GOAL';
+
+                ctx.fillStyle = '#FFFFFF';
+                // Shadow
+                ctx.shadowColor = 'rgba(0,0,0,0.8)';
+                ctx.shadowBlur = 10;
+                ctx.shadowOffsetX = 0;
+                ctx.shadowOffsetY = 2;
+
+                // Top-Left: DAY XXX (Extra Large)
+                ctx.font = '900 120px Inter, sans-serif';
+                // Adjust font size based on resolution? 120px is huge for 1080p, good.
+                // Let's scale font relative to width
+                const largeFontSize = Math.floor(w * 0.12);
+                ctx.font = `900 ${largeFontSize}px Inter, sans-serif`;
+                ctx.textAlign = 'left';
+                ctx.textBaseline = 'top';
+                ctx.fillText(dayStr, padding + 20, padding + 20);
+
+                // Top-Right: Date (Small)
+                const smallFontSize = Math.floor(w * 0.04);
+                ctx.font = `600 ${smallFontSize}px Inter, sans-serif`;
+                ctx.textAlign = 'right';
+                // Draw line by line
+                ctx.fillText(date, w - padding - 20, padding + 20);
+                ctx.fillText(time, w - padding - 20, padding + 20 + smallFontSize * 1.2);
+
+                // Bottom-Center: #Goal (Medium)
+                const mediumFontSize = Math.floor(w * 0.06);
+                ctx.font = `700 ${mediumFontSize}px Inter, sans-serif`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'bottom';
+                ctx.fillText(goalStr, w / 2, h - padding - 40);
+
+                // Reset shadow
+                ctx.shadowColor = 'transparent';
+                ctx.shadowBlur = 0;
+            }
+        }
+
+        // ===== IndexedDB Setup =====
+        let db = null;
+        const DB_NAME = 'OneShotDB';
+        const DB_VERSION = 1;
+
+        async function initDB() {
+            console.log('[DB] Initializing IndexedDB...');
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open(DB_NAME, DB_VERSION);
+
+                request.onerror = (e) => {
+                    console.error('[DB] Failed to open database:', e.target.error);
+                    reject(request.error);
+                };
+
+                request.onsuccess = () => {
+                    db = request.result;
+                    console.log('[DB] Database opened successfully');
+                    resolve(db);
+                };
+
+                request.onupgradeneeded = (e) => {
+                    console.log('[DB] Upgrading database schema...');
+                    const database = e.target.result;
+                    if (!database.objectStoreNames.contains('videos')) {
+                        database.createObjectStore('videos', { keyPath: 'date' });
+                        console.log('[DB] Created videos store');
+                    }
+                    if (!database.objectStoreNames.contains('settings')) {
+                        database.createObjectStore('settings', { keyPath: 'key' });
+                        console.log('[DB] Created settings store');
+                    }
+                };
+            });
+        }
+
+        async function saveVideo(date, blob, metadata) {
+            console.log('[DB] Saving video for date:', date);
+            console.log('[DB] Blob size:', blob.size, 'bytes');
+            console.log('[DB] Metadata:', metadata);
+
+            if (!db) {
+                console.error('[DB] Database not initialized!');
+                throw new Error('Database not initialized');
+            }
+
+            return new Promise((resolve, reject) => {
+                try {
+                    const transaction = db.transaction(['videos'], 'readwrite');
+                    const store = transaction.objectStore('videos');
+
+                    const record = {
+                        date: date,
+                        blob: blob,
+                        timestamp: metadata.timestamp,
+                        streak: metadata.streak,
+                        goal: metadata.goal
+                    };
+
+                    const putRequest = store.put(record);
+
+                    putRequest.onsuccess = () => {
+                        console.log('[DB] Video record created successfully');
+                    };
+
+                    putRequest.onerror = (e) => {
+                        console.error('[DB] Failed to put record:', e.target.error);
+                    };
+
+                    transaction.oncomplete = () => {
+                        console.log('Video saved successfully');
+                        resolve();
+                    };
+
+                    transaction.onerror = (e) => {
+                        console.error('[DB] Transaction error:', e.target.error);
+                        reject(transaction.error);
+                    };
+                } catch (err) {
+                    console.error('[DB] Exception during save:', err);
+                    reject(err);
+                }
+            });
+        }
+
+        async function getVideo(date) {
+            console.log('[DB] Getting video for date:', date);
+            if (!db) {
+                console.error('[DB] Database not initialized!');
+                return null;
+            }
+
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction(['videos'], 'readonly');
+                const store = transaction.objectStore('videos');
+                const request = store.get(date);
+                request.onsuccess = () => {
+                    console.log('[DB] Got video:', request.result ? 'found' : 'not found');
+                    resolve(request.result);
+                };
+                request.onerror = (e) => {
+                    console.error('[DB] Error getting video:', e.target.error);
+                    reject(request.error);
+                };
+            });
+        }
+
+        async function getAllVideos() {
+            console.log('[DB] Getting all videos...');
+            if (!db) {
+                console.error('[DB] Database not initialized!');
+                return [];
+            }
+
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction(['videos'], 'readonly');
+                const store = transaction.objectStore('videos');
+                const request = store.getAll();
+                request.onsuccess = () => {
+                    console.log('[DB] Retrieved', request.result.length, 'videos');
+                    resolve(request.result);
+                };
+                request.onerror = (e) => {
+                    console.error('[DB] Error getting all videos:', e.target.error);
+                    reject(request.error);
+                };
+            });
+        }
+
+        // ===== History List =====
+        async function loadHistory() {
+            console.log('[History] Loading history...');
+            const historyList = document.getElementById('history-list');
+            if (!historyList) {
+                console.warn('[History] history-list element not found');
+                return;
+            }
+
+            try {
+                const videos = await getAllVideos();
+
+                // Sort by date descending
+                videos.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+                if (videos.length === 0) {
+                    historyList.innerHTML = '<div class="history-empty">まだ記録がありません</div>';
+                    return;
+                }
+
+                let html = '';
+                videos.forEach(video => {
+                    const dateStr = video.date;
+                    const dateObj = new Date(dateStr);
+                    const displayDate = `${dateObj.getMonth() + 1}/${dateObj.getDate()}`;
+                    const dayName = ['日', '月', '火', '水', '木', '金', '土'][dateObj.getDay()];
+
+                    html += `
+                        <div class="history-item" data-date="${dateStr}">
+                            <div class="history-date">
+                                <span class="history-date-num">${displayDate}</span>
+                                <span class="history-date-day">(${dayName})</span>
+                            </div>
+                            <div class="history-info">
+                                <span class="history-streak">DAY ${video.streak || '?'}</span>
+                                <span class="history-goal">${video.goal || ''}</span>
+                            </div>
+                            <button class="history-play-btn">▶</button>
+                        </div>
+                    `;
+                });
+
+                historyList.innerHTML = html;
+
+                // Add click handlers
+                historyList.querySelectorAll('.history-item').forEach(item => {
+                    item.addEventListener('click', () => playVideo(item.dataset.date));
+                });
+
+                console.log('[History] Loaded', videos.length, 'items');
+            } catch (err) {
+                console.error('[History] Error loading history:', err);
+                historyList.innerHTML = '<div class="history-empty">履歴の読み込みに失敗しました</div>';
+            }
+        }
+
+        // ===== Date Logic (3:00 AM Reset) =====
+        function getLogicalDate(date = new Date()) {
+            const d = new Date(date);
+            if (d.getHours() < 3) {
+                d.setDate(d.getDate() - 1);
+            }
+            return d.toISOString().split('T')[0];
+        }
+
+        function formatDateForOverlay(date = new Date()) {
+            const y = date.getFullYear();
+            const m = String(date.getMonth() + 1).padStart(2, '0');
+            const d = String(date.getDate()).padStart(2, '0');
+            const h = String(date.getHours()).padStart(2, '0');
+            const min = String(date.getMinutes()).padStart(2, '0');
+            return { date: `${y}.${m}.${d}`, time: `${h}:${min}` };
+        }
+
+        // ===== Pass Logic =====
+        function checkAndGrantFreePass() {
+            const today = new Date();
+            const lastGrant = APP.lastPassGrant ? new Date(APP.lastPassGrant) : null;
+
+            // Monday check
+            if (today.getDay() === 1) {
+                if (!lastGrant || (today - lastGrant) >= 7 * 24 * 60 * 60 * 1000) {
+                    APP.passes = 1; // Reset to 1 (not add)
+                    APP.lastPassGrant = today.toISOString();
+                    saveAppState();
+                }
+            }
+        }
+
+        function usePass() {
+            if (APP.passes > 0) {
+                const yesterday = new Date();
+                yesterday.setDate(yesterday.getDate() - 1);
+                const yesterdayKey = getLogicalDate(yesterday);
+
+                // Mark yesterday as passed
+                APP.records[yesterdayKey] = { passed: true, timestamp: Date.now() };
+                APP.passes--;
+                saveAppState();
+                updateUI();
+                return true;
+            }
+            return false;
+        }
+
+        // ===== Streak Logic =====
+        function calculateStreak() {
+            const today = getLogicalDate();
+            let streak = 0;
+            let checkDate = new Date();
+
+            // Start from today
+            while (true) {
+                const key = getLogicalDate(checkDate);
+                const record = APP.records[key];
+
+                if (record && (record.blob || record.passed)) {
+                    streak++;
+                    checkDate.setDate(checkDate.getDate() - 1);
+                } else if (key === today) {
+                    // Today hasn't been recorded yet, check yesterday
+                    checkDate.setDate(checkDate.getDate() - 1);
+                } else {
+                    break;
+                }
+            }
+
+            APP.streak = streak;
+            return streak;
+        }
+
+        // ===== State Management =====
+        function saveAppState() {
+            localStorage.setItem('oneshot_state', JSON.stringify({
+                goal: APP.goal,
+                passes: APP.passes,
+                lastPassGrant: APP.lastPassGrant,
+                notifications: APP.notifications,
+                lastRecordDate: APP.lastRecordDate,
+                records: Object.fromEntries(
+                    Object.entries(APP.records).map(([k, v]) => [k, { ...v, blob: undefined }])
+                )
+            }));
+        }
+
+        function loadAppState() {
+            const saved = localStorage.getItem('oneshot_state');
+            if (saved) {
+                const data = JSON.parse(saved);
+                Object.assign(APP, {
+                    goal: data.goal || '',
+                    passes: data.passes ?? 1,
+                    lastPassGrant: data.lastPassGrant,
+                    notifications: data.notifications || APP.notifications,
+                    lastRecordDate: data.lastRecordDate,
+                    records: data.records || {}
+                });
+            }
+        }
+
+        // ===== UI Updates =====
+        function updateUI() {
+            calculateStreak();
+
+            // Streak display
+            document.getElementById('streak-display').textContent = APP.streak;
+            // Overlays are now handled by CanvasProcessor, but we still update DOM elements for the live camera view overlay (if we kept them).
+            // Actually, we should PROBABLY hide the DOM overlays during recording since they are now drawn on the canvas.
+            // But the user might want to see them *before* recording.
+            // Let's keep updating them for the "Camera Screen" UI.
+            document.getElementById('overlay-streak').textContent = `DAY ${APP.streak + 1}`;
+            document.getElementById('preview-overlay-streak').textContent = `DAY ${APP.streak + 1}`;
+
+            // Goal display
+            document.getElementById('goal-display').textContent = APP.goal || '目標を設定してください';
+            document.getElementById('overlay-goal').textContent = APP.goal || '# 目標';
+            document.getElementById('preview-overlay-goal').textContent = APP.goal || '# 目標';
+            document.getElementById('settings-goal').value = APP.goal;
+
+            // Date display
+            const { date, time } = formatDateForOverlay();
+            document.getElementById('overlay-date').innerHTML = `${date}<br>${time}`;
+            document.getElementById('preview-overlay-date').innerHTML = `${date}<br>${time}`;
+
+            // Pass display
+            document.getElementById('pass-count').textContent = APP.passes;
+            document.getElementById('settings-pass-count').textContent = APP.passes;
+
+            // Today status
+            const todayKey = getLogicalDate();
+            const todayRecord = APP.records[todayKey];
+            const statusEl = document.getElementById('today-status');
+
+            if (todayRecord && (todayRecord.blob || todayRecord.passed)) {
+                statusEl.classList.remove('pending');
+                statusEl.innerHTML = '✓ 今日の記録済み';
+            } else {
+                statusEl.classList.add('pending');
+                statusEl.textContent = 'まだ今日の記録がありません';
+            }
+
+            // Notification toggles
+            document.getElementById('notify-morning').classList.toggle('active', APP.notifications.morning);
+            document.getElementById('notify-evening').classList.toggle('active', APP.notifications.evening);
+            document.getElementById('settings-custom-time').value = APP.notifications.customTime;
+        }
+
+        // ===== Screen Navigation =====
+        function showScreen(screenId) {
+            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+            document.getElementById(screenId).classList.add('active');
+
+            // Update legacy nav
+            document.querySelectorAll('.nav-item').forEach(n => {
+                n.classList.toggle('active', n.dataset.screen === screenId);
+            });
+
+            // Update tab bar
+            document.querySelectorAll('.tab-item').forEach(t => {
+                t.classList.toggle('active', t.dataset.screen === screenId);
+            });
+
+            // Show/hide tab bar based on screen
+            const tabBar = document.getElementById('main-tab-bar');
+            if (tabBar) {
+                const hideTabScreens = ['onboarding', 'camera', 'preview', 'settings'];
+                tabBar.style.display = hideTabScreens.includes(screenId) ? 'none' : 'flex';
+            }
+
+            if (screenId === 'calendar-screen') {
+                renderCalendar();
+                loadHistory();
+            }
+        }
+
+        // ===== Camera Handling =====
+        async function startCamera() {
+            try {
+                // Request high resolution for better quality
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        facingMode: 'user',
+                        width: { ideal: 1080 },
+                        height: { ideal: 1920 }
+                    },
+                    audio: true
+                });
+
+                APP.videoStream = stream;
+                const video = document.getElementById('video-preview');
+                video.srcObject = stream;
+                video.muted = true; // Mute local playback to avoid feedback
+
+                // Initialize CanvasProcessor
+                const canvas = document.getElementById('composite-canvas');
+                APP.canvasProcessor = new CanvasProcessor(video, canvas);
+
+                showScreen('camera');
+                updateUI();
+            } catch (err) {
+                console.error('Camera error:', err);
+                alert('カメラへのアクセスが許可されていません。');
+            }
+        }
+
+        function stopCamera() {
+            if (APP.videoStream) {
+                APP.videoStream.getTracks().forEach(track => track.stop());
+                APP.videoStream = null;
+            }
+            if (APP.canvasProcessor) {
+                APP.canvasProcessor.stop();
+                APP.canvasProcessor = null;
+            }
+        }
+
+        function startRecording() {
+            if (!APP.videoStream || !APP.canvasProcessor) return;
+
+            // Start Canvas Processing Loop
+            APP.canvasProcessor.start();
+
+            // Create stream from canvas
+            // 30 FPS is usually sufficient
+            const canvasStream = document.getElementById('composite-canvas').captureStream(30);
+
+            // Add audio tracks from original stream
+            APP.videoStream.getAudioTracks().forEach(track => {
+                canvasStream.addTrack(track);
+            });
+
+            APP.recordedChunks = [];
+            APP.mediaRecorder = new MediaRecorder(canvasStream, {
+                mimeType: 'video/webm;codecs=vp8,opus',
+                videoBitsPerSecond: 2500000 // 2.5 Mbps
+            });
+
+            APP.mediaRecorder.ondataavailable = (e) => {
+                if (e.data.size > 0) {
+                    APP.recordedChunks.push(e.data);
+                }
+            };
+
+            APP.mediaRecorder.onstop = () => {
+                const blob = new Blob(APP.recordedChunks, { type: 'video/webm' });
+                showPreview(blob);
+
+                // Stop the canvas loop
+                APP.canvasProcessor.stop();
+            };
+
+            APP.isRecording = true;
+            APP.mediaRecorder.start();
+
+            // UI feedback
+            const captureBtn = document.getElementById('camera-capture-btn');
+            captureBtn.classList.add('recording');
+            document.getElementById('camera').classList.add('recording');
+
+            // Hide DOM overlays during recording (since they are drawn on canvas)
+            document.querySelector('.overlay-elements').style.opacity = '0';
+
+            // Timer countdown
+            let seconds = 5;
+            const timerEl = document.getElementById('camera-timer');
+            timerEl.classList.add('visible');
+            timerEl.textContent = seconds;
+
+            const interval = setInterval(() => {
+                seconds--;
+                timerEl.textContent = seconds;
+
+                if (seconds <= 0) {
+                    clearInterval(interval);
+                    stopRecording();
+                }
+            }, 1000);
+        }
+
+        function stopRecording() {
+            if (APP.mediaRecorder && APP.isRecording) {
+                APP.mediaRecorder.stop();
+                APP.isRecording = false;
+
+                const captureBtn = document.getElementById('camera-capture-btn');
+                captureBtn.classList.remove('recording');
+                document.getElementById('camera').classList.remove('recording');
+                document.getElementById('camera-timer').classList.remove('visible');
+
+                // Restore DOM overlays
+                document.querySelector('.overlay-elements').style.opacity = '1';
+            }
+        }
+
+        function showPreview(blob) {
+            const video = document.getElementById('preview-video');
+            video.src = URL.createObjectURL(blob);
+            video.currentBlob = blob;
+
+            // Hide DOM overlays in preview since they are burnt into the video
+            const previewOverlays = document.querySelector('#preview .overlay-elements');
+            if (previewOverlays) {
+                previewOverlays.style.display = 'none';
+            }
+
+            showScreen('preview');
+            updateUI();
+        }
+
+        async function saveRecording() {
+            console.log('[Save] Starting save process...');
+            const video = document.getElementById('preview-video');
+            const blob = video.currentBlob;
+            const todayKey = getLogicalDate();
+
+            if (!blob) {
+                console.error('[Save] No blob found to save!');
+                alert('保存するデータがありません');
+                return;
+            }
+
+            console.log('[Save] Saving for date:', todayKey);
+            console.log('[Save] Blob:', blob.type, blob.size, 'bytes');
+
+            try {
+                // Save to IndexedDB
+                await saveVideo(todayKey, blob, {
+                    timestamp: Date.now(),
+                    streak: APP.streak + 1,
+                    goal: APP.goal
+                });
+
+                console.log('Video saved successfully');
+
+                // Update state
+                APP.records[todayKey] = { blob: true, timestamp: Date.now() };
+                APP.lastRecordDate = todayKey;
+                saveAppState();
+
+                // Reload history
+                await loadHistory();
+
+                stopCamera();
+                showScreen('home');
+                updateUI();
+            } catch (err) {
+                console.error('[Save] Failed to save video:', err);
+                alert('保存に失敗しました: ' + err.message);
+            }
+        }
+
+        // ===== Share Functionality =====
+        async function shareVideo() {
+            const video = document.getElementById('preview-video');
+            const blob = video.currentBlob;
+
+            if (navigator.share && navigator.canShare) {
+                const file = new File([blob], 'oneshot.webm', { type: 'video/webm' });
+
+                if (navigator.canShare({ files: [file] })) {
+                    try {
+                        await navigator.share({
+                            files: [file],
+                            title: 'One Shot',
+                            text: `DAY ${APP.streak + 1} - ${APP.goal}`
+                        });
+                    } catch (err) {
+                        console.log('Share cancelled');
+                    }
+                }
+            } else {
+                // Fallback: download
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `oneshot_day${APP.streak + 1}.webm`;
+                a.click();
+            }
+        }
+
+        // ===== Calendar Rendering =====
+        async function renderCalendar() {
+            const grid = document.getElementById('calendar-grid');
+            const date = APP.currentCalendarDate;
+            const year = date.getFullYear();
+            const month = date.getMonth();
+
+            document.getElementById('calendar-title').textContent = `${year}年 ${month + 1}月`;
+
+            // Load videos from DB
+            const videos = await getAllVideos();
+            const videoMap = {};
+            videos.forEach(v => videoMap[v.date] = v);
+
+            // Day headers
+            const dayNames = ['日', '月', '火', '水', '木', '金', '土'];
+            let html = dayNames.map(d => `<div class="calendar-day-header">${d}</div>`).join('');
+
+            // First day offset
+            const firstDay = new Date(year, month, 1).getDay();
+            const daysInMonth = new Date(year, month + 1, 0).getDate();
+            const today = getLogicalDate();
+
+            // Empty cells
+            for (let i = 0; i < firstDay; i++) {
+                html += '<div class="calendar-day empty"></div>';
+            }
+
+            // Days
+            for (let d = 1; d <= daysInMonth; d++) {
+                const dateKey = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+                const record = APP.records[dateKey] || videoMap[dateKey];
+
+                let classes = 'calendar-day';
+                if (dateKey === today) classes += ' today';
+                if (record?.blob) classes += ' recorded';
+                else if (record?.passed) classes += ' passed';
+
+                html += `<div class="${classes}" data-date="${dateKey}">
+                    <span class="calendar-day-num">${d}</span>
+                </div>`;
+            }
+
+            grid.innerHTML = html;
+
+            // Add click handlers
+            grid.querySelectorAll('.calendar-day:not(.empty)').forEach(el => {
+                el.addEventListener('click', () => playVideo(el.dataset.date));
+            });
+        }
+
+        async function playVideo(dateKey) {
+            const record = await getVideo(dateKey);
+            if (record && record.blob) {
+                const modal = document.getElementById('video-modal');
+                const video = document.getElementById('modal-video');
+                video.src = URL.createObjectURL(record.blob);
+                modal.classList.add('active');
+                video.play();
+            }
+        }
+
+        // ===== Event Listeners =====
+        function initEventListeners() {
+            // Onboarding
+            document.getElementById('start-btn').addEventListener('click', () => {
+                const goal = document.getElementById('goal-input').value.trim();
+                if (!goal) {
+                    alert('目標を入力してください');
+                    return;
+                }
+
+                APP.goal = goal;
+
+                // Get notification settings
+                document.querySelectorAll('.time-chip').forEach(chip => {
+                    const time = chip.dataset.time;
+                    if (time === 'morning') APP.notifications.morning = chip.classList.contains('active');
+                    if (time === 'evening') APP.notifications.evening = chip.classList.contains('active');
+                });
+                APP.notifications.customTime = document.getElementById('custom-time').value;
+
+                saveAppState();
+                showScreen('home');
+                updateUI();
+
+                // Auto-open camera for first recording
+                setTimeout(() => startCamera(), 500);
+            });
+
+            // Time chips toggle
+            document.querySelectorAll('.time-chip[data-time="morning"], .time-chip[data-time="evening"]').forEach(chip => {
+                chip.addEventListener('click', () => chip.classList.toggle('active'));
+            });
+
+            // Navigation - Tab Bar
+            document.querySelectorAll('.tab-item').forEach(item => {
+                item.addEventListener('click', () => {
+                    const screen = item.dataset.screen;
+                    showScreen(screen);
+
+                    // Update tab active state
+                    document.querySelectorAll('.tab-item').forEach(t => t.classList.remove('active'));
+                    item.classList.add('active');
+                });
+            });
+
+            // Legacy nav-item (if still in DOM)
+            document.querySelectorAll('.nav-item').forEach(item => {
+                item.addEventListener('click', () => showScreen(item.dataset.screen));
+            });
+
+            // Record button
+            document.getElementById('record-open-btn').addEventListener('click', startCamera);
+
+            // Camera controls
+            document.getElementById('camera-close-btn').addEventListener('click', () => {
+                stopCamera();
+                showScreen('home');
+            });
+
+            document.getElementById('camera-capture-btn').addEventListener('click', () => {
+                if (!APP.isRecording) {
+                    startRecording();
+                }
+            });
+
+            // Preview controls
+            document.getElementById('retake-btn').addEventListener('click', () => {
+                showScreen('camera');
+            });
+
+            document.getElementById('save-btn').addEventListener('click', saveRecording);
+
+            // Settings
+            document.getElementById('settings-open-btn').addEventListener('click', () => showScreen('settings'));
+            document.getElementById('settings-back-btn').addEventListener('click', () => {
+                APP.goal = document.getElementById('settings-goal').value;
+                APP.notifications.customTime = document.getElementById('settings-custom-time').value;
+                saveAppState();
+                showScreen('home');
+                updateUI();
+            });
+
+            // Toggle switches
+            document.getElementById('notify-morning').addEventListener('click', function () {
+                this.classList.toggle('active');
+                APP.notifications.morning = this.classList.contains('active');
+                saveAppState();
+            });
+
+            document.getElementById('notify-evening').addEventListener('click', function () {
+                this.classList.toggle('active');
+                APP.notifications.evening = this.classList.contains('active');
+                saveAppState();
+            });
+
+            // Pass buttons
+            document.getElementById('use-pass-btn').addEventListener('click', () => {
+                if (usePass()) {
+                    alert('パスを使用しました。ストリークが維持されます。');
+                } else {
+                    alert('パスがありません。');
+                }
+            });
+
+            document.getElementById('buy-pass-btn').addEventListener('click', () => {
+                alert('購入機能は準備中です');
+            });
+
+            // Reset data
+            document.getElementById('reset-data-btn').addEventListener('click', async () => {
+                if (confirm('すべてのデータを削除しますか？この操作は取り消せません。')) {
+                    localStorage.removeItem('oneshot_state');
+                    indexedDB.deleteDatabase(DB_NAME);
+                    location.reload();
+                }
+            });
+
+            // Calendar navigation
+            document.getElementById('cal-prev').addEventListener('click', () => {
+                APP.currentCalendarDate.setMonth(APP.currentCalendarDate.getMonth() - 1);
+                renderCalendar();
+            });
+
+            document.getElementById('cal-next').addEventListener('click', () => {
+                APP.currentCalendarDate.setMonth(APP.currentCalendarDate.getMonth() + 1);
+                renderCalendar();
+            });
+
+            // Video modal
+            document.getElementById('modal-close-btn').addEventListener('click', () => {
+                const modal = document.getElementById('video-modal');
+                const video = document.getElementById('modal-video');
+                video.pause();
+                modal.classList.remove('active');
+            });
+        }
+
+        // ===== App Init =====
+        async function init() {
+            console.log('[App] Initializing One Shot...');
+
+            try {
+                await initDB();
+                console.log('[App] Database ready');
+            } catch (err) {
+                console.error('[App] Failed to initialize database:', err);
+                alert('データベースの初期化に失敗しました');
+            }
+
+            loadAppState();
+            checkAndGrantFreePass();
+            initEventListeners();
+
+            // Check if already set up
+            if (APP.goal) {
+                showScreen('home');
+                updateUI();
+            }
+
+            // Load video records from IndexedDB
+            try {
+                const videos = await getAllVideos();
+                console.log('[App] Found', videos.length, 'existing videos');
+                videos.forEach(v => {
+                    if (!APP.records[v.date]) {
+                        APP.records[v.date] = { blob: true, timestamp: v.timestamp };
+                    }
+                });
+
+                // Load history list
+                await loadHistory();
+            } catch (err) {
+                console.error('[App] Error loading videos:', err);
+            }
+
+            updateUI();
+            console.log('[App] Initialization complete');
+        }
+
+        document.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+
+</html>
