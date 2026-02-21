@@ -3,1260 +3,1327 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport"
-        content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="theme-color" content="#0A0A0A">
-    <title>One Shot - ワンショット</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+    <meta name="theme-color" content="#000000">
+    <title>One Shot</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap" rel="stylesheet">
     <style>
-        :root {
-            --bg-primary: #0A0A0A;
-            --bg-secondary: #151515;
-            --bg-card: #1A1A1A;
-            --text-primary: #FFFFFF;
-            --text-secondary: #A0A0A0;
-            --text-muted: #606060;
-            --accent: #8B0000;
-            /* マットな深紅 */
-            --accent-glow: rgba(139, 0, 0, 0.3);
-            --success: #4CAF50;
-            --warning: #FF9800;
-            --glass: rgba(255, 255, 255, 0.05);
-            --glass-border: rgba(255, 255, 255, 0.1);
-            --safe-top: env(safe-area-inset-top, 0px);
-            --safe-bottom: env(safe-area-inset-bottom, 0px);
-        }
-
         * {
             margin: 0;
             padding: 0;
-            box-sizing: border-box;
-            -webkit-tap-highlight-color: transparent;
+            box-sizing: border-box
+        }
+
+        :root {
+            --bg: #000;
+            --fg: #fff;
+            --accent: #FF4500;
+            --gray: #888;
+            --card: #111;
+            --card2: #1a1a1a
         }
 
         html,
         body {
             height: 100%;
             overflow: hidden;
-            background: #000;
+            background: var(--bg);
+            color: var(--fg);
+            font-family: 'Inter', sans-serif
         }
 
-        body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-            color: var(--text-primary);
-            line-height: 1.4;
-        }
-
-        #app {
+        .app {
             max-width: 480px;
-            width: 100%;
-            height: 100%;
             margin: 0 auto;
-            background: var(--bg-primary);
-            display: flex;
-            flex-direction: column;
+            height: 100%;
             position: relative;
-            overflow: hidden;
+            overflow: hidden
         }
 
         .screen {
             display: none;
             flex-direction: column;
-            flex: 1;
-            position: relative;
-            overflow: hidden;
+            height: 100%;
+            width: 100%;
+            position: absolute;
+            top: 0;
+            left: 0;
+            animation: fadeIn .3s
         }
 
         .screen.active {
-            display: flex;
+            display: flex
         }
 
-        .screen-scrollable {
-            flex: 1;
-            overflow-y: auto;
-            -webkit-overflow-scrolling: touch;
+        @keyframes fadeIn {
+            from {
+                opacity: 0
+            }
+
+            to {
+                opacity: 1
+            }
         }
 
-        /* ===== Tab Bar ===== */
-        .tab-bar {
-            display: flex;
-            background: var(--bg-secondary);
-            border-top: 1px solid var(--glass-border);
-            padding: 0.5rem 1rem;
-            padding-bottom: calc(0.5rem + var(--safe-bottom));
-            flex-shrink: 0;
+        @keyframes glow {
+
+            0%,
+            100% {
+                box-shadow: 0 0 20px rgba(255, 69, 0, .3)
+            }
+
+            50% {
+                box-shadow: 0 0 40px rgba(255, 69, 0, .6)
+            }
         }
 
-        .tab-item {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 0.25rem;
-            padding: 0.5rem;
-            background: transparent;
-            border: none;
-            color: var(--text-muted);
-            font-size: 0.7rem;
-            font-family: inherit;
-            cursor: pointer;
-            transition: color 0.2s;
-        }
-
-        .tab-item.active {
-            color: var(--text-primary);
-        }
-
-        .tab-icon {
-            font-size: 1.5rem;
-        }
-
-        .tab-label {
-            font-weight: 600;
-        }
-
-        /* ===== Onboarding ===== */
         #onboarding {
-            padding: 2rem 1.5rem;
             justify-content: center;
-            background: var(--bg-primary);
-            overflow-y: auto;
-        }
-
-        .onboarding-header {
-            text-align: center;
-            margin-bottom: 3rem;
-        }
-
-        .onboarding-header h1 {
-            font-size: 2.5rem;
-            font-weight: 900;
-            letter-spacing: -0.02em;
-            margin-bottom: 0.5rem;
-        }
-
-        .onboarding-header p {
-            color: var(--text-secondary);
-            font-size: 1rem;
-        }
-
-        .form-group {
-            margin-bottom: 1.5rem;
-        }
-
-        .form-group label {
-            display: block;
-            font-size: 0.85rem;
-            font-weight: 600;
-            color: var(--text-secondary);
-            margin-bottom: 0.5rem;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-        }
-
-        .form-input {
-            width: 100%;
-            padding: 1rem;
-            background: var(--glass);
-            border: 1px solid var(--glass-border);
-            border-radius: 12px;
-            color: var(--text-primary);
-            font-size: 1.1rem;
-            font-family: inherit;
-            outline: none;
-            transition: border-color 0.2s;
-        }
-
-        .form-input:focus {
-            border-color: var(--accent);
-        }
-
-        .form-input::placeholder {
-            color: var(--text-muted);
-        }
-
-        .notification-times {
-            display: flex;
-            gap: 0.5rem;
-            flex-wrap: wrap;
-        }
-
-        .time-chip {
-            flex: 1;
-            min-width: 80px;
-            padding: 0.75rem 1rem;
-            background: var(--glass);
-            border: 1px solid var(--glass-border);
-            border-radius: 10px;
-            color: var(--text-secondary);
-            font-size: 0.9rem;
-            cursor: pointer;
-            transition: all 0.2s;
-            text-align: center;
-            font-weight: 600;
-        }
-
-        .time-chip.active {
-            background: var(--accent);
-            border-color: var(--accent);
-            color: white;
-        }
-
-        .time-chip input {
-            background: transparent;
-            border: none;
-            color: inherit;
-            font-size: inherit;
-            font-family: inherit;
-            text-align: center;
-            width: 100%;
-            outline: none;
-            font-weight: 600;
-        }
-
-        /* ===== Buttons ===== */
-        .btn {
-            display: flex;
             align-items: center;
-            justify-content: center;
-            gap: 0.5rem;
-            padding: 1rem 2rem;
-            border: none;
-            border-radius: 14px;
-            font-size: 1.1rem;
+            padding: 40px 24px;
+            text-align: center
+        }
+
+        #onboarding h1 {
+            font-size: 48px;
+            font-weight: 900;
+            letter-spacing: -2px;
+            margin-bottom: 8px
+        }
+
+        #onboarding .subtitle {
+            color: var(--gray);
+            font-size: 14px;
+            margin-bottom: 48px
+        }
+
+        #onboarding .input-group {
+            width: 100%;
+            margin-bottom: 32px;
+            text-align: left
+        }
+
+        #onboarding label {
+            font-size: 12px;
+            color: var(--gray);
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            display: block;
+            margin-bottom: 8px
+        }
+
+        #onboarding input {
+            width: 100%;
+            padding: 16px;
+            background: var(--card);
+            border: 2px solid #333;
+            border-radius: 12px;
+            color: #fff;
+            font-size: 18px;
             font-weight: 700;
-            font-family: inherit;
-            cursor: pointer;
-            transition: all 0.2s;
+            font-family: 'Inter', sans-serif;
+            outline: none;
+            transition: border .3s
+        }
+
+        #onboarding input:focus {
+            border-color: var(--accent)
         }
 
         .btn-primary {
+            width: 100%;
+            padding: 18px;
             background: var(--accent);
-            color: white;
+            color: #fff;
+            border: none;
+            border-radius: 12px;
+            font-size: 18px;
+            font-weight: 900;
+            font-family: 'Inter', sans-serif;
+            cursor: pointer;
+            transition: all .2s;
+            text-transform: uppercase;
+            letter-spacing: 2px
         }
 
         .btn-primary:active {
-            transform: scale(0.98);
-            opacity: 0.9;
+            transform: scale(.97)
         }
 
-        .btn-secondary {
-            background: var(--glass);
-            color: var(--text-primary);
-            border: 1px solid var(--glass-border);
+        .btn-primary:disabled {
+            opacity: .4
         }
 
-        /* ===== Home Screen ===== */
         #home {
-            display: flex;
-            flex-direction: column;
-        }
-
-        .home-content {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            padding: 1.5rem;
-            padding-top: calc(1.5rem + var(--safe-top));
+            padding: 24px;
+            padding-bottom: 80px;
+            overflow-y: auto
         }
 
         .home-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 2rem;
+            margin-bottom: 32px
         }
 
-        .home-title {
-            font-size: 1.5rem;
+        .home-header h2 {
+            font-size: 24px;
             font-weight: 900;
-            letter-spacing: -0.02em;
+            letter-spacing: -1px
         }
 
         .settings-btn {
+            background: none;
+            border: none;
+            color: var(--fg);
+            font-size: 24px;
+            cursor: pointer;
             width: 44px;
             height: 44px;
-            background: var(--glass);
-            border: 1px solid var(--glass-border);
-            border-radius: 12px;
-            color: var(--text-primary);
-            font-size: 1.2rem;
-            cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
+            border-radius: 12px;
+            transition: background .2s
         }
 
-        .streak-container {
+        .settings-btn:active {
+            background: var(--card)
+        }
+
+        .streak-section {
             text-align: center;
-            margin-bottom: 2rem;
+            margin: 40px 0
         }
 
-        .streak-count {
-            font-size: 7rem;
+        .streak-num {
+            font-size: 120px;
             font-weight: 900;
             line-height: 1;
-            letter-spacing: -0.05em;
+            letter-spacing: -5px;
+            background: linear-gradient(180deg, #fff 30%, #555);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent
         }
 
         .streak-label {
-            font-size: 1.2rem;
-            font-weight: 700;
-            color: var(--text-secondary);
-            margin-top: 0.5rem;
+            font-size: 14px;
+            color: var(--gray);
+            text-transform: uppercase;
+            letter-spacing: 4px;
+            margin-top: 4px
         }
 
-        .goal-display {
-            text-align: center;
-            margin-bottom: 2rem;
+        .goal-card {
+            background: var(--card);
+            border-radius: 16px;
+            padding: 20px;
+            margin-bottom: 16px
         }
 
-        .goal-text {
-            font-size: 1.2rem;
-            font-weight: 700;
-            color: var(--text-primary);
+        .goal-title {
+            font-size: 20px;
+            font-weight: 900
         }
 
-        .info-row {
+        .goal-hash {
+            color: var(--accent);
+            margin-right: 6px
+        }
+
+        .status-row {
             display: flex;
-            justify-content: center;
-            gap: 2rem;
-            margin-bottom: 3rem;
+            gap: 12px;
+            margin-top: 12px
         }
 
-        .info-item {
+        .status-pill {
+            flex: 1;
+            padding: 10px;
+            border-radius: 10px;
+            background: var(--card2);
             text-align: center;
+            font-size: 12px;
+            font-weight: 700
         }
 
-        .info-value {
-            font-size: 1.5rem;
+        .status-pill .val {
+            font-size: 20px;
             font-weight: 900;
+            display: block;
+            margin-bottom: 2px
         }
 
-        .info-label {
-            font-size: 0.8rem;
-            color: var(--text-secondary);
-            font-weight: 600;
-            margin-top: 0.25rem;
+        .status-pill .val.done {
+            color: #00FF88
         }
 
-        .record-section {
+        .status-pill .val.pending {
+            color: var(--accent)
+        }
+
+        .rec-btn {
+            width: 80px;
+            height: 80px;
+            margin: 32px auto 0;
+            background: var(--accent);
+            border: none;
+            border-radius: 50%;
+            color: #fff;
+            cursor: pointer;
+            animation: glow 2s infinite;
+            transition: transform .1s;
+            display: flex;
+            align-items: center;
+            justify-content: center
+        }
+
+        .rec-btn svg {
+            width: 36px;
+            height: 36px;
+            fill: none;
+            stroke: #fff;
+            stroke-width: 2;
+            stroke-linecap: round;
+            stroke-linejoin: round
+        }
+
+        .rec-btn:active {
+            transform: scale(.92);
+            animation: none
+        }
+
+        .rec-btn.recorded {
+            background: #1a1a1a;
+            animation: none
+        }
+
+        .rec-btn.recorded svg {
+            stroke: var(--gray)
+        }
+
+        .rec-done-label {
+            text-align: center;
+            margin-top: 10px;
+            font-size: 12px;
+            font-weight: 700;
+            color: #00FF88;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            display: none
+        }
+
+        .rec-done-label.show {
+            display: block
+        }
+
+        .bottom-nav {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            display: flex;
+            background: #0a0a0a;
+            border-top: 1px solid #1a1a1a;
+            padding: 8px 0;
+            padding-bottom: env(safe-area-inset-bottom, 8px);
+            z-index: 100
+        }
+
+        .nav-item {
             flex: 1;
             display: flex;
             flex-direction: column;
             align-items: center;
-            justify-content: center;
-        }
-
-        .record-btn-large {
-            width: 140px;
-            height: 140px;
-            border-radius: 50%;
-            background: var(--accent);
-            border: none;
+            gap: 4px;
+            padding: 8px;
+            color: var(--gray);
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
             cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: all 0.2s;
-            box-shadow: 0 0 30px var(--accent-glow);
+            transition: color .2s;
+            background: none;
+            border: none;
+            font-family: 'Inter', sans-serif
         }
 
-        .record-btn-large:active {
-            transform: scale(0.95);
+        .nav-item.active {
+            color: var(--accent)
         }
 
-        .camera-icon {
-            width: 60px;
-            height: 60px;
-            fill: white;
+        .nav-item svg {
+            width: 24px;
+            height: 24px
         }
 
-        /* ===== Camera Screen ===== */
         #camera {
             background: #000;
+            justify-content: center;
+            align-items: center
         }
 
-        #video-preview {
+        .cam-container {
+            position: relative;
             width: 100%;
             height: 100%;
-            object-fit: cover;
-        }
-
-        .camera-overlay-ui {
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            display: flex;
-            flex-direction: column;
-            justify-content: space-between;
-            padding: 1.5rem;
-            padding-top: calc(1.5rem + var(--safe-top));
-            padding-bottom: calc(2rem + var(--safe-bottom));
-            pointer-events: none;
-        }
-
-        .camera-top {
-            display: flex;
-            justify-content: center;
-            align-items: flex-start;
-        }
-
-        .camera-timer {
-            font-size: 3rem;
-            font-weight: 900;
-            color: white;
-        }
-
-        .camera-controls {
             display: flex;
             justify-content: center;
             align-items: center;
-            pointer-events: auto;
+            overflow: hidden
         }
 
-        .camera-capture-btn {
-            width: 80px;
-            height: 80px;
+        .cam-canvas {
+            width: 100%;
+            height: 100%;
+            object-fit: cover
+        }
+
+        .cam-close {
+            position: absolute;
+            top: 16px;
+            left: 16px;
+            background: rgba(0, 0, 0, .5);
+            border: none;
+            color: #fff;
+            font-size: 24px;
+            width: 44px;
+            height: 44px;
             border-radius: 50%;
-            background: white;
-            border: 4px solid rgba(255, 255, 255, 0.3);
             cursor: pointer;
-            transition: all 0.2s;
+            z-index: 10;
+            backdrop-filter: blur(10px)
+        }
+
+        .cam-timer {
+            position: absolute;
+            top: 24px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 48px;
+            font-weight: 900;
+            color: #fff;
+            z-index: 10;
+            display: none;
+            letter-spacing: 2px;
+            text-shadow: none !important
+        }
+
+        .cam-controls {
+            position: absolute;
+            bottom: 40px;
+            left: 0;
+            right: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 10
+        }
+
+        .shutter-btn {
+            width: 72px;
+            height: 72px;
+            border-radius: 50%;
+            border: 4px solid #fff;
+            background: transparent;
+            cursor: pointer;
             position: relative;
+            transition: all .2s
         }
 
-        .camera-capture-btn.recording {
+        .shutter-btn .inner {
+            width: 56px;
+            height: 56px;
+            border-radius: 50%;
             background: var(--accent);
-        }
-
-        .camera-capture-btn.recording::before {
-            content: '';
             position: absolute;
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            width: 30px;
-            height: 30px;
-            background: white;
-            border-radius: 4px;
+            transition: all .2s
         }
 
-        /* ===== Preview Screen ===== */
-        #preview {
-            background: #000;
+        .shutter-btn:active .inner {
+            transform: translate(-50%, -50%) scale(.85)
         }
 
-        #preview-video {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
+        .shutter-btn.recording .inner {
+            border-radius: 8px;
+            width: 28px;
+            height: 28px;
+            background: #ff0000
         }
 
         .preview-controls {
             position: absolute;
-            bottom: 0;
+            bottom: 40px;
             left: 0;
             right: 0;
-            display: flex;
-            gap: 1rem;
-            padding: 2rem;
-            padding-bottom: calc(2rem + var(--safe-bottom));
-            background: linear-gradient(transparent, rgba(0, 0, 0, 0.8));
+            display: none;
+            justify-content: center;
+            gap: 16px;
+            z-index: 10;
+            padding: 0 24px
         }
 
-        .preview-controls .btn {
+        .prev-btn {
             flex: 1;
+            padding: 16px;
+            border: none;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 900;
+            font-family: 'Inter', sans-serif;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 1px
         }
 
-        /* ===== Calendar Screen ===== */
-        .calendar-header {
+        .prev-btn.retry {
+            background: #333;
+            color: #fff
+        }
+
+        .prev-btn.save {
+            background: var(--accent);
+            color: #fff
+        }
+
+        #history {
+            padding: 24px;
+            padding-bottom: 80px;
+            overflow-y: auto
+        }
+
+        #history .screen-title {
+            font-size: 24px;
+            font-weight: 900;
+            margin-bottom: 24px;
+            letter-spacing: -1px
+        }
+
+        .cal-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 1.5rem;
-            padding: 1.5rem;
-            padding-bottom: 0;
+            margin-bottom: 16px
         }
 
-        .calendar-title {
-            font-size: 1.25rem;
-            font-weight: 700;
-        }
-
-        .calendar-nav {
-            display: flex;
-            gap: 0.5rem;
-        }
-
-        .calendar-nav-btn {
-            width: 36px;
-            height: 36px;
-            background: var(--glass);
-            border: 1px solid var(--glass-border);
-            border-radius: 8px;
-            color: var(--text-primary);
-            font-size: 1rem;
+        .cal-header button {
+            background: none;
+            border: none;
+            color: var(--fg);
+            font-size: 20px;
             cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            padding: 8px
         }
 
-        .calendar-grid {
+        .cal-month {
+            font-size: 16px;
+            font-weight: 900
+        }
+
+        .cal-grid {
             display: grid;
             grid-template-columns: repeat(7, 1fr);
             gap: 4px;
-            padding: 0 1.5rem;
+            margin-bottom: 24px
         }
 
-        .calendar-day-header {
+        .cal-day-label {
             text-align: center;
-            font-size: 0.75rem;
-            font-weight: 600;
-            color: var(--text-muted);
-            padding: 0.5rem 0;
+            font-size: 10px;
+            color: var(--gray);
+            font-weight: 700;
+            padding: 4px
         }
 
-        .calendar-day {
-            aspect-ratio: 1;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            background: var(--glass);
-            border: 1px solid var(--glass-border);
+        .cal-day {
+            text-align: center;
+            padding: 8px 4px;
+            font-size: 13px;
+            font-weight: 700;
             border-radius: 8px;
-            font-size: 0.85rem;
-            color: var(--text-secondary);
             cursor: pointer;
             position: relative;
+            color: var(--gray)
         }
 
-        .calendar-day.today {
-            border-color: var(--accent);
-            color: var(--accent);
+        .cal-day.current-month {
+            color: var(--fg)
         }
 
-        .calendar-day.recorded {
-            background: var(--accent);
-            border-color: var(--accent);
-            color: white;
+        .cal-day.today {
+            background: var(--card)
         }
 
-        .calendar-day-num {
-            font-weight: 600;
-        }
-
-        /* ===== Video Modal ===== */
-        .video-modal {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(0, 0, 0, 0.95);
-            z-index: 100;
-            display: none;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .video-modal.active {
-            display: flex;
-        }
-
-        .video-modal-close {
-            position: absolute;
-            top: calc(1rem + var(--safe-top));
-            right: 1rem;
-            width: 44px;
-            height: 44px;
-            background: var(--glass);
-            border: none;
+        .cal-day.has-video::after {
+            content: '';
+            width: 6px;
+            height: 6px;
             border-radius: 50%;
-            color: white;
-            font-size: 1.5rem;
-            cursor: pointer;
-            z-index: 101;
+            background: var(--accent);
+            position: absolute;
+            bottom: 2px;
+            left: 50%;
+            transform: translateX(-50%)
+        }
+
+        .history-list {
             display: flex;
-            align-items: center;
-            justify-content: center;
+            flex-direction: column;
+            gap: 12px
         }
 
-        .video-modal video {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-        }
-
-        /* ===== Settings ===== */
-        #settings {
-            padding: 1.5rem;
-            padding-top: calc(1.5rem + var(--safe-top));
-            overflow-y: auto;
-        }
-
-        .settings-header {
-            display: flex;
-            align-items: center;
-            gap: 1rem;
-            margin-bottom: 2rem;
-        }
-
-        .settings-back {
-            width: 44px;
-            height: 44px;
-            background: var(--glass);
-            border: 1px solid var(--glass-border);
+        .history-item {
+            background: var(--card);
             border-radius: 12px;
-            color: var(--text-primary);
-            font-size: 1.2rem;
-            cursor: pointer;
+            padding: 16px;
             display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .settings-title {
-            font-size: 1.5rem;
-            font-weight: 700;
-        }
-
-        .settings-section {
-            margin-bottom: 2rem;
-        }
-
-        .settings-section-title {
-            font-size: 0.85rem;
-            font-weight: 600;
-            color: var(--text-muted);
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            margin-bottom: 1rem;
-        }
-
-        .settings-item {
-            display: flex;
-            align-items: center;
             justify-content: space-between;
-            padding: 1rem;
-            background: var(--glass);
-            border: 1px solid var(--glass-border);
-            border-radius: 12px;
-            margin-bottom: 0.5rem;
-        }
-
-        .settings-item-label {
-            font-size: 1rem;
-            font-weight: 500;
-        }
-
-        .settings-item input[type="text"] {
-            background: transparent;
-            border: none;
-            color: var(--text-primary);
-            font-size: 1rem;
-            font-family: inherit;
-            text-align: right;
-            outline: none;
-            font-weight: 600;
-        }
-
-        .danger-btn {
-            width: 100%;
-            padding: 1rem;
-            background: var(--glass);
-            border: 1px solid var(--accent);
-            border-radius: 12px;
-            color: var(--accent);
-            font-size: 1rem;
-            font-weight: 600;
+            align-items: center;
             cursor: pointer;
+            transition: background .2s
         }
 
-        /* ===== Animations ===== */
-        @keyframes recording-pulse {
-
-            0%,
-            100% {
-                box-shadow: 0 0 0 0 rgba(139, 0, 0, 0.5);
-            }
-
-            50% {
-                box-shadow: 0 0 0 20px transparent;
-            }
+        .history-item:active {
+            background: var(--card2)
         }
 
-        .recording .camera-capture-btn {
-            animation: recording-pulse 1s infinite;
+        .hi-left {
+            display: flex;
+            align-items: center;
+            gap: 12px
         }
 
-        #composite-canvas {
+        .hi-thumb {
+            width: 48px;
+            height: 48px;
+            border-radius: 8px;
+            background: var(--card2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px
+        }
+
+        .hi-info .hi-date {
+            font-size: 14px;
+            font-weight: 700
+        }
+
+        .hi-info .hi-day {
+            font-size: 12px;
+            color: var(--accent);
+            font-weight: 900
+        }
+
+        .hi-play {
+            color: var(--gray);
+            font-size: 20px
+        }
+
+        .no-history {
+            text-align: center;
+            color: var(--gray);
+            padding: 40px 0;
+            font-size: 14px
+        }
+
+        #settings {
+            padding: 24px;
+            padding-bottom: 80px;
+            overflow-y: auto
+        }
+
+        #settings .screen-title {
+            font-size: 24px;
+            font-weight: 900;
+            margin-bottom: 24px;
+            letter-spacing: -1px
+        }
+
+        .setting-group {
+            background: var(--card);
+            border-radius: 16px;
+            padding: 20px;
+            margin-bottom: 16px
+        }
+
+        .setting-group label {
+            font-size: 12px;
+            color: var(--gray);
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            display: block;
+            margin-bottom: 8px
+        }
+
+        .setting-group input {
+            width: 100%;
+            padding: 12px;
+            background: var(--card2);
+            border: 1px solid #333;
+            border-radius: 8px;
+            color: #fff;
+            font-size: 16px;
+            font-weight: 700;
+            font-family: 'Inter', sans-serif;
+            outline: none
+        }
+
+        .setting-group input:focus {
+            border-color: var(--accent)
+        }
+
+        .btn-danger {
+            width: 100%;
+            padding: 16px;
+            background: transparent;
+            border: 2px solid #ff3333;
+            border-radius: 12px;
+            color: #ff3333;
+            font-size: 14px;
+            font-weight: 900;
+            font-family: 'Inter', sans-serif;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-top: 24px
+        }
+
+        .modal-overlay {
             display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, .95);
+            z-index: 200;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column
+        }
+
+        .modal-overlay.active {
+            display: flex
+        }
+
+        .modal-overlay video {
+            max-width: 100%;
+            max-height: 80vh;
+            border-radius: 12px
+        }
+
+        .modal-close {
+            position: absolute;
+            top: 16px;
+            right: 16px;
+            background: none;
+            border: none;
+            color: #fff;
+            font-size: 32px;
+            cursor: pointer
+        }
+
+        .toast {
+            position: fixed;
+            bottom: 100px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #222;
+            color: #fff;
+            padding: 12px 24px;
+            border-radius: 12px;
+            font-size: 14px;
+            font-weight: 700;
+            z-index: 300;
+            opacity: 0;
+            transition: opacity .3s;
+            pointer-events: none
+        }
+
+        .toast.show {
+            opacity: 1
+        }
+
+        .toast.error {
+            background: #cc0000
         }
     </style>
 </head>
 
 <body>
-    <div id="app">
-        <div id="onboarding" class="screen active">
-            <div class="onboarding-header">
-                <h1>One Shot</h1>
-                <p>成功までの1コマを5秒で記録</p>
+    <div class="app">
+
+        <div id="onboarding" class="screen">
+            <h1>ONE SHOT</h1>
+            <p class="subtitle">5秒で記録する、ストイックな習慣</p>
+            <div class="input-group">
+                <label>目標を入力</label>
+                <input id="goalInput" type="text" placeholder="例: 筋トレ毎日" maxlength="20">
             </div>
-            <div class="form-group">
-                <label>習慣にしたい目標</label>
-                <input type="text" class="form-input" id="goal-input" placeholder="例: # 毎日筋トレ">
-            </div>
-            <div class="form-group">
-                <label>通知タイミング (任意)</label>
-                <div class="notification-times">
-                    <div class="time-chip" data-time="morning"><span>朝</span></div>
-                    <div class="time-chip" data-time="evening"><span>夜</span></div>
-                </div>
-            </div>
-            <button class="btn btn-primary" id="start-btn" style="margin-top: 2rem; width: 100%;">はじめる</button>
+            <button class="btn-primary" id="startBtn" disabled>START</button>
         </div>
 
         <div id="home" class="screen">
-            <div class="home-content">
-                <div class="home-header">
-                    <div class="home-title">One Shot</div>
-                    <button class="settings-btn" id="settings-open-btn">⚙️</button>
-                </div>
-                <div class="streak-container">
-                    <div class="streak-count" id="streak-display">0</div>
-                    <div class="streak-label">DAYS STREAK</div>
-                </div>
-                <div class="goal-display">
-                    <div class="goal-text" id="goal-display"></div>
-                </div>
-                <div class="info-row">
-                    <div class="info-item">
-                        <div class="info-value" id="pass-count">0</div>
-                        <div class="info-label">PASSES</div>
-                    </div>
-                    <div class="info-item">
-                        <div class="info-value" id="today-status">未</div>
-                        <div class="info-label">TODAY</div>
-                    </div>
-                </div>
-                <div class="record-section">
-                    <button class="record-btn-large" id="record-start-btn">
-                        <svg class="camera-icon" viewBox="0 0 24 24">
-                            <path
-                                d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
-                        </svg>
-                    </button>
+            <div class="home-header">
+                <h2>ONE SHOT</h2>
+                <button class="settings-btn" onclick="showScreen('settings')">⚙️</button>
+            </div>
+            <div class="streak-section">
+                <div class="streak-num" id="streakNum">0</div>
+                <div class="streak-label">Day Streak</div>
+            </div>
+            <div class="goal-card">
+                <div class="goal-title"><span class="goal-hash">#</span><span id="goalDisplay">-</span></div>
+                <div class="status-row">
+                    <div class="status-pill"><span class="val" id="todayStatus">−</span>今日</div>
+                    <div class="status-pill"><span class="val" id="passCount">0</span>パス残</div>
                 </div>
             </div>
+            <button class="rec-btn" id="recBtn" onclick="openCamera()">
+                <svg viewBox="0 0 24 24">
+                    <path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z" />
+                    <circle cx="12" cy="13" r="4" />
+                </svg>
+            </button>
+            <div class="rec-done-label" id="recDoneLabel">✓ RECORDED TODAY</div>
         </div>
 
         <div id="camera" class="screen">
-            <video id="video-preview" autoplay playsinline muted></video>
-            <div class="camera-overlay-ui" id="camera-ui">
-                <div class="camera-top">
-                    <div class="camera-timer" id="camera-timer"></div>
+            <div class="cam-container">
+                <canvas id="camCanvas" class="cam-canvas"></canvas>
+                <button class="cam-close" onclick="closeCamera()">✕</button>
+                <div class="cam-timer" id="camTimer"></div>
+                <div class="cam-controls" id="camControls">
+                    <button class="shutter-btn" id="shutterBtn" onclick="startRecording()">
+                        <div class="inner"></div>
+                    </button>
                 </div>
-                <div class="camera-controls">
-                    <button class="camera-capture-btn" id="camera-capture-btn"></button>
+                <div class="preview-controls" id="previewControls">
+                    <button class="prev-btn retry" onclick="retryRecording()">撮り直し</button>
+                    <button class="prev-btn save" onclick="saveRecording()">保存</button>
                 </div>
             </div>
         </div>
 
-        <div id="preview" class="screen">
-            <video id="preview-video" autoplay loop playsinline></video>
-            <div class="preview-controls">
-                <button class="btn btn-secondary" id="retake-btn">撮り直す</button>
-                <button class="btn btn-primary" id="save-btn">保存する</button>
+        <div id="history" class="screen">
+            <div class="screen-title">HISTORY</div>
+            <div class="cal-header">
+                <button onclick="changeMonth(-1)">◀</button>
+                <span class="cal-month" id="calMonth"></span>
+                <button onclick="changeMonth(1)">▶</button>
             </div>
-        </div>
-
-        <div id="calendar-screen" class="screen">
-            <div class="screen-scrollable">
-                <div class="calendar-header">
-                    <div class="calendar-title" id="calendar-title"></div>
-                    <div class="calendar-nav">
-                        <button class="calendar-nav-btn" id="cal-prev">◀</button>
-                        <button class="calendar-nav-btn" id="cal-next">▶</button>
-                    </div>
-                </div>
-                <div class="calendar-grid" id="calendar-grid"></div>
-                <div style="padding: 1.5rem; text-align: center; color: var(--text-muted); font-size: 0.9rem;">
-                    タップして動画を再生
-                </div>
-            </div>
+            <div class="cal-grid" id="calGrid"></div>
+            <div class="history-list" id="historyList"></div>
         </div>
 
         <div id="settings" class="screen">
-            <div class="settings-header">
-                <button class="settings-back" id="settings-back-btn">←</button>
-                <div class="settings-title">設定</div>
+            <div class="screen-title">SETTINGS</div>
+            <div class="setting-group">
+                <label>目標</label>
+                <input id="goalEdit" type="text" maxlength="20">
             </div>
-            <div class="settings-section">
-                <div class="settings-section-title">目標</div>
-                <div class="settings-item">
-                    <span class="settings-item-label">目標名</span>
-                    <input type="text" id="settings-goal" value="">
-                </div>
-            </div>
-            <div class="settings-section">
-                <div class="settings-section-title">データ</div>
-                <button class="danger-btn" id="reset-data-btn">すべてのデータをリセット</button>
-            </div>
+            <button class="btn-primary" onclick="saveSettings()" style="margin-bottom:16px">保存</button>
+            <button class="btn-danger" onclick="resetAll()">すべてのデータをリセット</button>
         </div>
 
-        <div class="video-modal" id="video-modal">
-            <button class="video-modal-close" id="modal-close-btn">✕</button>
-            <video id="modal-video" controls playsinline></video>
-        </div>
+        <nav class="bottom-nav" id="bottomNav">
+            <button class="nav-item active" onclick="showScreen('home')" data-screen="home">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
+                </svg>TODAY
+            </button>
+            <button class="nav-item" onclick="showScreen('history')" data-screen="history">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="3" y="4" width="18" height="18" rx="2" />
+                    <line x1="16" y1="2" x2="16" y2="6" />
+                    <line x1="8" y1="2" x2="8" y2="6" />
+                    <line x1="3" y1="10" x2="21" y2="10" />
+                </svg>HISTORY
+            </button>
+        </nav>
 
-        <div class="tab-bar" id="main-tab-bar">
-            <button class="tab-item active" data-screen="home"><span class="tab-icon">●</span><span
-                    class="tab-label">Today</span></button>
-            <button class="tab-item" data-screen="calendar-screen"><span class="tab-icon">📅</span><span
-                    class="tab-label">History</span></button>
+        <div class="modal-overlay" id="videoModal">
+            <button class="modal-close" onclick="closeModal()">✕</button>
+            <video id="modalVideo" controls playsinline></video>
         </div>
+        <div class="toast" id="toast"></div>
     </div>
 
-    <canvas id="composite-canvas"></canvas>
-
     <script>
-        // ===== Constants & Utils =====
-        const CANVAS_W = 1080;
-        const CANVAS_H = 1920;
-        const DB_NAME = 'OneShotDB_v2';
-        const DB_VERSION = 1;
+        // ===== STATE =====
+        var state = { goal: '', streak: 0, lastRecordDate: '', passCount: 0, onboarded: false, lastPassGrant: '' };
+        var db = null;
+        var calYear, calMonth;
+        var HOUR_BOUNDARY = 3;
+        var preparedBlob = null;
 
-        // 3AM cutoff logic
-        function getLogicalDate(date = new Date()) {
-            const d = new Date(date);
-            if (d.getHours() < 3) d.setDate(d.getDate() - 1);
-            return d.toISOString().split('T')[0];
+        function showToast(msg, isError) {
+            var t = document.getElementById('toast');
+            t.textContent = msg;
+            t.className = 'toast show' + (isError ? ' error' : '');
+            clearTimeout(t._tid);
+            t._tid = setTimeout(function () { t.className = 'toast' }, 3000);
         }
 
-        function formatDateForOverlay(date = new Date()) {
-            const y = date.getFullYear();
-            const m = String(date.getMonth() + 1).padStart(2, '0');
-            const d = String(date.getDate()).padStart(2, '0');
-            const h = String(date.getHours()).padStart(2, '0');
-            const min = String(date.getMinutes()).padStart(2, '0');
-            return { date: `${y}.${m}.${d}`, time: `${h}:${min}` };
+        // ===== APP DATE =====
+        function getAppDate(d) {
+            d = d || new Date();
+            var adj = new Date(d.getTime() - HOUR_BOUNDARY * 3600000);
+            var y = adj.getFullYear(), m = adj.getMonth() + 1, dd = adj.getDate();
+            return y + '-' + (m < 10 ? '0' : '') + m + '-' + (dd < 10 ? '0' : '') + dd;
         }
+        function getAppDayOfWeek(d) { d = d || new Date(); var adj = new Date(d.getTime() - HOUR_BOUNDARY * 3600000); return adj.getDay() }
+        function daysBetween(a, b) { return Math.round((new Date(b) - new Date(a)) / 86400000) }
 
-        // ===== App State =====
-        const APP = {
-            goal: '', streak: 0, passes: 0, lastRecordDate: null, lastPassGrant: null,
-            records: {}, // { 'YYYY-MM-DD': { blob: Blob, timestamp: number } }
-            videoStream: null, canvasProcessor: null, mediaRecorder: null, recordedChunks: [],
-            currentCalendarDate: new Date()
-        };
+        // ===== STORAGE =====
+        function saveState() { try { localStorage.setItem('oneshot_state', JSON.stringify(state)) } catch (e) { showToast('保存エラー', true) } }
+        function loadState() { try { var s = localStorage.getItem('oneshot_state'); if (s) Object.assign(state, JSON.parse(s)) } catch (e) { } }
 
-        // ===== CanvasProcessor (9:16 Center Crop + Filter + Large Overlays) =====
-        class CanvasProcessor {
-            constructor(videoElement, canvasElement) {
-                this.video = videoElement;
-                this.canvas = canvasElement;
-                this.ctx = canvasElement.getContext('2d', { willReadFrequently: false });
-                this.canvas.width = CANVAS_W;
-                this.canvas.height = CANVAS_H;
-                this.isActive = false;
-                this.startTime = 0;
-                this.frozenFrame = null;
-                this.animationFrameId = null;
-            }
-
-            start() {
-                this.isActive = true;
-                this.startTime = Date.now();
-                this.frozenFrame = null;
-                this._loop();
-            }
-
-            stop() {
-                this.isActive = false;
-                if (this.animationFrameId) cancelAnimationFrame(this.animationFrameId);
-            }
-
-            _drawVideoCenterCrop(ctx, video, cw, ch) {
-                const vw = video.videoWidth;
-                const vh = video.videoHeight;
-                if (!vw || !vh) return;
-                const videoRatio = vw / vh;
-                const canvasRatio = cw / ch;
-                let sx, sy, sw, sh;
-                if (videoRatio > canvasRatio) {
-                    sh = vh; sw = vh * canvasRatio;
-                    sx = (vw - sw) / 2; sy = 0;
-                } else {
-                    sw = vw; sh = vw / canvasRatio;
-                    sx = 0; sy = (vh - sh) / 2;
-                }
-                ctx.drawImage(video, sx, sy, sw, sh, 0, 0, cw, ch);
-            }
-
-            _loop() {
-                if (!this.isActive) return;
-                const elapsed = Date.now() - this.startTime;
-                const ctx = this.ctx;
-                const w = CANVAS_W; const h = CANVAS_H;
-
-                if (elapsed < 3000) {
-                    // Phase 1: Live
-                    ctx.filter = 'none';
-                    this._drawVideoCenterCrop(ctx, this.video, w, h);
-                } else {
-                    // Phase 2: Frozen + Filter
-                    if (!this.frozenFrame) {
-                        this.frozenFrame = document.createElement('canvas');
-                        this.frozenFrame.width = w; this.frozenFrame.height = h;
-                        const fCtx = this.frozenFrame.getContext('2d');
-                        this._drawVideoCenterCrop(fCtx, this.video, w, h);
+        function openDB() {
+            return new Promise(function (resolve, reject) {
+                if (!window.indexedDB) { showToast('IndexedDB未対応', true); reject(); return }
+                var req = indexedDB.open('OneShotDB', 2);
+                req.onupgradeneeded = function (e) {
+                    var d = e.target.result;
+                    if (!d.objectStoreNames.contains('videos')) {
+                        var store = d.createObjectStore('videos', { keyPath: 'id', autoIncrement: true });
+                        store.createIndex('date', 'date', { unique: false });
                     }
-                    // Apply Filter
-                    ctx.filter = 'brightness(0.7) contrast(1.3) saturate(0.6)';
-                    ctx.drawImage(this.frozenFrame, 0, 0, w, h);
-                    ctx.filter = 'none';
-                    // Draw Overlays
-                    this._drawOverlays(ctx, w, h);
-                }
-                this.animationFrameId = requestAnimationFrame(() => this._loop());
-            }
-
-            _drawOverlays(ctx, w, h) {
-                // Large Padding for SNS UI avoidance
-                const padX = Math.round(w * 0.12);
-                const padYTop = Math.round(h * 0.1);
-                const padYBottom = Math.round(h * 0.2);
-
-                const rSize = Math.round(w * 0.08);
-                const rThick = Math.round(w * 0.006);
-
-                // 1. Gradient
-                const gradH = h * 0.5;
-                const grad = ctx.createLinearGradient(0, h - gradH, 0, h);
-                grad.addColorStop(0, 'rgba(0,0,0,0)');
-                grad.addColorStop(1, 'rgba(0,0,0,0.9)');
-                ctx.fillStyle = grad;
-                ctx.fillRect(0, h - gradH, w, gradH);
-
-                // 2. Reticles (White)
-                ctx.strokeStyle = '#FFFFFF';
-                ctx.lineWidth = rThick;
-                ctx.beginPath();
-                // TL
-                ctx.moveTo(padX, padYTop + rSize); ctx.lineTo(padX, padYTop); ctx.lineTo(padX + rSize, padYTop);
-                // TR
-                ctx.moveTo(w - padX - rSize, padYTop); ctx.lineTo(w - padX, padYTop); ctx.lineTo(w - padX, padYTop + rSize);
-                // BR
-                ctx.moveTo(w - padX, h - padYBottom - rSize); ctx.lineTo(w - padX, h - padYBottom); ctx.lineTo(w - padX - rSize, h - padYBottom);
-                // BL
-                ctx.moveTo(padX + rSize, h - padYBottom); ctx.lineTo(padX, h - padYBottom); ctx.lineTo(padX, h - padYBottom - rSize);
-                ctx.stroke();
-
-                // 3. Text (Large & Bold)
-                const dayStr = `DAY ${APP.streak + 1}`;
-                const { date, time } = formatDateForOverlay();
-                const goalStr = APP.goal || '';
-
-                ctx.fillStyle = '#FFFFFF';
-                ctx.shadowColor = 'rgba(0,0,0,1.0)';
-                ctx.shadowBlur = 20;
-                ctx.shadowOffsetY = 4;
-
-                // DAY (Top Left, Huge)
-                const lgFont = Math.floor(w * 0.18);
-                ctx.font = `900 ${lgFont}px Inter, sans-serif`;
-                ctx.textAlign = 'left';
-                ctx.textBaseline = 'top';
-                ctx.fillText(dayStr, padX + rThick * 2, padYTop + rThick * 2);
-
-                // Date (Top Right, Large)
-                const smFont = Math.floor(w * 0.06);
-                ctx.font = `600 ${smFont}px Inter, sans-serif`;
-                ctx.textAlign = 'right';
-                ctx.fillText(date, w - padX - rThick * 2, padYTop + rThick * 2);
-                ctx.fillText(time, w - padX - rThick * 2, padYTop + rThick * 2 + smFont * 1.4);
-
-                // Goal (Bottom Center, Large)
-                const mdFont = Math.floor(w * 0.1);
-                ctx.font = `700 ${mdFont}px Inter, sans-serif`;
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'bottom';
-                ctx.fillText(goalStr, w / 2, h - padYBottom - rThick * 2);
-
-                ctx.shadowColor = 'transparent';
-            }
-        }
-
-        // ===== IndexedDB & State =====
-        let db = null;
-        async function initDB() {
-            return new Promise((resolve, reject) => {
-                const req = indexedDB.open(DB_NAME, DB_VERSION);
-                req.onerror = () => reject(req.error);
-                req.onsuccess = () => { db = req.result; resolve(db); };
-                req.onupgradeneeded = (e) => {
-                    const d = e.target.result;
-                    if (!d.objectStoreNames.contains('videos')) d.createObjectStore('videos');
                 };
+                req.onsuccess = function (e) { db = e.target.result; console.log('[DB] OK'); resolve(db) };
+                req.onerror = function (e) { showToast('DB error', true); reject(e) };
             });
         }
 
-        async function saveVideo(dateKey, blob) {
-            if (!db) throw new Error('DB not ready');
-            return new Promise((resolve, reject) => {
-                const tx = db.transaction(['videos'], 'readwrite');
-                tx.oncomplete = () => resolve();
-                tx.onerror = () => reject(tx.error);
-                tx.objectStore('videos').put(blob, dateKey);
-            });
-        }
-
-        async function loadRecords() {
-            if (!db) return;
-            return new Promise((resolve, reject) => {
-                const tx = db.transaction(['videos'], 'readonly');
-                const req = tx.objectStore('videos').getAllKeys();
-                req.onsuccess = () => {
-                    APP.records = {};
-                    req.result.forEach(key => APP.records[key] = { blob: true });
-                    resolve();
+        function saveVideoToDB(blob, dateStr, dayNum) {
+            return new Promise(function (resolve, reject) {
+                if (!db) { showToast('DB未接続', true); reject(new Error('no db')); return }
+                console.log('[SAVE] blob=' + blob.size + 'b type=' + blob.type);
+                var reader = new FileReader();
+                reader.onload = function () {
+                    try {
+                        var tx = db.transaction('videos', 'readwrite');
+                        var store = tx.objectStore('videos');
+                        store.put({ data: reader.result, mime: blob.type, date: dateStr, day: dayNum, ts: Date.now() });
+                        tx.oncomplete = function () { console.log('[SAVE] OK'); resolve() };
+                        tx.onerror = function (e) { showToast('DB書込エラー', true); reject(e) };
+                    } catch (ex) { showToast('保存例外: ' + ex.message, true); reject(ex) }
                 };
-                req.onerror = () => reject(req.error);
+                reader.onerror = function () { showToast('Blob読取エラー', true); reject(reader.error) };
+                reader.readAsArrayBuffer(blob);
             });
         }
 
-        async function getVideo(dateKey) {
-            if (!db) return null;
-            return new Promise((resolve, reject) => {
-                const tx = db.transaction(['videos'], 'readonly');
-                const req = tx.objectStore('videos').get(dateKey);
-                req.onsuccess = () => resolve(req.result);
-                req.onerror = () => reject(req.error);
+        function arrayBufferToBlob(ab, mime) { return new Blob([ab], { type: mime || 'video/webm' }) }
+
+        function getAllVideos() {
+            return new Promise(function (resolve) {
+                if (!db) { resolve([]); return }
+                try {
+                    var tx = db.transaction('videos', 'readonly'); var req = tx.objectStore('videos').getAll();
+                    req.onsuccess = function () { resolve(req.result || []) }; req.onerror = function () { resolve([]) }
+                } catch (e) { resolve([]) }
+            });
+        }
+        function getAllVideoDates() {
+            return new Promise(function (resolve) {
+                if (!db) { resolve([]); return }
+                try {
+                    var tx = db.transaction('videos', 'readonly'); var req = tx.objectStore('videos').index('date').getAllKeys();
+                    req.onsuccess = function () { resolve([...new Set(req.result || [])]) }; req.onerror = function () { resolve([]) }
+                } catch (e) { resolve([]) }
+            });
+        }
+        function getVideosByDate(dateStr) {
+            return new Promise(function (resolve) {
+                if (!db) { resolve([]); return }
+                try {
+                    var tx = db.transaction('videos', 'readonly'); var req = tx.objectStore('videos').index('date').getAll(dateStr);
+                    req.onsuccess = function () { resolve(req.result || []) }; req.onerror = function () { resolve([]) }
+                } catch (e) { resolve([]) }
             });
         }
 
-        function loadAppState() {
-            const saved = localStorage.getItem('oneshot_state_v2');
-            if (saved) {
-                const d = JSON.parse(saved);
-                APP.goal = d.goal || '';
-                APP.passes = d.passes || 0;
-                APP.lastRecordDate = d.lastRecordDate;
-                APP.lastPassGrant = d.lastPassGrant;
-            }
-        }
-
-        function saveAppState() {
-            localStorage.setItem('oneshot_state_v2', JSON.stringify({
-                goal: APP.goal, passes: APP.passes, lastRecordDate: APP.lastRecordDate, lastPassGrant: APP.lastPassGrant
-            }));
-        }
-
-        function calculateStreak() {
-            const today = getLogicalDate();
-            let streak = 0, check = new Date();
-            if (getLogicalDate(check) !== today) check.setDate(check.getDate() - 1);
-            while (true) {
-                const key = getLogicalDate(check);
-                if (APP.records[key]) { streak++; check.setDate(check.getDate() - 1); }
-                else break;
-            }
-            APP.streak = streak;
-        }
-
+        // ===== HABIT =====
         function checkPassGrant() {
-            const today = new Date();
-            if (today.getDay() === 1 && getLogicalDate(today) !== APP.lastPassGrant) {
-                APP.passes++; APP.lastPassGrant = getLogicalDate(today); saveAppState();
+            var today = getAppDate(), dow = getAppDayOfWeek();
+            if (dow === 1 && state.lastPassGrant !== today) { state.passCount++; state.lastPassGrant = today; saveState() }
+        }
+        function updateStreak() {
+            var today = getAppDate();
+            if (!state.lastRecordDate) { state.streak = 0; return }
+            if (daysBetween(state.lastRecordDate, today) >= 2) { state.streak = 0; saveState() }
+        }
+        function recordToday() {
+            var today = getAppDate();
+            if (state.lastRecordDate === today) return;
+            var diff = state.lastRecordDate ? daysBetween(state.lastRecordDate, today) : 999;
+            state.streak = (diff <= 1) ? state.streak + 1 : 1;
+            state.lastRecordDate = today;
+            saveState();
+        }
+
+        // ===== SCREENS =====
+        function showScreen(name) {
+            document.querySelectorAll('.screen').forEach(function (s) { s.classList.remove('active') });
+            document.getElementById(name).classList.add('active');
+            document.querySelectorAll('.nav-item').forEach(function (n) { n.classList.toggle('active', n.dataset.screen === name) });
+            document.getElementById('bottomNav').style.display = (name === 'onboarding' || name === 'camera') ? 'none' : 'flex';
+            if (name === 'home') refreshHome();
+            if (name === 'history') refreshHistory();
+            if (name === 'settings') document.getElementById('goalEdit').value = state.goal;
+        }
+        function refreshHome() {
+            updateStreak(); checkPassGrant();
+            document.getElementById('streakNum').textContent = state.streak;
+            document.getElementById('goalDisplay').textContent = state.goal || '-';
+            document.getElementById('passCount').textContent = state.passCount;
+            var today = getAppDate();
+            var st = document.getElementById('todayStatus'), rb = document.getElementById('recBtn'), dl = document.getElementById('recDoneLabel');
+            if (state.lastRecordDate === today) { st.textContent = '✓'; st.className = 'val done'; rb.classList.add('recorded'); dl.classList.add('show') }
+            else { st.textContent = '−'; st.className = 'val pending'; rb.classList.remove('recorded'); dl.classList.remove('show') }
+        }
+
+        // ===== ONBOARDING =====
+        var goalInput = document.getElementById('goalInput'), startBtn = document.getElementById('startBtn');
+        goalInput.addEventListener('input', function () { startBtn.disabled = !goalInput.value.trim() });
+        startBtn.addEventListener('click', function () { state.goal = goalInput.value.trim(); state.onboarded = true; saveState(); showScreen('home') });
+
+        // ===== SETTINGS =====
+        function saveSettings() { state.goal = document.getElementById('goalEdit').value.trim(); saveState(); showScreen('home') }
+        function resetAll() { if (confirm('すべてのデータを削除しますか？')) { localStorage.removeItem('oneshot_state'); indexedDB.deleteDatabase('OneShotDB'); location.reload() } }
+
+        // ===== HISTORY =====
+        function changeMonth(dir) {
+            calMonth += dir;
+            if (calMonth > 11) { calMonth = 0; calYear++ }
+            if (calMonth < 0) { calMonth = 11; calYear-- }
+            refreshHistory();
+        }
+        async function refreshHistory() {
+            if (calYear == null) { var n = new Date(); calYear = n.getFullYear(); calMonth = n.getMonth() }
+            document.getElementById('calMonth').textContent = calYear + '.' + (calMonth + 1 < 10 ? '0' : '') + (calMonth + 1);
+            var dates = []; try { dates = await getAllVideoDates() } catch (e) { }
+            var grid = document.getElementById('calGrid'); grid.innerHTML = '';
+            ['日', '月', '火', '水', '木', '金', '土'].forEach(function (l) {
+                var d = document.createElement('div'); d.className = 'cal-day-label'; d.textContent = l; grid.appendChild(d);
+            });
+            var firstDay = new Date(calYear, calMonth, 1), lastDay = new Date(calYear, calMonth + 1, 0).getDate();
+            var startDow = firstDay.getDay(), todayStr = getAppDate();
+            for (var i = 0; i < startDow; i++) { var d = document.createElement('div'); d.className = 'cal-day'; grid.appendChild(d) }
+            for (var i = 1; i <= lastDay; i++) {
+                var d = document.createElement('div'); d.className = 'cal-day current-month'; d.textContent = i;
+                var ds = calYear + '-' + (calMonth + 1 < 10 ? '0' : '') + (calMonth + 1) + '-' + (i < 10 ? '0' : '') + i;
+                if (ds === todayStr) d.classList.add('today');
+                if (dates.indexOf(ds) >= 0) d.classList.add('has-video');
+                (function (date) { d.addEventListener('click', function () { showDayVideos(date) }) })(ds);
+                grid.appendChild(d);
             }
+            var list = document.getElementById('historyList'); list.innerHTML = '';
+            var all = []; try { all = await getAllVideos() } catch (e) { }
+            if (all.length === 0) { list.innerHTML = '<div class="no-history">まだ記録がありません</div>'; return }
+            all.sort(function (a, b) { return b.ts - a.ts });
+            all.slice(0, 50).forEach(function (v) {
+                var item = document.createElement('div'); item.className = 'history-item';
+                item.innerHTML = '<div class="hi-left"><div class="hi-thumb">🎬</div><div class="hi-info"><div class="hi-date">' + v.date + '</div><div class="hi-day">DAY ' + v.day + '</div></div></div><div class="hi-play">▶</div>';
+                item.addEventListener('click', function () { playVideoRecord(v) });
+                list.appendChild(item);
+            });
+        }
+        async function showDayVideos(date) { try { var vids = await getVideosByDate(date); if (vids.length > 0) playVideoRecord(vids[0]) } catch (e) { } }
+        function playVideoRecord(record) {
+            var blob;
+            if (record.data) blob = arrayBufferToBlob(record.data, record.mime);
+            else if (record.blob) blob = record.blob;
+            else { showToast('動画データなし', true); return }
+            var vid = document.getElementById('modalVideo');
+            vid.src = URL.createObjectURL(blob);
+            document.getElementById('videoModal').classList.add('active');
+            vid.play().catch(function () { });
+        }
+        function closeModal() {
+            var v = document.getElementById('modalVideo'); v.pause();
+            try { URL.revokeObjectURL(v.src) } catch (e) { }
+            v.removeAttribute('src'); v.load();
+            document.getElementById('videoModal').classList.remove('active');
         }
 
-        // ===== UI & Flows =====
-        function updateHomeUI() {
-            calculateStreak();
-            document.getElementById('streak-display').textContent = APP.streak;
-            document.getElementById('goal-display').textContent = APP.goal;
-            document.getElementById('pass-count').textContent = APP.passes;
-            const todayKey = getLogicalDate();
-            document.getElementById('today-status').textContent = APP.records[todayKey] ? '済' : '未';
-            document.getElementById('today-status').style.color = APP.records[todayKey] ? 'var(--success)' : 'var(--text-secondary)';
+        // ===== CAMERA / CANVAS PROCESSOR =====
+        var camStream = null, mediaRec = null, animFrame = null, chunks = [];
+        var isRecording = false, isFrozen = false, frozenReady = false, recStart = 0;
+        var canvas = document.getElementById('camCanvas');
+        var ctx = canvas.getContext('2d', { willReadFrequently: true });
+        canvas.width = 1080; canvas.height = 1920;
+
+        // Offscreen: holds captured frame for filter application
+        var offCanvas = document.createElement('canvas');
+        offCanvas.width = 1080; offCanvas.height = 1920;
+        var offCtx = offCanvas.getContext('2d', { willReadFrequently: true });
+
+        // Second offscreen: holds filtered result
+        var filtCanvas = document.createElement('canvas');
+        filtCanvas.width = 1080; filtCanvas.height = 1920;
+        var filtCtx = filtCanvas.getContext('2d');
+
+        var videoEl = null;
+
+        function openCamera() {
+            showScreen('camera');
+            document.getElementById('camControls').style.display = 'flex';
+            document.getElementById('previewControls').style.display = 'none';
+            document.getElementById('camTimer').style.display = 'none';
+            document.getElementById('shutterBtn').classList.remove('recording');
+            isRecording = false; isFrozen = false; frozenReady = false; chunks = []; preparedBlob = null;
+
+            if (!videoEl) { videoEl = document.createElement('video'); videoEl.setAttribute('playsinline', ''); videoEl.muted = true }
+            navigator.mediaDevices.getUserMedia({
+                video: { facingMode: 'user', width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: true
+            }).then(function (stream) {
+                camStream = stream; videoEl.srcObject = stream; videoEl.play(); drawLoop();
+            }).catch(function (e) { showToast('カメラエラー: ' + e.message, true); closeCamera() });
         }
 
-        function showScreen(id) {
-            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-            document.getElementById(id).classList.add('active');
-            const tabBar = document.getElementById('main-tab-bar');
-            tabBar.style.display = ['home', 'calendar-screen'].includes(id) ? 'flex' : 'none';
-            if (id === 'home') updateHomeUI();
-            if (id === 'calendar-screen') renderCalendar();
-        }
+        function drawLoop() {
+            if (!camStream) return;
 
-        // Camera Flow
-        async function startCameraFlow() {
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({
-                    video: { facingMode: 'user', width: { ideal: 1080 }, height: { ideal: 1920 }, aspectRatio: { ideal: 9 / 16 } },
-                    audio: true
-                });
-                APP.videoStream = stream;
-                const video = document.getElementById('video-preview');
-                video.srcObject = stream;
-                const canvas = document.getElementById('composite-canvas');
-                APP.canvasProcessor = new CanvasProcessor(video, canvas);
-                showScreen('camera');
-                document.getElementById('camera-ui').style.display = 'flex';
-            } catch (e) {
-                alert('カメラの起動に失敗しました: ' + e.message);
-            }
-        }
-
-        function startRecording() {
-            if (!APP.videoStream || !APP.canvasProcessor) return;
-            const btn = document.getElementById('camera-capture-btn');
-            if (btn.classList.contains('recording')) return;
-            btn.classList.add('recording');
-            document.getElementById('camera-ui').style.display = 'none'; // Hide UI during recording
-
-            APP.canvasProcessor.start();
-            const canvasStream = document.getElementById('composite-canvas').captureStream(30);
-            APP.videoStream.getAudioTracks().forEach(t => canvasStream.addTrack(t));
-            APP.recordedChunks = [];
-            // Safari friendly mimeType
-            let options = { mimeType: 'video/mp4' };
-            if (!MediaRecorder.isTypeSupported(options.mimeType)) options = { mimeType: 'video/webm' };
-            
-            APP.mediaRecorder = new MediaRecorder(canvasStream, options);
-            APP.mediaRecorder.ondataavailable = e => { if (e.data.size > 0) APP.recordedChunks.push(e.data); };
-            APP.mediaRecorder.onstop = () => {
-                const blob = new Blob(APP.recordedChunks, { type: APP.mediaRecorder.mimeType });
-                showPreview(blob);
-            };
-            APP.mediaRecorder.start();
-
-            let count = 3;
-            const timer = document.getElementById('camera-timer');
-            document.getElementById('camera-ui').style.display = 'flex'; // Show Timer
-            timer.textContent = count;
-            const int = setInterval(() => {
-                count--;
-                if (count > 0) timer.textContent = count;
-                else {
-                    clearInterval(int);
-                    timer.textContent = '';
-                    setTimeout(() => {
-                        APP.mediaRecorder.stop();
-                        APP.canvasProcessor.stop();
-                        APP.videoStream.getTracks().forEach(t => t.stop());
-                    }, 2000); // 2s freeze
+            if (!isFrozen) {
+                // Live phase: draw camera to main canvas
+                var vw = videoEl.videoWidth, vh = videoEl.videoHeight;
+                if (vw && vh) {
+                    var targetRatio = 9 / 16, srcRatio = vw / vh;
+                    var sx = 0, sy = 0, sw = vw, sh = vh;
+                    if (srcRatio > targetRatio) { sw = vh * targetRatio; sx = (vw - sw) / 2 }
+                    else { sh = vw / targetRatio; sy = (vh - sh) / 2 }
+                    ctx.filter = 'none';
+                    ctx.drawImage(videoEl, sx, sy, sw, sh, 0, 0, 1080, 1920);
                 }
-            }, 1000);
+                if (isRecording) {
+                    var elapsed = (Date.now() - recStart) / 1000;
+                    if (elapsed >= 3) {
+                        // === FREEZE: capture → filter → overlay ===
+                        // Step 1: Copy current frame to offscreen (raw)
+                        offCtx.filter = 'none';
+                        offCtx.drawImage(canvas, 0, 0);
+
+                        // Step 2: Apply cinematic filter to filtCanvas
+                        filtCtx.filter = 'brightness(0.7) contrast(1.3) saturate(0.6)';
+                        filtCtx.drawImage(offCanvas, 0, 0);
+                        filtCtx.filter = 'none';
+
+                        // Step 3: Draw overlay text on filtCanvas
+                        drawOverlayOn(filtCtx);
+
+                        isFrozen = true;
+                        frozenReady = true;
+                        console.log('[FREEZE] filter+overlay applied');
+                    }
+                }
+            }
+
+            if (isFrozen && frozenReady) {
+                // Frozen phase: copy filtered+overlaid frame to main canvas every frame
+                ctx.filter = 'none';
+                ctx.drawImage(filtCanvas, 0, 0);
+                var elapsed2 = (Date.now() - recStart) / 1000;
+                if (elapsed2 >= 5) { stopRecording(); return }
+            }
+
+            // Timer (countdown)
+            if (isRecording) {
+                var el = (Date.now() - recStart) / 1000;
+                var timer = document.getElementById('camTimer');
+                timer.style.display = 'block';
+                timer.textContent = Math.max(0, Math.ceil(5 - el)) + 's';
+            }
+
+            animFrame = requestAnimationFrame(drawLoop);
         }
 
-        function showPreview(blob) {
-            const video = document.getElementById('preview-video');
-            video.src = URL.createObjectURL(blob);
-            video.currentBlob = blob;
-            showScreen('preview');
+        // ===== OVERLAY DRAWING (SNS-optimized layout) =====
+        function drawOverlayOn(c) {
+            var w = 1080, h = 1920;
+
+            // --- L-bracket reticles (四隅) ---
+            var L = 70, T = 7;
+            c.strokeStyle = '#fff'; c.lineWidth = T; c.lineCap = 'square';
+            // Moved inward for SNS safe area
+            var margin = 60;
+            c.beginPath(); c.moveTo(margin, margin + L); c.lineTo(margin, margin); c.lineTo(margin + L, margin); c.stroke();
+            c.beginPath(); c.moveTo(w - margin, margin + L); c.lineTo(w - margin, margin); c.lineTo(w - margin - L, margin); c.stroke();
+            c.beginPath(); c.moveTo(margin, h - margin - L); c.lineTo(margin, h - margin); c.lineTo(margin + L, h - margin); c.stroke();
+            c.beginPath(); c.moveTo(w - margin, h - margin - L); c.lineTo(w - margin, h - margin); c.lineTo(w - margin - L, h - margin); c.stroke();
+
+            // --- Bottom gradient (taller for cinematic look) ---
+            var grd = c.createLinearGradient(0, h * 0.45, 0, h);
+            grd.addColorStop(0, 'rgba(0,0,0,0)');
+            grd.addColorStop(0.6, 'rgba(0,0,0,0.3)');
+            grd.addColorStop(1, 'rgba(0,0,0,0.75)');
+            c.fillStyle = grd; c.fillRect(0, h * 0.45, w, h * 0.55);
+
+            // --- Top gradient (subtle, for upper text readability) ---
+            var grdTop = c.createLinearGradient(0, 0, 0, h * 0.25);
+            grdTop.addColorStop(0, 'rgba(0,0,0,0.6)');
+            grdTop.addColorStop(1, 'rgba(0,0,0,0)');
+            c.fillStyle = grdTop; c.fillRect(0, 0, w, h * 0.25);
+
+            // Shadow helper
+            function setShadow(blur, alpha) {
+                c.shadowColor = 'rgba(0,0,0,' + alpha + ')';
+                c.shadowBlur = blur;
+                c.shadowOffsetX = 0;
+                c.shadowOffsetY = 4;
+            }
+
+            // --- DAY number (upper area, ~12% from top) ---
+            var dayNum = state.streak + 1;
+            var dayY = Math.round(h * 0.12);
+            setShadow(30, 0.9);
+            c.fillStyle = '#fff';
+            c.font = '900 140px Inter,sans-serif';
+            c.textAlign = 'left';
+            c.textBaseline = 'top';
+            c.fillText('DAY ' + dayNum, 80, dayY);
+
+            // --- Date/Time (below DAY, ~18% from top) ---
+            var now = new Date();
+            var dateStr = now.getFullYear() + '.'
+                + (now.getMonth() + 1 < 10 ? '0' : '') + (now.getMonth() + 1) + '.'
+                + (now.getDate() < 10 ? '0' : '') + now.getDate() + '  '
+                + (now.getHours() < 10 ? '0' : '') + now.getHours() + ':'
+                + (now.getMinutes() < 10 ? '0' : '') + now.getMinutes();
+            var dateY = Math.round(h * 0.12) + 150;
+            setShadow(20, 0.8);
+            c.font = '700 52px Inter,sans-serif';
+            c.textAlign = 'left';
+            c.textBaseline = 'top';
+            c.fillText(dateStr, 85, dateY);
+
+            // --- Goal text (lower area, ~80% from top = 20% from bottom) ---
+            var goalText = '#' + (state.goal || 'NO GOAL');
+            var goalY = Math.round(h * 0.80);
+            setShadow(35, 0.95);
+            c.font = '900 80px Inter,sans-serif';
+            c.textAlign = 'center';
+            c.textBaseline = 'middle';
+            c.fillText(goalText, w / 2, goalY);
+
+            // Reset shadow
+            c.shadowColor = 'transparent';
+            c.shadowBlur = 0;
+            c.shadowOffsetX = 0;
+            c.shadowOffsetY = 0;
+        }
+
+        // ===== RECORDING =====
+        function startRecording() {
+            if (isRecording) return;
+            isRecording = true; isFrozen = false; frozenReady = false; chunks = []; preparedBlob = null;
+            recStart = Date.now();
+            document.getElementById('shutterBtn').classList.add('recording');
+
+            var types = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm;codecs=vp8', 'video/webm', 'video/mp4'];
+            var mime = '';
+            for (var i = 0; i < types.length; i++) {
+                try { if (MediaRecorder.isTypeSupported(types[i])) { mime = types[i]; break } } catch (e) { }
+            }
+            console.log('[REC] mime=' + mime);
+
+            var canvasStream = canvas.captureStream(30);
+            if (camStream) {
+                var at = camStream.getAudioTracks();
+                for (var j = 0; j < at.length; j++) { canvasStream.addTrack(at[j]) }
+            }
+
+            try {
+                var opts = mime ? { mimeType: mime } : {};
+                mediaRec = new MediaRecorder(canvasStream, opts);
+                mediaRec.ondataavailable = function (e) {
+                    if (e.data && e.data.size > 0) { chunks.push(e.data); console.log('[REC] chunk +' + e.data.size) }
+                };
+                mediaRec.onstop = function () {
+                    console.log('[REC] stopped, chunks=' + chunks.length);
+                    var mt = (mediaRec && mediaRec.mimeType) ? mediaRec.mimeType : (mime || 'video/webm');
+                    preparedBlob = new Blob(chunks, { type: mt });
+                    console.log('[REC] blob=' + preparedBlob.size + 'b type=' + preparedBlob.type);
+                    onRecordingComplete();
+                };
+                mediaRec.onerror = function (e) { console.error('[REC] error', e); showToast('録画エラー', true) };
+                mediaRec.start();
+                console.log('[REC] started');
+            } catch (e) {
+                console.error('[REC] start fail', e);
+                showToast('録画開始エラー: ' + e.message, true);
+                isRecording = false;
+                document.getElementById('shutterBtn').classList.remove('recording');
+            }
+        }
+
+        function stopRecording() {
+            isRecording = false;
+            document.getElementById('shutterBtn').classList.remove('recording');
+            document.getElementById('camTimer').style.display = 'none';
+            if (mediaRec && mediaRec.state !== 'inactive') {
+                try { mediaRec.requestData() } catch (e) { }
+                setTimeout(function () {
+                    try { if (mediaRec.state !== 'inactive') mediaRec.stop() } catch (e) { }
+                }, 200);
+            }
+        }
+
+        function onRecordingComplete() {
+            document.getElementById('camControls').style.display = 'none';
+            document.getElementById('previewControls').style.display = 'flex';
+        }
+
+        function retryRecording() {
+            isFrozen = false; frozenReady = false; chunks = []; preparedBlob = null;
+            document.getElementById('camControls').style.display = 'flex';
+            document.getElementById('previewControls').style.display = 'none';
+            isRecording = false;
+            if (!animFrame) drawLoop();
         }
 
         async function saveRecording() {
-            const blob = document.getElementById('preview-video').currentBlob;
-            if (!blob) return;
-            const todayKey = getLogicalDate();
             try {
-                await saveVideo(todayKey, blob);
-                APP.records[todayKey] = { blob: true };
-                APP.lastRecordDate = todayKey;
-                saveAppState();
-                updateHomeUI();
+                if (!preparedBlob || preparedBlob.size < 100) {
+                    showToast('録画データなし (size=' + (preparedBlob ? preparedBlob.size : 0) + ')', true); return;
+                }
+                var today = getAppDate(), dayNum = state.streak + 1;
+                await saveVideoToDB(preparedBlob, today, dayNum);
+                recordToday();
+                showToast('✓ DAY ' + state.streak + ' 保存完了！');
+                closeCameraOnly();
                 showScreen('home');
             } catch (e) {
-                alert('保存に失敗しました: ' + e.message);
+                console.error('[SAVE] failed', e);
+                showToast('保存失敗: ' + e.message, true);
             }
         }
 
-        // Calendar
-        function renderCalendar() {
-            const grid = document.getElementById('calendar-grid');
-            const d = APP.currentCalendarDate;
-            const year = d.getFullYear(), month = d.getMonth();
-            document.getElementById('calendar-title').textContent = `${year}年 ${month + 1}月`;
-            const firstDay = new Date(year, month, 1).getDay();
-            const daysInMonth = new Date(year, month + 1, 0).getDate();
-            let html = ['日', '月', '火', '水', '木', '金', '土'].map(n => `<div class="calendar-day-header">${n}</div>`).join('');
-            for (let i = 0; i < firstDay; i++) html += '<div class="calendar-day" style="visibility:hidden"></div>';
-            const todayKey = getLogicalDate();
-            for (let day = 1; day <= daysInMonth; day++) {
-                const dateKey = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-                let cls = 'calendar-day';
-                if (dateKey === todayKey) cls += ' today';
-                if (APP.records[dateKey]) cls += ' recorded';
-                html += `<div class="${cls}" data-key="${dateKey}"><span class="calendar-day-num">${day}</span></div>`;
-            }
-            grid.innerHTML = html;
-            grid.querySelectorAll('.calendar-day.recorded').forEach(el => {
-                el.addEventListener('click', async () => {
-                    const blob = await getVideo(el.dataset.key);
-                    if (blob) {
-                        const v = document.getElementById('modal-video');
-                        v.src = URL.createObjectURL(blob);
-                        document.getElementById('video-modal').classList.add('active');
-                        v.play();
-                    }
-                });
-            });
+        function closeCameraOnly() {
+            if (animFrame) { cancelAnimationFrame(animFrame); animFrame = null }
+            if (camStream) { camStream.getTracks().forEach(function (t) { t.stop() }); camStream = null }
+            isRecording = false; isFrozen = false; frozenReady = false;
+            document.getElementById('camTimer').style.display = 'none';
         }
 
-        // Init
-        async function init() {
-            try { await initDB(); await loadRecords(); } catch (e) { console.error(e); }
-            loadAppState(); checkPassGrant();
-            
-            // Event Listeners
-            document.getElementById('start-btn').addEventListener('click', () => {
-                APP.goal = document.getElementById('goal-input').value;
-                if (!APP.goal) return alert('目標を入力してください');
-                saveAppState(); showScreen('home');
-            });
-            document.getElementById('record-start-btn').addEventListener('click', startCameraFlow);
-            document.getElementById('camera-capture-btn').addEventListener('click', startRecording);
-            document.getElementById('save-btn').addEventListener('click', saveRecording);
-            document.getElementById('retake-btn').addEventListener('click', () => startCameraFlow());
-            document.getElementById('settings-open-btn').addEventListener('click', () => {
-                document.getElementById('settings-goal').value = APP.goal;
-                showScreen('settings');
-            });
-            document.getElementById('settings-back-btn').addEventListener('click', () => {
-                APP.goal = document.getElementById('settings-goal').value;
-                saveAppState(); showScreen('home');
-            });
-            document.getElementById('reset-data-btn').addEventListener('click', () => {
-                if(confirm('本当にデータをリセットしますか？')) {
-                    localStorage.removeItem('oneshot_state_v2');
-                    indexedDB.deleteDatabase(DB_NAME);
-                    location.reload();
-                }
-            });
-            document.getElementById('cal-prev').addEventListener('click', () => { APP.currentCalendarDate.setMonth(APP.currentCalendarDate.getMonth() - 1); renderCalendar(); });
-            document.getElementById('cal-next').addEventListener('click', () => { APP.currentCalendarDate.setMonth(APP.currentCalendarDate.getMonth() + 1); renderCalendar(); });
-            document.getElementById('modal-close-btn').addEventListener('click', () => {
-                document.getElementById('video-modal').classList.remove('active');
-                document.getElementById('modal-video').pause();
-            });
-            document.querySelectorAll('.tab-item').forEach(t => t.addEventListener('click', () => showScreen(t.dataset.screen)));
-
-            if (APP.goal) showScreen('home'); else showScreen('onboarding');
+        function closeCamera() {
+            closeCameraOnly();
+            showScreen('home');
         }
-        document.addEventListener('DOMContentLoaded', init);
+
+        // ===== INIT =====
+        (async function () {
+            loadState();
+            try { await openDB() } catch (e) { console.error('DB init fail', e) }
+            var n = new Date(); calYear = n.getFullYear(); calMonth = n.getMonth();
+            if (!state.onboarded) showScreen('onboarding');
+            else showScreen('home');
+        })();
     </script>
 </body>
 
