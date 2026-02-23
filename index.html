@@ -810,6 +810,144 @@
         .toast.error {
             background: #cc0000
         }
+
+        /* ===== GUIDE MODAL ===== */
+        #guideModal {
+            position: fixed;
+            inset: 0;
+            background: #000;
+            z-index: 400;
+            display: none;
+            flex-direction: column;
+            overflow-y: auto;
+            padding: 48px 24px 40px;
+            max-width: 480px;
+            margin: 0 auto
+        }
+
+        #guideModal.active {
+            display: flex
+        }
+
+        .guide-logo {
+            font-size: 32px;
+            font-weight: 900;
+            letter-spacing: -1px;
+            margin-bottom: 4px
+        }
+
+        .guide-sub {
+            font-size: 13px;
+            color: var(--gray);
+            margin-bottom: 36px;
+            letter-spacing: 1px
+        }
+
+        .guide-card {
+            background: #111;
+            border-radius: 16px;
+            padding: 20px 20px 18px;
+            margin-bottom: 12px;
+            border-left: 3px solid var(--accent)
+        }
+
+        .guide-card-head {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 8px
+        }
+
+        .guide-card-icon {
+            font-size: 22px;
+            line-height: 1
+        }
+
+        .guide-card-title {
+            font-size: 15px;
+            font-weight: 900;
+            letter-spacing: .5px
+        }
+
+        .guide-card-body {
+            font-size: 13px;
+            color: #bbb;
+            line-height: 1.7;
+            padding-left: 32px
+        }
+
+        .guide-start-btn {
+            width: 100%;
+            padding: 18px;
+            background: var(--accent);
+            color: #fff;
+            border: none;
+            border-radius: 12px;
+            font-size: 18px;
+            font-weight: 900;
+            font-family: 'Inter', sans-serif;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+            margin-top: 24px;
+            transition: opacity .2s
+        }
+
+        .guide-start-btn:active {
+            opacity: .8
+        }
+
+        /* ===== USE PASS BUTTON ===== */
+        .use-pass-btn {
+            display: none;
+            width: 100%;
+            padding: 14px;
+            background: transparent;
+            border: 2px solid var(--accent);
+            border-radius: 12px;
+            color: var(--accent);
+            font-size: 14px;
+            font-weight: 900;
+            font-family: 'Inter', sans-serif;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-top: 12px;
+            transition: all .2s
+        }
+
+        .use-pass-btn.visible {
+            display: block
+        }
+
+        .use-pass-btn:active {
+            background: var(--accent);
+            color: #fff
+        }
+
+        /* ===== SETTINGS LIST ITEM ===== */
+        .setting-link {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px 20px;
+            background: var(--card);
+            border-radius: 12px;
+            margin-bottom: 12px;
+            cursor: pointer;
+            font-size: 15px;
+            font-weight: 700;
+            transition: background .2s
+        }
+
+        .setting-link:active {
+            background: var(--card2)
+        }
+
+        .setting-link-arrow {
+            color: var(--gray);
+            font-size: 18px
+        }
     </style>
 </head>
 
@@ -851,7 +989,8 @@
                 </svg>
             </button>
             <div class="rec-done-label" id="recDoneLabel">✓ RECORDED TODAY</div>
-            <button class="pass-purchase" onclick="purchasePass()">🎟️ パスを購入（¥100）</button>
+            <button class="use-pass-btn" id="usePassBtn" onclick="usePassToday()">🎟️ パスを使う（残り <span id="passRemain">0</span>枚）</button>
+            <button class="pass-purchase" onclick="purchasePass()">💳 パスを購入（¥100）</button>
         </div>
 
         <!-- Camera -->
@@ -896,6 +1035,10 @@
         <!-- Settings -->
         <div id="settings" class="screen">
             <div class="screen-title">SETTINGS</div>
+            <div class="setting-link" onclick="showGuide()">
+                <span>📖 アプリの使い方</span>
+                <span class="setting-link-arrow">›</span>
+            </div>
             <div class="setting-group">
                 <label>目標</label>
                 <input id="goalEdit" type="text" maxlength="20">
@@ -932,13 +1075,54 @@
             <video id="modalVideo" controls playsinline></video>
         </div>
         <div class="toast" id="toast"></div>
+
+        <!-- Guide Modal -->
+        <div id="guideModal">
+            <div class="guide-logo">ONE SHOT</div>
+            <div class="guide-sub">使い方ガイド</div>
+
+            <div class="guide-card">
+                <div class="guide-card-head">
+                    <span class="guide-card-icon">📱</span>
+                    <span class="guide-card-title">習慣化の仕組み</span>
+                </div>
+                <div class="guide-card-body">1日1回、継続したい習慣の動画を撮り、SNSにシェアしましょう。フォロワーが見ていることで、サボれない環境を作ります。</div>
+            </div>
+
+            <div class="guide-card">
+                <div class="guide-card-head">
+                    <span class="guide-card-icon">🎬</span>
+                    <span class="guide-card-title">撮影ルール</span>
+                </div>
+                <div class="guide-card-body">撮影開始から3秒後に自動で止まり、写真として保存されます。あとはシェアするだけ。</div>
+            </div>
+
+            <div class="guide-card">
+                <div class="guide-card-head">
+                    <span class="guide-card-icon">🎟️</span>
+                    <span class="guide-card-title">パス（お休み）機能</span>
+                </div>
+                <div class="guide-card-body">週に1回、お休みできる「パス」が付与されます。どうしても継続できない時に使いましょう。ストリークがそのまま維持されます。</div>
+            </div>
+
+            <div class="guide-card">
+                <div class="guide-card-head">
+                    <span class="guide-card-icon">💳</span>
+                    <span class="guide-card-title">パスの購入</span>
+                </div>
+                <div class="guide-card-body">パスは1枚¥100で追加購入できます。有効期限なし、何枚でもストックできます。</div>
+            </div>
+
+            <button class="guide-start-btn" onclick="closeGuide()">はじめる</button>
+        </div>
     </div>
 
     <script>
         // ===== STATE =====
         // freePassCount: 毎週月曜付与・溜め込み不可（常に0か1）
         // paidPassCount: 有効期限なし・ストック可能（RevenueCat連携予定）
-        var state = { goal: '', streak: 0, lastRecordDate: '', freePassCount: 0, paidPassCount: 0, onboarded: false, lastPassGrant: '', notifyTime: '21:00' };
+        // guideShown: 初回ガイド表示済みフラグ
+        var state = { goal: '', streak: 0, lastRecordDate: '', freePassCount: 0, paidPassCount: 0, onboarded: false, guideShown: false, lastPassGrant: '', notifyTime: '21:00' };
         var db = null;
         var calYear, calMonth;
         var HOUR_BOUNDARY = 3;
@@ -1131,15 +1315,70 @@
             document.getElementById('goalDisplay').textContent = state.goal || '-';
             document.getElementById('passCount').textContent = totalPassCount();
             var today = getAppDate();
+            var recorded = state.lastRecordDate === today;
             var st = document.getElementById('todayStatus'), rb = document.getElementById('recBtn'), dl = document.getElementById('recDoneLabel');
-            if (state.lastRecordDate === today) { st.textContent = '✓'; st.className = 'val done'; rb.classList.add('recorded'); dl.classList.add('show') }
-            else { st.textContent = '−'; st.className = 'val pending'; rb.classList.remove('recorded'); dl.classList.remove('show') }
+            if (recorded) {
+                st.textContent = '✓'; st.className = 'val done';
+                rb.classList.add('recorded'); dl.classList.add('show');
+            } else {
+                st.textContent = '−'; st.className = 'val pending';
+                rb.classList.remove('recorded'); dl.classList.remove('show');
+            }
+            // パスを使うボタン: 未記録かつパスあり の時のみ表示
+            var passBtn = document.getElementById('usePassBtn');
+            var passRemain = document.getElementById('passRemain');
+            var total = totalPassCount();
+            passRemain.textContent = total;
+            passBtn.classList.toggle('visible', !recorded && total > 0);
+        }
+
+        // ===== GUIDE =====
+        function showGuide() {
+            document.getElementById('guideModal').classList.add('active');
+        }
+
+        function closeGuide() {
+            document.getElementById('guideModal').classList.remove('active');
+            if (!state.guideShown) {
+                state.guideShown = true;
+                saveState();
+            }
+        }
+
+        // ===== PASS USE =====
+        function usePassToday() {
+            var today = getAppDate();
+            if (state.lastRecordDate === today) {
+                showToast('今日はすでに記録済みです');
+                return;
+            }
+            if (totalPassCount() === 0) {
+                showToast('パスがありません', true);
+                return;
+            }
+            if (!confirm('本日はパス（お休み）を使用しますか？\nストリークがそのまま維持されます。')) return;
+            // ストリークを維持しながら今日の記録をつける
+            var diff = state.lastRecordDate ? daysBetween(state.lastRecordDate, today) : 999;
+            state.streak = (diff <= 1) ? state.streak + 1 : 1;
+            state.lastRecordDate = today;
+            consumePass();
+            saveState();
+            refreshHome();
+            showToast('🎟️ パスを使用しました。お疲れ様！');
         }
 
         // ===== ONBOARDING =====
         var goalInput = document.getElementById('goalInput'), startBtn = document.getElementById('startBtn');
         goalInput.addEventListener('input', function () { startBtn.disabled = !goalInput.value.trim() });
-        startBtn.addEventListener('click', function () { state.goal = goalInput.value.trim(); state.onboarded = true; saveState(); scheduleNotification(); showScreen('home') });
+        startBtn.addEventListener('click', function () {
+            state.goal = goalInput.value.trim();
+            state.onboarded = true;
+            saveState();
+            scheduleNotification();
+            showScreen('home');
+            // 初回のみガイドを表示
+            if (!state.guideShown) showGuide();
+        });
 
         // ===== SETTINGS =====
         function saveSettings() {
@@ -1420,8 +1659,14 @@
         (async function () {
             loadState(); try { await openDB() } catch (e) { }
             var n = new Date(); calYear = n.getFullYear(); calMonth = n.getMonth();
-            if (!state.onboarded) showScreen('onboarding');
-            else { showScreen('home'); scheduleNotification() }
+            if (!state.onboarded) {
+                showScreen('onboarding');
+            } else {
+                showScreen('home');
+                scheduleNotification();
+                // 既存ユーザーでガイド未表示の場合も初回表示
+                if (!state.guideShown) showGuide();
+            }
         })();
     </script>
 </body>
