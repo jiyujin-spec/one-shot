@@ -18,7 +18,7 @@
         :root {
             --bg: #000;
             --fg: #fff;
-            --accent: #FF4500;
+            --accent: #8B0000;
             --gray: #888;
             --card: #111;
             --card2: #1a1a1a
@@ -70,11 +70,11 @@
 
             0%,
             100% {
-                box-shadow: 0 0 20px rgba(255, 69, 0, .3)
+                box-shadow: 0 0 20px rgba(139, 0, 0, .4)
             }
 
             50% {
-                box-shadow: 0 0 40px rgba(255, 69, 0, .6)
+                box-shadow: 0 0 50px rgba(139, 0, 0, .75)
             }
         }
 
@@ -528,6 +528,29 @@
             color: #fff
         }
 
+        .prev-btn.share {
+            background: #1a1a1a;
+            color: #fff;
+            border: 2px solid #444;
+            font-size: 15px
+        }
+
+        .prev-btn.share:active {
+            background: #333
+        }
+
+        .share-controls {
+            position: absolute;
+            bottom: 40px;
+            left: 0;
+            right: 0;
+            display: none;
+            justify-content: center;
+            gap: 16px;
+            z-index: 10;
+            padding: 0 24px
+        }
+
         #history {
             padding: 24px;
             padding-bottom: 80px;
@@ -849,6 +872,12 @@
                     <button class="prev-btn retry" onclick="retryRecording()">撮り直し</button>
                     <button class="prev-btn save" onclick="saveRecording()">保存</button>
                 </div>
+                <div class="share-controls" id="shareControls">
+                    <button class="prev-btn share" id="shareBtn" onclick="shareRecording()">
+                        <span>&#8679;</span> SNSにシェア
+                    </button>
+                    <button class="prev-btn retry" onclick="closeCamera()">閉じる</button>
+                </div>
             </div>
         </div>
 
@@ -907,7 +936,9 @@
 
     <script>
         // ===== STATE =====
-        var state = { goal: '', streak: 0, lastRecordDate: '', passCount: 0, onboarded: false, lastPassGrant: '', notifyTime: '21:00' };
+        // freePassCount: 毎週月曜付与・溜め込み不可（常に0か1）
+        // paidPassCount: 有効期限なし・ストック可能（RevenueCat連携予定）
+        var state = { goal: '', streak: 0, lastRecordDate: '', freePassCount: 0, paidPassCount: 0, onboarded: false, lastPassGrant: '', notifyTime: '21:00' };
         var db = null;
         var calYear, calMonth;
         var HOUR_BOUNDARY = 3;
@@ -934,7 +965,21 @@
 
         // ===== STORAGE =====
         function saveState() { try { localStorage.setItem('oneshot_state', JSON.stringify(state)) } catch (e) { showToast('保存エラー', true) } }
-        function loadState() { try { var s = localStorage.getItem('oneshot_state'); if (s) Object.assign(state, JSON.parse(s)) } catch (e) { } }
+        function loadState() {
+            try {
+                var s = localStorage.getItem('oneshot_state');
+                if (s) {
+                    var saved = JSON.parse(s);
+                    // 旧バージョン（passCount）からの移行
+                    if (saved.passCount !== undefined && saved.freePassCount === undefined) {
+                        saved.freePassCount = saved.passCount;
+                        delete saved.passCount;
+                    }
+                    if (saved.paidPassCount === undefined) saved.paidPassCount = 0;
+                    Object.assign(state, saved);
+                }
+            } catch (e) { }
+        }
 
         function openDB() {
             return new Promise(function (resolve, reject) {
@@ -990,17 +1035,33 @@
         }
 
         // ===== HABIT + PASS =====
+        // 毎週月曜 AM3:00 に freePass をリセットして1枚付与（溜め込み防止）
         function checkPassGrant() {
             var today = getAppDate(), dow = getAppDayOfWeek();
-            if (dow === 1 && state.lastPassGrant !== today) { state.passCount++; state.lastPassGrant = today; saveState() }
+            if (dow === 1 && state.lastPassGrant !== today) {
+                state.freePassCount = 1; // 既存分をリセットして常に1枚維持
+                state.lastPassGrant = today;
+                saveState();
+                showToast('🎟️ 今週の無料パスが付与されました');
+            }
+        }
+
+        // パスの合計枚数を返す（UI表示用）
+        function totalPassCount() { return state.freePassCount + state.paidPassCount; }
+
+        // パスを1枚消費（有料→無料の順で消費）
+        function consumePass() {
+            if (state.paidPassCount > 0) { state.paidPassCount--; }
+            else if (state.freePassCount > 0) { state.freePassCount--; }
+            saveState();
         }
 
         function updateStreak() {
             var today = getAppDate();
             if (!state.lastRecordDate) { state.streak = 0; return }
             var diff = daysBetween(state.lastRecordDate, today);
-            if (diff === 2 && state.passCount > 0) {
-                state.passCount--;
+            if (diff === 2 && totalPassCount() > 0) {
+                consumePass();
                 state.lastRecordDate = getAppDate(new Date(Date.now() - 86400000));
                 saveState();
                 showToast('🎟️ パスを使用してストリークを維持しました');
@@ -1021,10 +1082,10 @@
 
         function purchasePass() {
             if (confirm('パスを1回分購入しますか？（¥100）\n\n※現在はテストモードのため、無料で追加されます。')) {
-                state.passCount++;
+                state.paidPassCount++; // 有料パスはストック可能
                 saveState();
                 refreshHome();
-                showToast('🎟️ パス +1 追加されました');
+                showToast('🎟️ 有料パス +1 追加されました（ストック中）');
             }
         }
 
@@ -1068,7 +1129,7 @@
             updateStreak(); checkPassGrant();
             document.getElementById('streakNum').textContent = state.streak;
             document.getElementById('goalDisplay').textContent = state.goal || '-';
-            document.getElementById('passCount').textContent = state.passCount;
+            document.getElementById('passCount').textContent = totalPassCount();
             var today = getAppDate();
             var st = document.getElementById('todayStatus'), rb = document.getElementById('recBtn'), dl = document.getElementById('recDoneLabel');
             if (state.lastRecordDate === today) { st.textContent = '✓'; st.className = 'val done'; rb.classList.add('recorded'); dl.classList.add('show') }
@@ -1163,20 +1224,46 @@
         }
 
         function resetCameraStates() {
-            if (mediaRec && mediaRec.state !== 'inactive') { try { mediaRec.stop() } catch (e) { } }
+            // --- MediaRecorder の完全停止 ---
+            if (mediaRec) {
+                try {
+                    if (mediaRec.state !== 'inactive') mediaRec.stop();
+                } catch (e) { }
+                mediaRec.ondataavailable = null;
+                mediaRec.onstop = null;
+                mediaRec = null;
+            }
+            // --- アニメーションフレーム停止 ---
             if (animFrame) { cancelAnimationFrame(animFrame); animFrame = null }
-            isRecording = false; isFrozen = false; frozenReady = false; chunks = [];
-            if (preparedBlob) { try { URL.revokeObjectURL(preparedBlob) } catch (e) { } preparedBlob = null }
+            // --- 録画チャンクの完全クリア ---
+            chunks = [];
+            // --- フリーズフレームのnull初期化 ---
+            isFrozen = false;
+            frozenReady = false;
+            // --- Blobオブジェクトの解放 ---
+            if (preparedBlob) {
+                try { URL.revokeObjectURL(preparedBlob) } catch (e) { }
+                preparedBlob = null;
+            }
+            // --- タイマー・状態リセット ---
+            isRecording = false;
+            recStart = 0;
+            // --- UI リセット ---
             document.getElementById('camControls').style.display = 'flex';
             document.getElementById('previewControls').style.display = 'none';
+            document.getElementById('shareControls').style.display = 'none';
             document.getElementById('camTimer').style.display = 'none';
             document.getElementById('shutterBtn').classList.remove('recording');
+            // --- offCanvas / filtCanvas もクリア ---
+            offCtx.clearRect(0, 0, offCanvas.width, offCanvas.height);
+            filtCtx.clearRect(0, 0, filtCanvas.width, filtCanvas.height);
         }
 
         function retryRecording() {
-            showToast('撮り直します...');
+            // カメラストリームは維持したまま状態だけ完全リセット
             resetCameraStates();
-            openCamera();
+            drawLoop(); // ライブプレビューを再開
+            showToast('撮り直します');
         }
 
         function drawLoop() {
@@ -1196,7 +1283,7 @@
                     if (elapsed >= 3) {
                         timer.textContent = '0';
                         offCtx.filter = 'none'; offCtx.drawImage(canvas, 0, 0);
-                        filtCtx.filter = 'brightness(0.7) contrast(1.3) saturate(0.6)';
+                        filtCtx.filter = 'brightness(0.7) contrast(1.4) saturate(0.7)';
                         filtCtx.drawImage(offCanvas, 0, 0); filtCtx.filter = 'none';
                         drawOverlayOn(filtCtx); isFrozen = true; frozenReady = true;
                     }
@@ -1231,8 +1318,8 @@
             setShadow(20, 0.8); c.font = '700 52px Inter,sans-serif'; c.textAlign = 'left'; c.textBaseline = 'top';
             c.fillText(dateStr, 85, Math.round(h * 0.12) + 150);
             var goalText = '#' + (state.goal || 'NO GOAL');
-            setShadow(35, 0.95); c.font = '900 80px Inter,sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
-            c.fillText(goalText, w / 2, Math.round(h * 0.80));
+            setShadow(40, 0.97); c.font = '900 80px Inter,sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
+            c.fillText(goalText, w / 2, Math.round(h * 0.75));
             c.shadowColor = 'transparent'; c.shadowBlur = 0; c.shadowOffsetX = 0; c.shadowOffsetY = 0;
         }
 
@@ -1260,6 +1347,7 @@
 
         function onRecordingComplete() {
             document.getElementById('camControls').style.display = 'none';
+            document.getElementById('shareControls').style.display = 'none';
             document.getElementById('previewControls').style.display = 'flex';
         }
 
@@ -1268,15 +1356,63 @@
                 if (!preparedBlob || preparedBlob.size < 100) { showToast('データなし', true); return }
                 var today = getAppDate(), dayNum = state.streak + 1;
                 await saveVideoToDB(preparedBlob, today, dayNum);
-                recordToday(); showToast('✓ DAY ' + state.streak + ' 保存完了！');
-                closeCameraOnly(); showScreen('home');
+                recordToday();
+                showToast('✓ DAY ' + state.streak + ' 保存完了！');
+                // 保存後にシェア画面へ切り替え
+                document.getElementById('previewControls').style.display = 'none';
+                document.getElementById('shareControls').style.display = 'flex';
             } catch (e) { showToast('保存失敗', true) }
+        }
+
+        async function shareRecording() {
+            if (!preparedBlob) { showToast('シェアデータなし', true); return }
+            var ext = preparedBlob.type.includes('mp4') ? 'mp4' : 'webm';
+            var filename = 'oneshot-day' + state.streak + '.' + ext;
+            var file = new File([preparedBlob], filename, { type: preparedBlob.type });
+            if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+                try {
+                    await navigator.share({
+                        files: [file],
+                        title: 'ONE SHOT – DAY ' + state.streak,
+                        text: '#' + (state.goal || 'oneshot') + ' #oneshot #習慣化'
+                    });
+                    showToast('シェアしました！');
+                } catch (e) {
+                    if (e.name !== 'AbortError') showToast('シェア失敗: ' + e.message, true);
+                }
+            } else if (navigator.share) {
+                // ファイル共有非対応ブラウザ（PCなど）はテキストのみシェア
+                try {
+                    await navigator.share({
+                        title: 'ONE SHOT – DAY ' + state.streak,
+                        text: '#' + (state.goal || 'oneshot') + ' #oneshot #習慣化'
+                    });
+                } catch (e) { if (e.name !== 'AbortError') showToast('シェア非対応', true) }
+            } else {
+                // フォールバック: ダウンロード
+                var a = document.createElement('a');
+                a.href = URL.createObjectURL(preparedBlob);
+                a.download = filename;
+                a.click();
+                setTimeout(function () { URL.revokeObjectURL(a.href) }, 5000);
+                showToast('動画を端末に保存しました');
+            }
         }
 
         function closeCameraOnly() {
             if (animFrame) { cancelAnimationFrame(animFrame); animFrame = null }
+            if (mediaRec) {
+                try { if (mediaRec.state !== 'inactive') mediaRec.stop() } catch (e) { }
+                mediaRec.ondataavailable = null;
+                mediaRec.onstop = null;
+                mediaRec = null;
+            }
             if (camStream) { camStream.getTracks().forEach(function (t) { t.stop() }); camStream = null }
-            isRecording = false; isFrozen = false; frozenReady = false;
+            chunks = [];
+            isRecording = false; isFrozen = false; frozenReady = false; recStart = 0;
+            if (preparedBlob) { try { URL.revokeObjectURL(preparedBlob) } catch (e) { } preparedBlob = null }
+            document.getElementById('shareControls').style.display = 'none';
+            document.getElementById('previewControls').style.display = 'none';
         }
 
         function closeCamera() { closeCameraOnly(); showScreen('home') }
