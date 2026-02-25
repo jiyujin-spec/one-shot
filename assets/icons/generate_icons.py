@@ -1,21 +1,29 @@
 #!/usr/bin/env python3
 """
 Generate all iOS/Web icon sizes from source-logo.png.
-Auto-crops black margins, centers the logo, and applies consistent padding.
+
+Strategy:
+  - Do NOT auto-crop the source. The logo image already has appropriate
+    black margins built in by the designer.
+  - Resize the full source (with its natural padding) to LOGO_FILL of
+    the target canvas.
+  - Center on a pure black (#000000) square canvas.
+  - Aspect ratio is NEVER altered (source must be square; if not, it is
+    letterboxed symmetrically).
 """
 from pathlib import Path
 from PIL import Image
-import numpy as np
 
 SCRIPT_DIR = Path(__file__).parent
-SRC = SCRIPT_DIR / "source-logo.png"
-APPICONSET_DIR = SCRIPT_DIR / "AppIcon.appiconset"
+SRC        = SCRIPT_DIR / "source-logo.png"
 
-# padding_ratio: logo が占める割合 (0.85 = 枠の 85% を logo, 7.5% ずつ余白)
+# Logo (including its built-in padding) fills this fraction of each icon.
+# 0.85 → 7.5 % black margin added on every side by us,
+# plus whatever natural padding the source image already contains.
 LOGO_FILL = 0.85
 
-# (output_path_relative_to_SCRIPT_DIR, size_px)
 ICONS = [
+    # AppIcon.appiconset (Xcode)
     ("AppIcon.appiconset/icon-20@2x.png",    40),
     ("AppIcon.appiconset/icon-20@3x.png",    60),
     ("AppIcon.appiconset/icon-29@2x.png",    58),
@@ -31,69 +39,50 @@ ICONS = [
     ("AppIcon.appiconset/icon-76@2x.png",   152),
     ("AppIcon.appiconset/icon-83.5@2x.png", 167),
     ("AppIcon.appiconset/icon-1024.png",   1024),
+    # Web / PWA
     ("apple-touch-icon.png",               180),
     ("favicon-32x32.png",                   32),
     ("favicon-16x16.png",                   16),
 ]
 
 
-def crop_to_content(img: Image.Image, threshold: int = 30):
+def make_icon(src: Image.Image, out_path: Path, icon_size: int, fill: float):
     """
-    黒背景を除いたコンテンツ領域を正方形でクロップして返す。
-    外れ値ピクセル（ウォーターマーク等）の影響を排除するため
-    コンテンツ画素の重心＋パーセンタイルで境界を決定する。
+    Place src (with its natural padding) onto a black square canvas.
+    The longer side of src maps to (icon_size * fill) pixels.
+    Aspect ratio is strictly preserved.
     """
-    arr = np.array(img.convert("RGB"))
-    mask = ~((arr[:, :, 0] < threshold) &
-             (arr[:, :, 1] < threshold) &
-             (arr[:, :, 2] < threshold))
+    src_w, src_h = src.size
+    # Scale so the longer side equals inner_size
+    inner = int(icon_size * fill)
+    scale  = inner / max(src_w, src_h)
+    new_w  = round(src_w * scale)
+    new_h  = round(src_h * scale)
 
-    ys, xs = np.where(mask)
+    resized = src.resize((new_w, new_h), Image.LANCZOS)
 
-    # 99パーセンタイルで外れ値除去
-    p1, p99 = 1, 99
-    rmin = int(np.percentile(ys, p1))
-    rmax = int(np.percentile(ys, p99))
-    cmin = int(np.percentile(xs, p1))
-    cmax = int(np.percentile(xs, p99))
+    canvas   = Image.new("RGB", (icon_size, icon_size), (0, 0, 0))
+    x_offset = (icon_size - new_w) // 2
+    y_offset = (icon_size - new_h) // 2
+    canvas.paste(resized, (x_offset, y_offset))
 
-    # 重心を中心にして正方形クロップ
-    cx = (cmin + cmax) // 2
-    cy = (rmin + rmax) // 2
-    half = max(rmax - rmin, cmax - cmin) // 2
-
-    left   = max(cx - half, 0)
-    top    = max(cy - half, 0)
-    right  = min(cx + half, img.width)
-    bottom = min(cy + half, img.height)
-
-    return img.crop((left, top, right, bottom))
-
-
-def make_icon(cropped: Image.Image, out_path: Path, size: int, fill: float):
-    """指定サイズのアイコンを生成。fill 比率でロゴをセンタリング。"""
-    canvas = Image.new("RGB", (size, size), (0, 0, 0))
-    inner = int(size * fill)
-    resized = cropped.resize((inner, inner), Image.LANCZOS)
-    offset = (size - inner) // 2
-    canvas.paste(resized, (offset, offset))
     out_path.parent.mkdir(parents=True, exist_ok=True)
     canvas.save(str(out_path), "PNG", optimize=True)
 
 
 def main():
-    src = Image.open(SRC)
-    print(f"Source: {SRC.name}  {src.size[0]}x{src.size[1]}")
+    src = Image.open(SRC).convert("RGB")
+    print(f"Source : {SRC.name}  {src.size[0]}x{src.size[1]}")
+    print(f"Fill   : {LOGO_FILL:.0%}  (margin each side: {(1-LOGO_FILL)/2:.1%})")
 
-    cropped = crop_to_content(src)
-    print(f"Cropped to content: {cropped.size[0]}x{cropped.size[1]}  (fill={LOGO_FILL})")
-
-    for rel_path, size in ICONS:
+    for rel_path, icon_size in ICONS:
         out = SCRIPT_DIR / rel_path
-        make_icon(cropped, out, size, LOGO_FILL)
-        print(f"  {out.name}  {size}x{size}")
+        make_icon(src, out, icon_size, LOGO_FILL)
+        result = Image.open(out)
+        ok = "OK" if result.size == (icon_size, icon_size) else "NG"
+        print(f"  [{ok}] {out.name:<35} {result.size[0]}x{result.size[1]}")
 
-    print(f"\nDone. {len(ICONS)} files updated.")
+    print(f"\nDone. {len(ICONS)} icons generated.")
 
 
 if __name__ == "__main__":

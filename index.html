@@ -960,6 +960,179 @@
             color: var(--gray);
             font-size: 18px
         }
+
+        /* ===== PAYWALL ===== */
+        #paywall {
+            flex-direction: column;
+            align-items: center;
+            padding: 52px 24px 40px;
+            overflow-y: auto;
+            background: #000
+        }
+
+        .paywall-logo {
+            font-size: 36px;
+            font-weight: 900;
+            letter-spacing: -1px;
+            margin-bottom: 4px
+        }
+
+        .paywall-sub {
+            font-size: 12px;
+            color: var(--accent);
+            text-transform: uppercase;
+            letter-spacing: 3px;
+            margin-bottom: 32px
+        }
+
+        .paywall-price-badge {
+            background: var(--accent);
+            border-radius: 20px;
+            padding: 24px 40px;
+            text-align: center;
+            margin-bottom: 28px;
+            width: 100%
+        }
+
+        .paywall-price {
+            font-size: 56px;
+            font-weight: 900;
+            line-height: 1
+        }
+
+        .paywall-price-sub {
+            font-size: 13px;
+            opacity: .85;
+            margin-top: 4px
+        }
+
+        .paywall-features {
+            width: 100%;
+            background: var(--card);
+            border-radius: 16px;
+            padding: 8px 20px;
+            margin-bottom: 28px
+        }
+
+        .paywall-feature {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 14px 0;
+            border-bottom: 1px solid #1e1e1e;
+            font-size: 15px;
+            font-weight: 700
+        }
+
+        .paywall-feature:last-child {
+            border-bottom: none
+        }
+
+        .paywall-feature-icon {
+            font-size: 22px;
+            width: 32px;
+            text-align: center;
+            flex-shrink: 0
+        }
+
+        .paywall-pass-note {
+            font-size: 12px;
+            color: var(--gray);
+            margin-top: 14px;
+            text-align: center
+        }
+
+        .paywall-restore {
+            font-size: 12px;
+            color: var(--gray);
+            margin-top: 10px;
+            cursor: pointer;
+            text-decoration: underline;
+            background: none;
+            border: none;
+            font-family: 'Inter', sans-serif
+        }
+
+        .paywall-links {
+            display: flex;
+            gap: 20px;
+            margin-top: 18px;
+            font-size: 11px
+        }
+
+        .paywall-links a {
+            color: var(--gray)
+        }
+
+        /* ===== CAMERA MODE TOGGLE ===== */
+        .cam-mode-toggle {
+            position: absolute;
+            bottom: 132px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            background: rgba(0, 0, 0, .55);
+            border-radius: 20px;
+            padding: 4px;
+            gap: 2px;
+            z-index: 10;
+            backdrop-filter: blur(12px)
+        }
+
+        .cam-mode-btn {
+            padding: 7px 22px;
+            border: none;
+            border-radius: 16px;
+            font-size: 13px;
+            font-weight: 700;
+            font-family: 'Inter', sans-serif;
+            cursor: pointer;
+            color: rgba(255, 255, 255, .55);
+            background: transparent;
+            transition: all .2s
+        }
+
+        .cam-mode-btn.active {
+            background: #fff;
+            color: #000
+        }
+
+        /* ===== PRE-RECORDING COUNTDOWN OVERLAY ===== */
+        #countdownOverlay {
+            position: absolute;
+            inset: 0;
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 20;
+            background: rgba(0, 0, 0, .35);
+            pointer-events: none
+        }
+
+        #countdownOverlay.active {
+            display: flex
+        }
+
+        .countdown-num {
+            font-size: 200px;
+            font-weight: 900;
+            color: #fff;
+            line-height: 1;
+            text-shadow: 0 0 80px rgba(255, 255, 255, .4);
+            animation: cdPop .45s ease-out
+        }
+
+        .countdown-num.start {
+            font-size: 96px;
+            color: var(--accent);
+            letter-spacing: 2px
+        }
+
+        @keyframes cdPop {
+            0% { transform: scale(1.4); opacity: 0 }
+            100% { transform: scale(1); opacity: 1 }
+        }
     </style>
 </head>
 
@@ -1014,8 +1187,19 @@
                     <button class="cam-top-btn" id="camFlipBtn" onclick="flipCamera()">🔄</button>
                 </div>
                 <div class="cam-timer" id="camTimer"></div>
+                <!-- Pre-recording countdown overlay -->
+                <div id="countdownOverlay">
+                    <div class="countdown-num" id="countdownNum">3</div>
+                </div>
+
+                <!-- Photo / Video mode toggle -->
+                <div class="cam-mode-toggle" id="camModeToggle">
+                    <button class="cam-mode-btn active" id="modeVideoBtn" onclick="setCamMode('video')">動画</button>
+                    <button class="cam-mode-btn" id="modePhotoBtn" onclick="setCamMode('photo')">写真</button>
+                </div>
+
                 <div class="cam-controls" id="camControls">
-                    <button class="shutter-btn" id="shutterBtn" onclick="startRecording()">
+                    <button class="shutter-btn" id="shutterBtn" onclick="startCountdown()">
                         <div class="inner"></div>
                     </button>
                 </div>
@@ -1062,6 +1246,30 @@
             </div>
             <button class="btn-primary" onclick="saveSettings()" style="margin-bottom:16px">保存</button>
             <button class="btn-danger" onclick="resetAll()">すべてのデータをリセット</button>
+        </div>
+
+        <!-- Paywall -->
+        <div id="paywall" class="screen">
+            <div class="paywall-logo">ONE SHOT</div>
+            <div class="paywall-sub">プレミアム会員</div>
+            <div class="paywall-price-badge">
+                <div class="paywall-price">¥300</div>
+                <div class="paywall-price-sub">/ 月（税込）・自動更新</div>
+            </div>
+            <div class="paywall-features">
+                <div class="paywall-feature"><span class="paywall-feature-icon">🎬</span><span>動画・写真の毎日撮影（無制限）</span></div>
+                <div class="paywall-feature"><span class="paywall-feature-icon">🔥</span><span>ストリーク管理・継続記録</span></div>
+                <div class="paywall-feature"><span class="paywall-feature-icon">📤</span><span>Instagram / TikTok への SNS シェア</span></div>
+                <div class="paywall-feature"><span class="paywall-feature-icon">🎟️</span><span>毎週1枚の無料パス自動付与</span></div>
+                <div class="paywall-feature"><span class="paywall-feature-icon">📅</span><span>撮影履歴・カレンダー表示</span></div>
+            </div>
+            <button class="btn-primary" onclick="subscribePremium()">月額 ¥300 で始める</button>
+            <p class="paywall-pass-note">お休みパスは ¥100/枚 で別途購入できます</p>
+            <button class="paywall-restore" onclick="restorePurchase()">購入を復元する</button>
+            <div class="paywall-links">
+                <a href="terms.html" target="_blank">利用規約</a>
+                <a href="privacy-policy.html" target="_blank">プライバシーポリシー</a>
+            </div>
         </div>
 
         <!-- Nav -->
@@ -1131,15 +1339,24 @@
 
     <script>
         // ===== STATE =====
-        // freePassCount: 毎週月曜付与・溜め込み不可（常に0か1）
-        // paidPassCount: 有効期限なし・ストック可能（RevenueCat連携予定）
-        // guideShown: 初回ガイド表示済みフラグ
-        var state = { goal: '', streak: 0, lastRecordDate: '', freePassCount: 0, paidPassCount: 0, onboarded: false, guideShown: false, lastPassGrant: '', notifyTime: '21:00' };
+        // freePassCount : 毎週月曜付与・溜め込み不可
+        // paidPassCount : 有効期限なし・ストック可能
+        // subscribed    : 月額サブスクリプション加入済みフラグ
+        // guideShown    : 初回ガイド表示済みフラグ
+        var state = {
+            goal: '', streak: 0, lastRecordDate: '',
+            freePassCount: 0, paidPassCount: 0,
+            onboarded: false, guideShown: false,
+            lastPassGrant: '', notifyTime: '21:00',
+            subscribed: false
+        };
         var db = null;
         var calYear, calMonth;
         var HOUR_BOUNDARY = 3;
         var preparedBlob = null;
-        var currentFacing = 'environment'; // default: back camera
+        var currentFacing = 'environment';
+        var camMode = 'video';   // 'video' | 'photo'
+        var isCounting = false;  // pre-recording countdown active
 
         function showToast(msg, isError) {
             var t = document.getElementById('toast');
@@ -1307,12 +1524,33 @@
             }, ms);
         }
 
+        // ===== PAYWALL =====
+        function subscribePremium() {
+            // 本番では Apple IAP を起動。現在はテストモード。
+            if (confirm('月額¥300のサブスクリプションを開始しますか？\n\n※現在はテストモードのため無料で有効になります。')) {
+                state.subscribed = true;
+                saveState();
+                showScreen('home');
+                if (!state.guideShown) showGuide();
+            }
+        }
+
+        function restorePurchase() {
+            // 本番では Apple IAP の復元を呼ぶ
+            if (confirm('購入を復元しますか？\n\n※テストモードでは直接有効化されます。')) {
+                state.subscribed = true;
+                saveState();
+                showScreen('home');
+            }
+        }
+
         // ===== SCREENS =====
         function showScreen(name) {
             document.querySelectorAll('.screen').forEach(function (s) { s.classList.remove('active') });
             document.getElementById(name).classList.add('active');
             document.querySelectorAll('.nav-item').forEach(function (n) { n.classList.toggle('active', n.dataset.screen === name) });
-            document.getElementById('bottomNav').style.display = (name === 'onboarding' || name === 'camera') ? 'none' : 'flex';
+            var noNav = ['onboarding', 'camera', 'paywall'];
+            document.getElementById('bottomNav').style.display = noNav.indexOf(name) >= 0 ? 'none' : 'flex';
             if (name === 'home') refreshHome();
             if (name === 'history') refreshHistory();
             if (name === 'settings') {
@@ -1387,9 +1625,12 @@
             state.onboarded = true;
             saveState();
             scheduleNotification();
-            showScreen('home');
-            // 初回のみガイドを表示
-            if (!state.guideShown) showGuide();
+            if (!state.subscribed) {
+                showScreen('paywall');
+            } else {
+                showScreen('home');
+                if (!state.guideShown) showGuide();
+            }
         });
 
         // ===== SETTINGS =====
@@ -1427,7 +1668,8 @@
             all.sort(function (a, b) { return b.ts - a.ts });
             all.slice(0, 50).forEach(function (v) {
                 var item = document.createElement('div'); item.className = 'history-item';
-                item.innerHTML = '<div class="hi-left"><div class="hi-thumb">🎬</div><div class="hi-info"><div class="hi-date">' + v.date + '</div><div class="hi-day">DAY ' + v.day + '</div></div></div><div class="hi-play">▶</div>';
+                var thumb = (v.mime && v.mime.includes('image')) ? '📷' : '🎬';
+                item.innerHTML = '<div class="hi-left"><div class="hi-thumb">' + thumb + '</div><div class="hi-info"><div class="hi-date">' + v.date + '</div><div class="hi-day">DAY ' + v.day + '</div></div></div><div class="hi-play">▶</div>';
                 item.addEventListener('click', function () { playVideoRecord(v) }); list.appendChild(item);
             });
         }
@@ -1498,8 +1740,13 @@
             }
             // --- タイマー・状態リセット ---
             isRecording = false;
+            isCounting = false;
             recStart = 0;
             // --- UI リセット ---
+            document.getElementById('countdownOverlay').classList.remove('active');
+            var sb = document.getElementById('shutterBtn');
+            sb.style.opacity = ''; sb.style.pointerEvents = '';
+            document.getElementById('camModeToggle').style.display = '';
             document.getElementById('camControls').style.display = 'flex';
             document.getElementById('previewControls').style.display = 'none';
             document.getElementById('shareControls').style.display = 'none';
@@ -1528,11 +1775,7 @@
                 }
                 if (isRecording) {
                     var elapsed = (Date.now() - recStart) / 1000;
-                    var countdown = Math.max(0, Math.ceil(3 - elapsed));
-                    var timer = document.getElementById('camTimer');
-                    timer.style.display = 'block'; timer.textContent = countdown;
                     if (elapsed >= 3) {
-                        timer.textContent = '0';
                         offCtx.filter = 'none'; offCtx.drawImage(canvas, 0, 0);
                         filtCtx.filter = 'brightness(0.7) contrast(1.4) saturate(0.7)';
                         filtCtx.drawImage(offCanvas, 0, 0); filtCtx.filter = 'none';
@@ -1574,20 +1817,94 @@
             c.shadowColor = 'transparent'; c.shadowBlur = 0; c.shadowOffsetX = 0; c.shadowOffsetY = 0;
         }
 
-        function startRecording() {
+        // ===== PRE-RECORDING COUNTDOWN (3…2…1…START!) =====
+        function startCountdown() {
+            if (isRecording || isCounting) return;
+            isCounting = true;
+
+            var overlay = document.getElementById('countdownOverlay');
+            var numEl   = document.getElementById('countdownNum');
+            var shutterBtn = document.getElementById('shutterBtn');
+            var modeToggle = document.getElementById('camModeToggle');
+
+            overlay.classList.add('active');
+            shutterBtn.style.opacity = '0.25';
+            shutterBtn.style.pointerEvents = 'none';
+            modeToggle.style.display = 'none';
+
+            var count = 3;
+            numEl.textContent = count;
+            numEl.className = 'countdown-num';
+
+            function tick() {
+                count--;
+                if (count > 0) {
+                    numEl.className = 'countdown-num';
+                    numEl.textContent = count;
+                    setTimeout(tick, 1000);
+                } else if (count === 0) {
+                    numEl.className = 'countdown-num start';
+                    numEl.textContent = 'START!';
+                    setTimeout(tick, 900);
+                } else {
+                    overlay.classList.remove('active');
+                    shutterBtn.style.opacity = '';
+                    shutterBtn.style.pointerEvents = '';
+                    modeToggle.style.display = '';
+                    isCounting = false;
+                    if (camMode === 'video') {
+                        beginVideoRecording();
+                    } else {
+                        takePhoto();
+                    }
+                }
+            }
+            setTimeout(tick, 1000);
+        }
+
+        // ===== CAMERA MODE TOGGLE =====
+        function setCamMode(mode) {
+            camMode = mode;
+            document.getElementById('modeVideoBtn').classList.toggle('active', mode === 'video');
+            document.getElementById('modePhotoBtn').classList.toggle('active', mode === 'photo');
+        }
+
+        // ===== VIDEO RECORDING =====
+        function beginVideoRecording() {
             if (isRecording) return;
             isRecording = true; isFrozen = false; frozenReady = false; chunks = []; preparedBlob = null;
             recStart = Date.now(); document.getElementById('shutterBtn').classList.add('recording');
             var types = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm;codecs=vp8', 'video/webm', 'video/mp4'];
             var mime = ''; for (var i = 0; i < types.length; i++) { try { if (MediaRecorder.isTypeSupported(types[i])) { mime = types[i]; break } } catch (e) { } }
             var canvasStream = canvas.captureStream(30);
-            if (camStream) { var at = camStream.getAudioTracks(); for (var j = 0; j < at.length; j++)canvasStream.addTrack(at[j]) }
+            if (camStream) { var at = camStream.getAudioTracks(); for (var j = 0; j < at.length; j++) canvasStream.addTrack(at[j]) }
             try {
                 mediaRec = new MediaRecorder(canvasStream, mime ? { mimeType: mime } : {});
                 mediaRec.ondataavailable = function (e) { if (e.data && e.data.size > 0) chunks.push(e.data) };
                 mediaRec.onstop = function () { preparedBlob = new Blob(chunks, { type: mediaRec.mimeType }); onRecordingComplete() };
                 mediaRec.start();
             } catch (e) { showToast('開始エラー', true); isRecording = false }
+        }
+
+        // ===== PHOTO CAPTURE =====
+        function takePhoto() {
+            // 現在のフレームにオーバーレイを描画してスナップショット
+            isFrozen = true; frozenReady = true;
+            offCtx.filter = 'none'; offCtx.drawImage(canvas, 0, 0);
+            filtCtx.filter = 'brightness(0.7) contrast(1.4) saturate(0.7)';
+            filtCtx.drawImage(offCanvas, 0, 0); filtCtx.filter = 'none';
+            drawOverlayOn(filtCtx);
+            ctx.filter = 'none'; ctx.drawImage(filtCanvas, 0, 0);
+
+            // camTimer に ✓ を表示
+            var timer = document.getElementById('camTimer');
+            timer.style.display = 'block'; timer.textContent = '✓';
+            setTimeout(function () { timer.style.display = 'none' }, 1500);
+
+            filtCanvas.toBlob(function (blob) {
+                preparedBlob = blob;
+                onRecordingComplete();
+            }, 'image/png');
         }
 
         function stopRecording() {
@@ -1617,7 +1934,9 @@
 
         async function shareRecording() {
             if (!preparedBlob) { showToast('シェアデータなし', true); return }
-            var ext = preparedBlob.type.includes('mp4') ? 'mp4' : 'webm';
+            var ext = preparedBlob.type.includes('mp4') ? 'mp4' :
+                      preparedBlob.type.includes('png') ? 'png' :
+                      preparedBlob.type.includes('jpeg') ? 'jpg' : 'webm';
             var filename = 'oneshot-day' + state.streak + '.' + ext;
             var file = new File([preparedBlob], filename, { type: preparedBlob.type });
             if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
@@ -1673,10 +1992,12 @@
             var n = new Date(); calYear = n.getFullYear(); calMonth = n.getMonth();
             if (!state.onboarded) {
                 showScreen('onboarding');
+            } else if (!state.subscribed) {
+                // オンボーディング済みだがサブスク未加入 → ペイウォール
+                showScreen('paywall');
             } else {
                 showScreen('home');
                 scheduleNotification();
-                // 既存ユーザーでガイド未表示の場合も初回表示
                 if (!state.guideShown) showGuide();
             }
         })();
