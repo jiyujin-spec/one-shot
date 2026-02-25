@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!-- Background -->
+  <rect width="1024" height="1024" fill="#000000" rx="230"/>
+
+  <!-- Outer ring (white) -->
+  <circle cx="512" cy="440" r="230" fill="none" stroke="#ffffff" stroke-width="28"/>
+
+  <!-- Inner circle fill (dark) -->
+  <circle cx="512" cy="440" r="202" fill="#0a0a0a"/>
+
+  <!-- Lens aperture blades (dark red accent) -->
+  <g fill="#8B0000" opacity="0.85">
+    <ellipse cx="512" cy="290" rx="28" ry="62" transform="rotate(0 512 440)"/>
+    <ellipse cx="512" cy="290" rx="28" ry="62" transform="rotate(60 512 440)"/>
+    <ellipse cx="512" cy="290" rx="28" ry="62" transform="rotate(120 512 440)"/>
+    <ellipse cx="512" cy="290" rx="28" ry="62" transform="rotate(180 512 440)"/>
+    <ellipse cx="512" cy="290" rx="28" ry="62" transform="rotate(240 512 440)"/>
+    <ellipse cx="512" cy="290" rx="28" ry="62" transform="rotate(300 512 440)"/>
+  </g>
+
+  <!-- Center dot (white) -->
+  <circle cx="512" cy="440" r="52" fill="#ffffff"/>
+  <circle cx="512" cy="440" r="30" fill="#8B0000"/>
+
+  <!-- Diagonal "one shot" slash line -->
+  <line x1="320" y1="248" x2="704" y2="632" stroke="#8B0000" stroke-width="22" stroke-linecap="round"/>
+
+  <!-- "ONE SHOT" text -->
+  <text x="512" y="740" font-family="Inter, Arial, sans-serif" font-weight="900"
+        font-size="108" fill="#ffffff" text-anchor="middle" letter-spacing="6">ONE</text>
+  <text x="512" y="858" font-family="Inter, Arial, sans-serif" font-weight="900"
+        font-size="108" fill="#8B0000" text-anchor="middle" letter-spacing="6">SHOT</text>
+</svg>
