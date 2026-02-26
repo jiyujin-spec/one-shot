@@ -36,6 +36,33 @@
             --card2: #1a1a1a
         }
 
+        /* ライトモード自動対応 */
+        @media (prefers-color-scheme: light) {
+            :root {
+                --bg: #f5f5f5;
+                --fg: #111;
+                --accent: #8B0000;
+                --gray: #666;
+                --card: #fff;
+                --card2: #ececec
+            }
+            html, body { background: var(--bg); color: var(--fg) }
+            .bottom-nav { background: #fff; border-top-color: #ddd }
+            .cam-top-btn { background: rgba(0,0,0,.45) }
+            .toast { background: #333 }
+            .modal-overlay { background: rgba(255,255,255,.97) }
+            .modal-overlay video { box-shadow: 0 4px 32px rgba(0,0,0,.15) }
+            #guideModal { background: #f5f5f5 }
+            .guide-card { background: #fff }
+            .guide-card-body { color: #555 }
+            .guide-tip { color: #555 }
+            .guide-step span:last-child { color: #555 }
+            #paywall { background: #f5f5f5 }
+            .setting-group input { color: #111 }
+            .shutter-btn { border-color: #111 }
+            #countdownOverlay { background: rgba(0,0,0,.25) }
+        }
+
         html,
         body {
             height: 100%;
@@ -909,6 +936,73 @@
             opacity: .8
         }
 
+        /* ===== GUIDE STEPS ===== */
+        .guide-steps {
+            display: flex;
+            flex-direction: column;
+            gap: 0;
+            padding-left: 0
+        }
+
+        .guide-step {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 6px 0
+        }
+
+        .guide-step-num {
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            background: var(--accent);
+            color: #fff;
+            font-size: 11px;
+            font-weight: 900;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0
+        }
+
+        .guide-step span:last-child {
+            font-size: 13px;
+            color: #bbb
+        }
+
+        .guide-step-arrow {
+            font-size: 12px;
+            color: #444;
+            padding-left: 8px
+        }
+
+        /* ===== GUIDE INSTAGRAM CARD ===== */
+        .guide-card--instagram {
+            border-left-color: #C13584
+        }
+
+        .guide-instagram-tips {
+            margin-top: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px
+        }
+
+        .guide-tip {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+            color: #bbb
+        }
+
+        .guide-tip-icon {
+            font-size: 16px;
+            width: 22px;
+            text-align: center;
+            flex-shrink: 0
+        }
+
         /* ===== USE PASS BUTTON ===== */
         .use-pass-btn {
             display: none;
@@ -1095,6 +1189,90 @@
         .cam-mode-btn.active {
             background: #fff;
             color: #000
+        }
+
+        /* ===== CAMERA PERMISSION ERROR ===== */
+        #camPermission {
+            position: fixed;
+            inset: 0;
+            background: var(--bg);
+            z-index: 500;
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 40px 32px;
+            text-align: center;
+            max-width: 480px;
+            margin: 0 auto
+        }
+
+        #camPermission.active {
+            display: flex
+        }
+
+        .cam-perm-icon {
+            font-size: 64px;
+            margin-bottom: 24px
+        }
+
+        .cam-perm-title {
+            font-size: 20px;
+            font-weight: 900;
+            margin-bottom: 12px;
+            letter-spacing: -.5px
+        }
+
+        .cam-perm-body {
+            font-size: 14px;
+            color: var(--gray);
+            line-height: 1.7;
+            margin-bottom: 28px
+        }
+
+        .cam-perm-hint {
+            width: 100%;
+            background: var(--card);
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 28px;
+            text-align: left
+        }
+
+        .cam-perm-hint p {
+            font-size: 12px;
+            color: var(--gray);
+            line-height: 1.7;
+            margin-bottom: 6px
+        }
+
+        .cam-perm-hint p:last-child {
+            margin-bottom: 0
+        }
+
+        .cam-perm-btn {
+            width: 100%;
+            padding: 16px;
+            background: var(--accent);
+            color: #fff;
+            border: none;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 900;
+            font-family: 'Inter', sans-serif;
+            cursor: pointer;
+            margin-bottom: 12px;
+            letter-spacing: 1px
+        }
+
+        .cam-perm-back {
+            background: none;
+            border: none;
+            color: var(--gray);
+            font-size: 14px;
+            font-family: 'Inter', sans-serif;
+            cursor: pointer;
+            padding: 8px
         }
 
         /* ===== LANGUAGE TOGGLE ===== */
@@ -1329,41 +1507,83 @@
         </div>
         <div class="toast" id="toast"></div>
 
+        <!-- Camera Permission Error -->
+        <div id="camPermission">
+            <div class="cam-perm-icon">📷</div>
+            <div class="cam-perm-title" data-i18n="cam_permission_title">カメラへのアクセスを許可してください</div>
+            <div class="cam-perm-body" data-i18n="cam_permission_body">One Shot はカメラとマイクを使用して動画を記録します。ブラウザの設定からアクセスを許可してください。</div>
+            <div class="cam-perm-hint">
+                <p data-i18n="cam_permission_ios">iOSの場合：設定 → Safari → カメラ → 許可</p>
+                <p data-i18n="cam_permission_android">Androidの場合：設定 → アプリ → ブラウザ → 権限 → カメラを許可</p>
+            </div>
+            <button class="cam-perm-btn" onclick="closeCamPermission()" data-i18n="cam_permission_back">戻る</button>
+        </div>
+
         <!-- Guide Modal -->
         <div id="guideModal">
             <div class="guide-logo">ONE SHOT</div>
             <div class="guide-sub" data-i18n="guide_sub">使い方ガイド</div>
 
+            <!-- Card 1: 習慣化の仕組み -->
             <div class="guide-card">
                 <div class="guide-card-head">
-                    <span class="guide-card-icon">📱</span>
+                    <span class="guide-card-icon">🔥</span>
                     <span class="guide-card-title" data-i18n="guide_card1_title">習慣化の仕組み</span>
                 </div>
                 <div class="guide-card-body" data-i18n="guide_card1_body">1日1回、継続したい習慣の動画を撮り、SNSにシェアしましょう。フォロワーが見ていることで、サボれない環境を作ります。</div>
             </div>
 
+            <!-- Card 2: 撮影の流れ -->
             <div class="guide-card">
                 <div class="guide-card-head">
                     <span class="guide-card-icon">🎬</span>
-                    <span class="guide-card-title" data-i18n="guide_card2_title">撮影ルール</span>
+                    <span class="guide-card-title" data-i18n="guide_card2_title">撮影の流れ</span>
                 </div>
-                <div class="guide-card-body" data-i18n="guide_card2_body">撮影開始から3秒後に自動で止まり、写真として保存されます。あとはシェアするだけ。</div>
+                <div class="guide-card-body">
+                    <div class="guide-steps">
+                        <div class="guide-step"><span class="guide-step-num">1</span><span data-i18n="guide_step1">カメラボタンを押す</span></div>
+                        <div class="guide-step-arrow">↓</div>
+                        <div class="guide-step"><span class="guide-step-num">2</span><span data-i18n="guide_step2">3・2・1 カウントダウン</span></div>
+                        <div class="guide-step-arrow">↓</div>
+                        <div class="guide-step"><span class="guide-step-num">3</span><span data-i18n="guide_step3">自動で3秒録画・停止</span></div>
+                        <div class="guide-step-arrow">↓</div>
+                        <div class="guide-step"><span class="guide-step-num">4</span><span data-i18n="guide_step4">保存 → シェア</span></div>
+                    </div>
+                </div>
             </div>
 
+            <!-- Card 3: Instagram 活用法 -->
+            <div class="guide-card guide-card--instagram">
+                <div class="guide-card-head">
+                    <span class="guide-card-icon">📸</span>
+                    <span class="guide-card-title" data-i18n="guide_card3_title">Instagram で継続を確実に</span>
+                </div>
+                <div class="guide-card-body">
+                    <p data-i18n="guide_card3_body">動画はInstagramストーリーにアップし、「ハイライト」に保存しましょう。</p>
+                    <div class="guide-instagram-tips">
+                        <div class="guide-tip"><span class="guide-tip-icon">👥</span><span data-i18n="guide_tip1">フォロワーが見ている＝サボれない</span></div>
+                        <div class="guide-tip"><span class="guide-tip-icon">📌</span><span data-i18n="guide_tip2">ハイライトに記録が積み上がる</span></div>
+                        <div class="guide-tip"><span class="guide-tip-icon">💪</span><span data-i18n="guide_tip3">継続を可視化して自信につなげる</span></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Card 4: パス機能 -->
             <div class="guide-card">
                 <div class="guide-card-head">
                     <span class="guide-card-icon">🎟️</span>
-                    <span class="guide-card-title" data-i18n="guide_card3_title">パス（お休み）機能</span>
+                    <span class="guide-card-title" data-i18n="guide_card4_title">パス（お休み）機能</span>
                 </div>
-                <div class="guide-card-body" data-i18n="guide_card3_body">週に1回、お休みできる「パス」が付与されます。どうしても継続できない時に使いましょう。ストリークがそのまま維持されます。</div>
+                <div class="guide-card-body" data-i18n="guide_card4_body">週に1回、お休みできる「パス」が付与されます。どうしても継続できない時に使いましょう。ストリークがそのまま維持されます。</div>
             </div>
 
+            <!-- Card 5: パスの購入 -->
             <div class="guide-card">
                 <div class="guide-card-head">
                     <span class="guide-card-icon">💳</span>
-                    <span class="guide-card-title" data-i18n="guide_card4_title">パスの購入</span>
+                    <span class="guide-card-title" data-i18n="guide_card5_title">パスの購入</span>
                 </div>
-                <div class="guide-card-body" data-i18n="guide_card4_body">パスは1枚¥100で追加購入できます。有効期限なし、何枚でもストックできます。</div>
+                <div class="guide-card-body" data-i18n="guide_card5_body">パスは1枚¥100で追加購入できます。有効期限なし、何枚でもストックできます。</div>
             </div>
 
             <button class="guide-start-btn" onclick="closeGuide()" data-i18n="guide_start_btn">はじめる</button>
@@ -1559,10 +1779,10 @@
         // パスの合計枚数を返す（UI表示用）
         function totalPassCount() { return state.freePassCount + state.paidPassCount; }
 
-        // パスを1枚消費（有料→無料の順で消費）
+        // パスを1枚消費（無料パス→有料パスの順で消費）
         function consumePass() {
-            if (state.paidPassCount > 0) { state.paidPassCount--; }
-            else if (state.freePassCount > 0) { state.freePassCount--; }
+            if (state.freePassCount > 0) { state.freePassCount--; }
+            else if (state.paidPassCount > 0) { state.paidPassCount--; }
             saveState();
         }
 
@@ -1809,7 +2029,24 @@
         function openCamera() {
             showScreen('camera');
             resetCameraStates();
-            initCamera().then(function () { drawLoop() }).catch(function (e) { showToast(t('toast_camera_error') + e.message, true); closeCamera() });
+            initCamera().then(function () { drawLoop() }).catch(function (e) {
+                // NotAllowedError: カメラ/マイクのアクセス拒否
+                if (e.name === 'NotAllowedError' || e.name === 'PermissionDeniedError') {
+                    closeCamera();
+                    showCamPermission();
+                } else {
+                    showToast(t('toast_camera_error') + e.message, true);
+                    closeCamera();
+                }
+            });
+        }
+
+        function showCamPermission() {
+            document.getElementById('camPermission').classList.add('active');
+        }
+
+        function closeCamPermission() {
+            document.getElementById('camPermission').classList.remove('active');
         }
 
         function flipCamera() {
