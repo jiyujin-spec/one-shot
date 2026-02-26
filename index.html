@@ -1097,6 +1097,32 @@
             color: #000
         }
 
+        /* ===== LANGUAGE TOGGLE ===== */
+        .lang-toggle {
+            display: flex;
+            gap: 8px;
+            margin-top: 4px
+        }
+
+        .lang-btn {
+            flex: 1;
+            padding: 10px;
+            border-radius: 8px;
+            border: 2px solid #333;
+            background: var(--card2);
+            color: #888;
+            font-size: 14px;
+            font-weight: 700;
+            font-family: 'Inter', sans-serif;
+            cursor: pointer;
+            transition: all .2s
+        }
+
+        .lang-btn.active {
+            border-color: var(--accent);
+            color: #fff
+        }
+
         /* ===== PRE-RECORDING COUNTDOWN OVERLAY ===== */
         #countdownOverlay {
             position: absolute;
@@ -1142,10 +1168,10 @@
         <!-- Onboarding -->
         <div id="onboarding" class="screen">
             <h1>ONE SHOT</h1>
-            <p class="subtitle">5秒で記録する、ストイックな習慣</p>
+            <p class="subtitle" data-i18n="onboarding_subtitle">5秒で記録する、ストイックな習慣</p>
             <div class="input-group">
-                <label>目標を入力</label>
-                <input id="goalInput" type="text" placeholder="例: 筋トレ毎日" maxlength="20">
+                <label data-i18n="onboarding_label">目標を入力</label>
+                <input id="goalInput" type="text" placeholder="例: 筋トレ毎日" data-i18n-placeholder="onboarding_placeholder" maxlength="20">
             </div>
             <button class="btn-primary" id="startBtn" disabled>START</button>
         </div>
@@ -1158,13 +1184,13 @@
             </div>
             <div class="streak-section">
                 <div class="streak-num" id="streakNum">0</div>
-                <div class="streak-label">Day Streak</div>
+                <div class="streak-label" data-i18n="streak_label">Day Streak</div>
             </div>
             <div class="goal-card">
                 <div class="goal-title"><span class="goal-hash">#</span><span id="goalDisplay">-</span></div>
                 <div class="status-row">
-                    <div class="status-pill"><span class="val" id="todayStatus">−</span>今日</div>
-                    <div class="status-pill"><span class="val" id="passCount">0</span>パス残</div>
+                    <div class="status-pill"><span class="val" id="todayStatus">−</span><span data-i18n="today_label">今日</span></div>
+                    <div class="status-pill"><span class="val" id="passCount">0</span><span data-i18n="pass_remain_label">パス残</span></div>
                 </div>
             </div>
             <button class="rec-btn" id="recBtn" onclick="openCamera()">
@@ -1173,9 +1199,9 @@
                     <circle cx="12" cy="13" r="4" />
                 </svg>
             </button>
-            <div class="rec-done-label" id="recDoneLabel">✓ RECORDED TODAY</div>
+            <div class="rec-done-label" id="recDoneLabel" data-i18n="recorded_today">✓ RECORDED TODAY</div>
             <button class="use-pass-btn" id="usePassBtn" onclick="usePassToday()">🎟️ パスを使う（残り <span id="passRemain">0</span>枚）</button>
-            <button class="pass-purchase" onclick="purchasePass()">💳 パスを購入（¥100）</button>
+            <button class="pass-purchase" id="passPurchaseBtn" onclick="purchasePass()" data-i18n="pass_purchase_btn">💳 パスを購入（¥100）</button>
         </div>
 
         <!-- Camera -->
@@ -1194,8 +1220,8 @@
 
                 <!-- Photo / Video mode toggle -->
                 <div class="cam-mode-toggle" id="camModeToggle">
-                    <button class="cam-mode-btn active" id="modeVideoBtn" onclick="setCamMode('video')">動画</button>
-                    <button class="cam-mode-btn" id="modePhotoBtn" onclick="setCamMode('photo')">写真</button>
+                    <button class="cam-mode-btn active" id="modeVideoBtn" onclick="setCamMode('video')" data-i18n="mode_video">動画</button>
+                    <button class="cam-mode-btn" id="modePhotoBtn" onclick="setCamMode('photo')" data-i18n="mode_photo">写真</button>
                 </div>
 
                 <div class="cam-controls" id="camControls">
@@ -1204,14 +1230,14 @@
                     </button>
                 </div>
                 <div class="preview-controls" id="previewControls">
-                    <button class="prev-btn retry" onclick="retryRecording()">撮り直し</button>
-                    <button class="prev-btn save" onclick="saveRecording()">保存</button>
+                    <button class="prev-btn retry" onclick="retryRecording()" data-i18n="retry_btn">撮り直し</button>
+                    <button class="prev-btn save" onclick="saveRecording()" data-i18n="save_btn">保存</button>
                 </div>
                 <div class="share-controls" id="shareControls">
                     <button class="prev-btn share" id="shareBtn" onclick="shareRecording()">
-                        <span>&#8679;</span> SNSにシェア
+                        <span>&#8679;</span> <span data-i18n="share_btn">SNSにシェア</span>
                     </button>
-                    <button class="prev-btn retry" onclick="closeCamera()">閉じる</button>
+                    <button class="prev-btn retry" onclick="closeCamera()" data-i18n="close_btn">閉じる</button>
                 </div>
             </div>
         </div>
@@ -1230,45 +1256,52 @@
 
         <!-- Settings -->
         <div id="settings" class="screen">
-            <div class="screen-title">SETTINGS</div>
+            <div class="screen-title" data-i18n="settings_title">SETTINGS</div>
             <div class="setting-link" onclick="showGuide()">
-                <span>📖 アプリの使い方</span>
+                <span data-i18n="settings_guide">📖 アプリの使い方</span>
                 <span class="setting-link-arrow">›</span>
             </div>
             <div class="setting-group">
-                <label>目標</label>
+                <label data-i18n="settings_goal_label">目標</label>
                 <input id="goalEdit" type="text" maxlength="20">
             </div>
             <div class="setting-group">
-                <label>リマインド通知</label>
+                <label data-i18n="settings_notify_label">リマインド通知</label>
                 <input id="notifyTime" type="time" value="21:00">
-                <div style="margin-top:8px;font-size:11px;color:var(--gray)">毎日この時刻に通知します</div>
+                <div style="margin-top:8px;font-size:11px;color:var(--gray)" data-i18n="settings_notify_hint">毎日この時刻に通知します</div>
             </div>
-            <button class="btn-primary" onclick="saveSettings()" style="margin-bottom:16px">保存</button>
-            <button class="btn-danger" onclick="resetAll()">すべてのデータをリセット</button>
+            <div class="setting-group">
+                <label data-i18n="settings_language_label">言語 / Language</label>
+                <div class="lang-toggle">
+                    <button class="lang-btn active" id="langJa" onclick="setLanguage('ja')">🇯🇵 日本語</button>
+                    <button class="lang-btn" id="langEn" onclick="setLanguage('en')">🇬🇧 English</button>
+                </div>
+            </div>
+            <button class="btn-primary" onclick="saveSettings()" style="margin-bottom:16px" data-i18n="settings_save_btn">保存</button>
+            <button class="btn-danger" onclick="resetAll()" data-i18n="settings_reset_btn">すべてのデータをリセット</button>
         </div>
 
         <!-- Paywall -->
         <div id="paywall" class="screen">
             <div class="paywall-logo">ONE SHOT</div>
-            <div class="paywall-sub">プレミアム会員</div>
+            <div class="paywall-sub" data-i18n="paywall_sub">プレミアム会員</div>
             <div class="paywall-price-badge">
                 <div class="paywall-price">¥300</div>
-                <div class="paywall-price-sub">/ 月（税込）・自動更新</div>
+                <div class="paywall-price-sub" data-i18n="paywall_price_sub">/ 月（税込）・自動更新</div>
             </div>
             <div class="paywall-features">
-                <div class="paywall-feature"><span class="paywall-feature-icon">🎬</span><span>動画・写真の毎日撮影（無制限）</span></div>
-                <div class="paywall-feature"><span class="paywall-feature-icon">🔥</span><span>ストリーク管理・継続記録</span></div>
-                <div class="paywall-feature"><span class="paywall-feature-icon">📤</span><span>Instagram / TikTok への SNS シェア</span></div>
-                <div class="paywall-feature"><span class="paywall-feature-icon">🎟️</span><span>毎週1枚の無料パス自動付与</span></div>
-                <div class="paywall-feature"><span class="paywall-feature-icon">📅</span><span>撮影履歴・カレンダー表示</span></div>
+                <div class="paywall-feature"><span class="paywall-feature-icon">🎬</span><span data-i18n="paywall_feature1">動画・写真の毎日撮影（無制限）</span></div>
+                <div class="paywall-feature"><span class="paywall-feature-icon">🔥</span><span data-i18n="paywall_feature2">ストリーク管理・継続記録</span></div>
+                <div class="paywall-feature"><span class="paywall-feature-icon">📤</span><span data-i18n="paywall_feature3">Instagram / TikTok への SNS シェア</span></div>
+                <div class="paywall-feature"><span class="paywall-feature-icon">🎟️</span><span data-i18n="paywall_feature4">毎週1枚の無料パス自動付与</span></div>
+                <div class="paywall-feature"><span class="paywall-feature-icon">📅</span><span data-i18n="paywall_feature5">撮影履歴・カレンダー表示</span></div>
             </div>
-            <button class="btn-primary" onclick="subscribePremium()">月額 ¥300 で始める</button>
-            <p class="paywall-pass-note">お休みパスは ¥100/枚 で別途購入できます</p>
-            <button class="paywall-restore" onclick="restorePurchase()">購入を復元する</button>
+            <button class="btn-primary" onclick="subscribePremium()" data-i18n="paywall_subscribe_btn">月額 ¥300 で始める</button>
+            <p class="paywall-pass-note" data-i18n="paywall_pass_note">お休みパスは ¥100/枚 で別途購入できます</p>
+            <button class="paywall-restore" onclick="restorePurchase()" data-i18n="paywall_restore_btn">購入を復元する</button>
             <div class="paywall-links">
-                <a href="terms.html" target="_blank">利用規約</a>
-                <a href="privacy-policy.html" target="_blank">プライバシーポリシー</a>
+                <a id="paywallTermsLink" href="terms.html" target="_blank" data-i18n="paywall_terms">利用規約</a>
+                <a id="paywallPrivacyLink" href="privacy-policy.html" target="_blank" data-i18n="paywall_privacy">プライバシーポリシー</a>
             </div>
         </div>
 
@@ -1299,45 +1332,109 @@
         <!-- Guide Modal -->
         <div id="guideModal">
             <div class="guide-logo">ONE SHOT</div>
-            <div class="guide-sub">使い方ガイド</div>
+            <div class="guide-sub" data-i18n="guide_sub">使い方ガイド</div>
 
             <div class="guide-card">
                 <div class="guide-card-head">
                     <span class="guide-card-icon">📱</span>
-                    <span class="guide-card-title">習慣化の仕組み</span>
+                    <span class="guide-card-title" data-i18n="guide_card1_title">習慣化の仕組み</span>
                 </div>
-                <div class="guide-card-body">1日1回、継続したい習慣の動画を撮り、SNSにシェアしましょう。フォロワーが見ていることで、サボれない環境を作ります。</div>
+                <div class="guide-card-body" data-i18n="guide_card1_body">1日1回、継続したい習慣の動画を撮り、SNSにシェアしましょう。フォロワーが見ていることで、サボれない環境を作ります。</div>
             </div>
 
             <div class="guide-card">
                 <div class="guide-card-head">
                     <span class="guide-card-icon">🎬</span>
-                    <span class="guide-card-title">撮影ルール</span>
+                    <span class="guide-card-title" data-i18n="guide_card2_title">撮影ルール</span>
                 </div>
-                <div class="guide-card-body">撮影開始から3秒後に自動で止まり、写真として保存されます。あとはシェアするだけ。</div>
+                <div class="guide-card-body" data-i18n="guide_card2_body">撮影開始から3秒後に自動で止まり、写真として保存されます。あとはシェアするだけ。</div>
             </div>
 
             <div class="guide-card">
                 <div class="guide-card-head">
                     <span class="guide-card-icon">🎟️</span>
-                    <span class="guide-card-title">パス（お休み）機能</span>
+                    <span class="guide-card-title" data-i18n="guide_card3_title">パス（お休み）機能</span>
                 </div>
-                <div class="guide-card-body">週に1回、お休みできる「パス」が付与されます。どうしても継続できない時に使いましょう。ストリークがそのまま維持されます。</div>
+                <div class="guide-card-body" data-i18n="guide_card3_body">週に1回、お休みできる「パス」が付与されます。どうしても継続できない時に使いましょう。ストリークがそのまま維持されます。</div>
             </div>
 
             <div class="guide-card">
                 <div class="guide-card-head">
                     <span class="guide-card-icon">💳</span>
-                    <span class="guide-card-title">パスの購入</span>
+                    <span class="guide-card-title" data-i18n="guide_card4_title">パスの購入</span>
                 </div>
-                <div class="guide-card-body">パスは1枚¥100で追加購入できます。有効期限なし、何枚でもストックできます。</div>
+                <div class="guide-card-body" data-i18n="guide_card4_body">パスは1枚¥100で追加購入できます。有効期限なし、何枚でもストックできます。</div>
             </div>
 
-            <button class="guide-start-btn" onclick="closeGuide()">はじめる</button>
+            <button class="guide-start-btn" onclick="closeGuide()" data-i18n="guide_start_btn">はじめる</button>
         </div>
     </div>
 
     <script>
+        // ===== i18n =====
+        var TRANSLATIONS = {};
+        var currentLang = 'ja';
+
+        function detectLang() {
+            var saved = localStorage.getItem('oneshot_lang');
+            if (saved === 'ja' || saved === 'en') return saved;
+            var bl = (navigator.language || 'ja').toLowerCase();
+            return bl.startsWith('ja') ? 'ja' : 'en';
+        }
+
+        function t(key, replacements) {
+            var dict = TRANSLATIONS[currentLang] || {};
+            var str = (dict[key] !== undefined) ? dict[key] : key;
+            if (replacements) {
+                Object.keys(replacements).forEach(function(k) {
+                    str = str.replace('{' + k + '}', replacements[k]);
+                });
+            }
+            return str;
+        }
+
+        function applyTranslations() {
+            document.documentElement.lang = currentLang;
+            document.querySelectorAll('[data-i18n]').forEach(function(el) {
+                el.textContent = t(el.getAttribute('data-i18n'));
+            });
+            document.querySelectorAll('[data-i18n-placeholder]').forEach(function(el) {
+                el.placeholder = t(el.getAttribute('data-i18n-placeholder'));
+            });
+            // Update dynamic pass button text
+            updatePassBtn();
+            // Update paywall legal links based on language
+            var termsLink = document.getElementById('paywallTermsLink');
+            var privacyLink = document.getElementById('paywallPrivacyLink');
+            if (termsLink) termsLink.href = currentLang === 'en' ? 'terms-en.html' : 'terms.html';
+            if (privacyLink) privacyLink.href = currentLang === 'en' ? 'privacy-policy-en.html' : 'privacy-policy.html';
+            // Update lang buttons
+            var ja = document.getElementById('langJa');
+            var en = document.getElementById('langEn');
+            if (ja) ja.classList.toggle('active', currentLang === 'ja');
+            if (en) en.classList.toggle('active', currentLang === 'en');
+        }
+
+        function updatePassBtn() {
+            var passRemainEl = document.getElementById('passRemain');
+            var usePassBtn = document.getElementById('usePassBtn');
+            if (!passRemainEl || !usePassBtn) return;
+            usePassBtn.textContent = t('use_pass_btn_prefix') + passRemainEl.textContent + t('use_pass_btn_suffix');
+        }
+
+        function setLanguage(lang) {
+            currentLang = lang;
+            localStorage.setItem('oneshot_lang', lang);
+            applyTranslations();
+        }
+
+        async function loadTranslations() {
+            try {
+                var r = await fetch('translations.json');
+                TRANSLATIONS = await r.json();
+            } catch(e) { /* fallback: UI stays in Japanese */ }
+        }
+
         // ===== STATE =====
         // freePassCount : 毎週月曜付与・溜め込み不可
         // paidPassCount : 有効期限なし・ストック可能
@@ -1377,7 +1474,7 @@
         function daysBetween(a, b) { return Math.round((new Date(b) - new Date(a)) / 86400000) }
 
         // ===== STORAGE =====
-        function saveState() { try { localStorage.setItem('oneshot_state', JSON.stringify(state)) } catch (e) { showToast('保存エラー', true) } }
+        function saveState() { try { localStorage.setItem('oneshot_state', JSON.stringify(state)) } catch (e) { showToast(t('toast_save_error'), true) } }
         function loadState() {
             try {
                 var s = localStorage.getItem('oneshot_state');
@@ -1396,7 +1493,7 @@
 
         function openDB() {
             return new Promise(function (resolve, reject) {
-                if (!window.indexedDB) { showToast('IndexedDB未対応', true); reject(); return }
+                if (!window.indexedDB) { showToast(t('toast_db_error'), true); reject(); return }
                 var req = indexedDB.open('OneShotDB', 2);
                 req.onupgradeneeded = function (e) {
                     var d = e.target.result;
@@ -1406,23 +1503,23 @@
                     }
                 };
                 req.onsuccess = function (e) { db = e.target.result; resolve(db) };
-                req.onerror = function (e) { showToast('DB error', true); reject(e) };
+                req.onerror = function (e) { showToast(t('toast_db_error'), true); reject(e) };
             });
         }
 
         function saveVideoToDB(blob, dateStr, dayNum) {
             return new Promise(function (resolve, reject) {
-                if (!db) { showToast('DB未接続', true); reject(new Error('no db')); return }
+                if (!db) { showToast(t('toast_db_error'), true); reject(new Error('no db')); return }
                 var reader = new FileReader();
                 reader.onload = function () {
                     try {
                         var tx = db.transaction('videos', 'readwrite');
                         tx.objectStore('videos').put({ data: reader.result, mime: blob.type, date: dateStr, day: dayNum, ts: Date.now() });
                         tx.oncomplete = function () { resolve() };
-                        tx.onerror = function (e) { showToast('DB書込エラー', true); reject(e) };
-                    } catch (ex) { showToast('保存例外', true); reject(ex) }
+                        tx.onerror = function (e) { showToast(t('toast_save_error'), true); reject(e) };
+                    } catch (ex) { showToast(t('toast_save_error'), true); reject(ex) }
                 };
-                reader.onerror = function () { showToast('Blob読取エラー', true); reject(reader.error) };
+                reader.onerror = function () { showToast(t('toast_save_error'), true); reject(reader.error) };
                 reader.readAsArrayBuffer(blob);
             });
         }
@@ -1455,7 +1552,7 @@
                 state.freePassCount = 1; // 既存分をリセットして常に1枚維持
                 state.lastPassGrant = today;
                 saveState();
-                showToast('🎟️ 今週の無料パスが付与されました');
+                showToast(t('toast_free_pass_granted'));
             }
         }
 
@@ -1477,7 +1574,7 @@
                 consumePass();
                 state.lastRecordDate = getAppDate(new Date(Date.now() - 86400000));
                 saveState();
-                showToast('🎟️ パスを使用してストリークを維持しました');
+                showToast(t('toast_pass_used_auto'));
             } else if (diff >= 2) {
                 state.streak = 0;
                 saveState();
@@ -1494,11 +1591,11 @@
         }
 
         function purchasePass() {
-            if (confirm('パスを1回分購入しますか？（¥100）\n\n※現在はテストモードのため、無料で追加されます。')) {
+            if (confirm(t('confirm_purchase_pass'))) {
                 state.paidPassCount++; // 有料パスはストック可能
                 saveState();
                 refreshHome();
-                showToast('🎟️ 有料パス +1 追加されました（ストック中）');
+                showToast(t('toast_paid_pass_added'));
             }
         }
 
@@ -1518,7 +1615,8 @@
             var ms = target - now;
             window._notifyTimer = setTimeout(function () {
                 if (Notification.permission === 'granted' && state.lastRecordDate !== getAppDate()) {
-                    new Notification('One Shot', { body: '今日の記録がまだです。5秒で始めよう！', icon: '📷' });
+                    var notifyBody = currentLang === 'en' ? "You haven't recorded today. Start in 5 seconds!" : '今日の記録がまだです。5秒で始めよう！';
+                    new Notification('One Shot', { body: notifyBody, icon: '📷' });
                 }
                 scheduleNotification();
             }, ms);
@@ -1527,7 +1625,7 @@
         // ===== PAYWALL =====
         function subscribePremium() {
             // 本番では Apple IAP を起動。現在はテストモード。
-            if (confirm('月額¥300のサブスクリプションを開始しますか？\n\n※現在はテストモードのため無料で有効になります。')) {
+            if (confirm(t('confirm_subscribe'))) {
                 state.subscribed = true;
                 saveState();
                 showScreen('home');
@@ -1537,7 +1635,7 @@
 
         function restorePurchase() {
             // 本番では Apple IAP の復元を呼ぶ
-            if (confirm('購入を復元しますか？\n\n※テストモードでは直接有効化されます。')) {
+            if (confirm(t('confirm_restore'))) {
                 state.subscribed = true;
                 saveState();
                 showScreen('home');
@@ -1579,6 +1677,7 @@
             var passRemain = document.getElementById('passRemain');
             var total = totalPassCount();
             passRemain.textContent = total;
+            passBtn.textContent = t('use_pass_btn_prefix') + total + t('use_pass_btn_suffix');
             passBtn.classList.toggle('visible', !recorded && total > 0);
         }
 
@@ -1599,14 +1698,14 @@
         function usePassToday() {
             var today = getAppDate();
             if (state.lastRecordDate === today) {
-                showToast('今日はすでに記録済みです');
+                showToast(t('toast_already_recorded'));
                 return;
             }
             if (totalPassCount() === 0) {
-                showToast('パスがありません', true);
+                showToast(t('toast_no_pass'), true);
                 return;
             }
-            if (!confirm('本日はパス（お休み）を使用しますか？\nストリークがそのまま維持されます。')) return;
+            if (!confirm(t('confirm_use_pass'))) return;
             // ストリークを維持しながら今日の記録をつける
             var diff = state.lastRecordDate ? daysBetween(state.lastRecordDate, today) : 999;
             state.streak = (diff <= 1) ? state.streak + 1 : 1;
@@ -1614,7 +1713,7 @@
             consumePass();
             saveState();
             refreshHome();
-            showToast('🎟️ パスを使用しました。お疲れ様！');
+            showToast(t('toast_pass_used'));
         }
 
         // ===== ONBOARDING =====
@@ -1639,10 +1738,10 @@
             state.notifyTime = document.getElementById('notifyTime').value;
             saveState();
             scheduleNotification();
-            showToast('✓ 設定を保存しました');
+            showToast(t('toast_settings_saved'));
             showScreen('home');
         }
-        function resetAll() { if (confirm('すべてのデータを削除しますか？')) { localStorage.removeItem('oneshot_state'); indexedDB.deleteDatabase('OneShotDB'); location.reload() } }
+        function resetAll() { if (confirm(t('confirm_reset'))) { localStorage.removeItem('oneshot_state'); localStorage.removeItem('oneshot_lang'); indexedDB.deleteDatabase('OneShotDB'); location.reload() } }
 
         // ===== HISTORY =====
         function changeMonth(dir) { calMonth += dir; if (calMonth > 11) { calMonth = 0; calYear++ } if (calMonth < 0) { calMonth = 11; calYear-- } refreshHistory() }
@@ -1651,7 +1750,10 @@
             document.getElementById('calMonth').textContent = calYear + '.' + pad2(calMonth + 1);
             var dates = []; try { dates = await getAllVideoDates() } catch (e) { }
             var grid = document.getElementById('calGrid'); grid.innerHTML = '';
-            ['日', '月', '火', '水', '木', '金', '土'].forEach(function (l) { var d = document.createElement('div'); d.className = 'cal-day-label'; d.textContent = l; grid.appendChild(d) });
+            var dayLabels = currentLang === 'en'
+                ? ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+                : ['日', '月', '火', '水', '木', '金', '土'];
+            dayLabels.forEach(function (l) { var d = document.createElement('div'); d.className = 'cal-day-label'; d.textContent = l; grid.appendChild(d) });
             var firstDay = new Date(calYear, calMonth, 1), lastDay = new Date(calYear, calMonth + 1, 0).getDate(), startDow = firstDay.getDay(), todayStr = getAppDate();
             for (var i = 0; i < startDow; i++) { var d = document.createElement('div'); d.className = 'cal-day'; grid.appendChild(d) }
             for (var i = 1; i <= lastDay; i++) {
@@ -1664,7 +1766,7 @@
             }
             var list = document.getElementById('historyList'); list.innerHTML = '';
             var all = []; try { all = await getAllVideos() } catch (e) { }
-            if (all.length === 0) { list.innerHTML = '<div class="no-history">まだ記録がありません</div>'; return }
+            if (all.length === 0) { list.innerHTML = '<div class="no-history">' + t('no_history') + '</div>'; return }
             all.sort(function (a, b) { return b.ts - a.ts });
             all.slice(0, 50).forEach(function (v) {
                 var item = document.createElement('div'); item.className = 'history-item';
@@ -1676,7 +1778,7 @@
         async function showDayVideos(date) { try { var v = await getVideosByDate(date); if (v.length > 0) playVideoRecord(v[0]) } catch (e) { } }
         function playVideoRecord(r) {
             var blob = r.data ? arrayBufferToBlob(r.data, r.mime) : r.blob;
-            if (!blob) { showToast('動画データなし', true); return }
+            if (!blob) { showToast(t('toast_no_data'), true); return }
             var vid = document.getElementById('modalVideo'); vid.src = URL.createObjectURL(blob);
             document.getElementById('videoModal').classList.add('active'); vid.play().catch(function () { });
         }
@@ -1707,7 +1809,7 @@
         function openCamera() {
             showScreen('camera');
             resetCameraStates();
-            initCamera().then(function () { drawLoop() }).catch(function (e) { showToast('カメラエラー: ' + e.message, true); closeCamera() });
+            initCamera().then(function () { drawLoop() }).catch(function (e) { showToast(t('toast_camera_error') + e.message, true); closeCamera() });
         }
 
         function flipCamera() {
@@ -1761,7 +1863,7 @@
             // カメラストリームは維持したまま状態だけ完全リセット
             resetCameraStates();
             drawLoop(); // ライブプレビューを再開
-            showToast('撮り直します');
+            showToast(t('toast_retry'));
         }
 
         function drawLoop() {
@@ -1883,7 +1985,7 @@
                 mediaRec.ondataavailable = function (e) { if (e.data && e.data.size > 0) chunks.push(e.data) };
                 mediaRec.onstop = function () { preparedBlob = new Blob(chunks, { type: mediaRec.mimeType }); onRecordingComplete() };
                 mediaRec.start();
-            } catch (e) { showToast('開始エラー', true); isRecording = false }
+            } catch (e) { showToast(t('toast_save_error'), true); isRecording = false }
         }
 
         // ===== PHOTO CAPTURE =====
@@ -1921,19 +2023,19 @@
 
         async function saveRecording() {
             try {
-                if (!preparedBlob || preparedBlob.size < 100) { showToast('データなし', true); return }
+                if (!preparedBlob || preparedBlob.size < 100) { showToast(t('toast_no_data'), true); return }
                 var today = getAppDate(), dayNum = state.streak + 1;
                 await saveVideoToDB(preparedBlob, today, dayNum);
                 recordToday();
-                showToast('✓ DAY ' + state.streak + ' 保存完了！');
+                showToast(t('toast_save_complete', { day: state.streak }));
                 // 保存後にシェア画面へ切り替え
                 document.getElementById('previewControls').style.display = 'none';
                 document.getElementById('shareControls').style.display = 'flex';
-            } catch (e) { showToast('保存失敗', true) }
+            } catch (e) { showToast(t('toast_save_error'), true) }
         }
 
         async function shareRecording() {
-            if (!preparedBlob) { showToast('シェアデータなし', true); return }
+            if (!preparedBlob) { showToast(t('toast_no_data'), true); return }
             var ext = preparedBlob.type.includes('mp4') ? 'mp4' :
                       preparedBlob.type.includes('png') ? 'png' :
                       preparedBlob.type.includes('jpeg') ? 'jpg' : 'webm';
@@ -1944,20 +2046,20 @@
                     await navigator.share({
                         files: [file],
                         title: 'ONE SHOT – DAY ' + state.streak,
-                        text: '#' + (state.goal || 'oneshot') + ' #oneshot #習慣化'
+                        text: '#' + (state.goal || 'oneshot') + ' ' + t('share_hashtag')
                     });
-                    showToast('シェアしました！');
+                    showToast(t('toast_share_done'));
                 } catch (e) {
-                    if (e.name !== 'AbortError') showToast('シェア失敗: ' + e.message, true);
+                    if (e.name !== 'AbortError') showToast(t('toast_share_fail') + e.message, true);
                 }
             } else if (navigator.share) {
                 // ファイル共有非対応ブラウザ（PCなど）はテキストのみシェア
                 try {
                     await navigator.share({
                         title: 'ONE SHOT – DAY ' + state.streak,
-                        text: '#' + (state.goal || 'oneshot') + ' #oneshot #習慣化'
+                        text: '#' + (state.goal || 'oneshot') + ' ' + t('share_hashtag')
                     });
-                } catch (e) { if (e.name !== 'AbortError') showToast('シェア非対応', true) }
+                } catch (e) { if (e.name !== 'AbortError') showToast(t('toast_share_unsupported'), true) }
             } else {
                 // フォールバック: ダウンロード
                 var a = document.createElement('a');
@@ -1965,7 +2067,7 @@
                 a.download = filename;
                 a.click();
                 setTimeout(function () { URL.revokeObjectURL(a.href) }, 5000);
-                showToast('動画を端末に保存しました');
+                showToast(t('toast_download_done'));
             }
         }
 
@@ -1988,6 +2090,11 @@
         function closeCamera() { closeCameraOnly(); showScreen('home') }
 
         (async function () {
+            // i18n: 翻訳ファイルを読み込み、ブラウザ言語または保存済み言語を適用
+            currentLang = detectLang();
+            await loadTranslations();
+            applyTranslations();
+
             loadState(); try { await openDB() } catch (e) { }
             var n = new Date(); calYear = n.getFullYear(); calMonth = n.getMonth();
             if (!state.onboarded) {
