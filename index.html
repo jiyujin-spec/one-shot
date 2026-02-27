@@ -631,16 +631,35 @@
             background: var(--card)
         }
 
+        .cal-day.has-video {
+            background: rgba(139, 0, 0, .18);
+            color: #fff
+        }
+
         .cal-day.has-video::after {
-            content: '';
-            width: 6px;
-            height: 6px;
-            border-radius: 50%;
-            background: var(--accent);
+            content: '✓';
             position: absolute;
-            bottom: 2px;
-            left: 50%;
-            transform: translateX(-50%)
+            top: 1px;
+            right: 3px;
+            font-size: 8px;
+            font-weight: 900;
+            color: var(--accent);
+            line-height: 1
+        }
+
+        .cal-day.milestone {
+            background: rgba(255, 200, 0, .18);
+            color: #FFD700
+        }
+
+        .cal-day.milestone::after {
+            content: '★';
+            position: absolute;
+            top: 1px;
+            right: 2px;
+            font-size: 9px;
+            color: #FFD700;
+            line-height: 1
         }
 
         .history-list {
@@ -1360,6 +1379,10 @@
 
         /* ===== CAMERA SIDE BUTTON (pre-countdown toggle) ===== */
         .cam-side-btn {
+            position: absolute;
+            left: 20px;
+            top: 50%;
+            transform: translateY(-50%);
             width: 48px;
             height: 48px;
             border-radius: 50%;
@@ -1372,8 +1395,7 @@
             align-items: center;
             justify-content: center;
             backdrop-filter: blur(10px);
-            transition: all .2s;
-            flex-shrink: 0
+            transition: all .2s
         }
 
         .cam-side-btn.active {
@@ -1383,8 +1405,7 @@
         }
 
         .cam-side-spacer {
-            width: 48px;
-            flex-shrink: 0
+            display: none
         }
 
         /* ===== RECORDING LIVE COUNTDOWN ===== */
@@ -2069,7 +2090,7 @@
             var total = totalPassCount();
             passRemain.textContent = total;
             passBtn.textContent = t('use_pass_btn_prefix') + total + t('use_pass_btn_suffix');
-            passBtn.classList.toggle('visible', !recorded && total > 0);
+            passBtn.classList.toggle('visible', !recorded);
         }
 
         // ===== GUIDE =====
@@ -2174,6 +2195,10 @@
             if (calYear == null) { var n = new Date(); calYear = n.getFullYear(); calMonth = n.getMonth() }
             document.getElementById('calMonth').textContent = calYear + '.' + pad2(calMonth + 1);
             var dates = []; try { dates = await getAllVideoDates() } catch (e) { }
+            // 記録日を昇順ソートして「何日目か」のマップを作成
+            var sortedDates = dates.slice().sort();
+            var dateRankMap = {};
+            sortedDates.forEach(function (d, i) { dateRankMap[d] = i + 1; });
             var grid = document.getElementById('calGrid'); grid.innerHTML = '';
             var dayLabels = currentLang === 'en'
                 ? ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
@@ -2185,7 +2210,14 @@
                 var d = document.createElement('div'); d.className = 'cal-day current-month'; d.textContent = i;
                 var ds = calYear + '-' + pad2(calMonth + 1) + '-' + pad2(i);
                 if (ds === todayStr) d.classList.add('today');
-                if (dates.indexOf(ds) >= 0) d.classList.add('has-video');
+                if (dates.indexOf(ds) >= 0) {
+                    var rank = dateRankMap[ds];
+                    if (rank % 10 === 0) {
+                        d.classList.add('has-video', 'milestone');
+                    } else {
+                        d.classList.add('has-video');
+                    }
+                }
                 (function (date) { d.addEventListener('click', function () { showDayVideos(date) }) })(ds);
                 grid.appendChild(d);
             }
