@@ -86,7 +86,12 @@
     "cam_permission_ios": "iOSの場合：設定 → Safari → カメラ → 許可",
     "cam_permission_android": "Androidの場合：設定 → アプリ → ブラウザ → 権限 → カメラを許可",
     "cam_permission_btn": "カメラ設定を開く",
-    "cam_permission_back": "戻る"
+    "cam_permission_back": "戻る",
+    "settings_countdown_label": "録画中カウントダウン",
+    "settings_countdown_hint": "録画中に残り時間を表示",
+    "settings_debug_btn": "🛠 デモデータを生成",
+    "confirm_demo_data": "デモデータを生成しますか？\n現在のデータはリセットされ、100日分の履歴が生成されます。",
+    "toast_demo_generated": "✓ デモデータを生成しました"
   },
   "en": {
     "meta_description": "One video a day. Record your habits with video.",
@@ -175,6 +180,11 @@
     "cam_permission_ios": "iOS: Settings → Safari → Camera → Allow",
     "cam_permission_android": "Android: Settings → Apps → Browser → Permissions → Allow Camera",
     "cam_permission_btn": "Open Camera Settings",
-    "cam_permission_back": "Go Back"
+    "cam_permission_back": "Go Back",
+    "settings_countdown_label": "Recording Countdown",
+    "settings_countdown_hint": "Show remaining time during recording",
+    "settings_debug_btn": "🛠 Generate Demo Data",
+    "confirm_demo_data": "Generate demo data?\nCurrent data will be reset and 100 days of history will be created.",
+    "toast_demo_generated": "✓ Demo data generated"
   }
 }

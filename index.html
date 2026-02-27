@@ -1298,7 +1298,126 @@
 
         .lang-btn.active {
             border-color: var(--accent);
-            color: #fff
+            color: var(--fg)
+        }
+
+        /* ===== TOGGLE SWITCH ===== */
+        .setting-toggle-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-top: 4px
+        }
+
+        .setting-toggle-hint {
+            font-size: 13px;
+            color: var(--gray)
+        }
+
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 48px;
+            height: 26px;
+            flex-shrink: 0
+        }
+
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+            position: absolute
+        }
+
+        .toggle-slider {
+            position: absolute;
+            inset: 0;
+            background: #333;
+            border-radius: 13px;
+            transition: background .2s;
+            cursor: pointer
+        }
+
+        .toggle-slider::before {
+            content: '';
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #888;
+            top: 3px;
+            left: 3px;
+            transition: transform .2s, background .2s
+        }
+
+        .toggle-switch input:checked + .toggle-slider {
+            background: var(--accent)
+        }
+
+        .toggle-switch input:checked + .toggle-slider::before {
+            transform: translateX(22px);
+            background: #fff
+        }
+
+        /* ===== DEBUG BUTTON ===== */
+        .btn-debug {
+            width: 100%;
+            padding: 12px;
+            background: transparent;
+            border: 1px dashed #333;
+            border-radius: 8px;
+            color: #444;
+            font-size: 11px;
+            font-weight: 700;
+            font-family: 'Inter', sans-serif;
+            cursor: pointer;
+            letter-spacing: 1px;
+            margin-top: 32px
+        }
+
+        .btn-debug:active {
+            background: var(--card)
+        }
+
+        /* ===== RECORDING LIVE COUNTDOWN ===== */
+        .cam-rec-countdown {
+            font-size: 96px;
+            font-weight: 900;
+            color: #fff;
+            text-shadow: 0 0 40px rgba(255,255,255,.4);
+            letter-spacing: -2px
+        }
+
+        /* ===== ACHIEVEMENT BADGE ===== */
+        .achievement-badge {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: linear-gradient(135deg, #8B0000 0%, #cc2200 100%);
+            border-radius: 16px;
+            padding: 16px 20px;
+            margin-bottom: 20px
+        }
+
+        .achievement-icon {
+            font-size: 32px;
+            flex-shrink: 0
+        }
+
+        .achievement-text {
+            font-size: 18px;
+            font-weight: 900;
+            color: #fff;
+            letter-spacing: -.5px;
+            line-height: 1.3
+        }
+
+        .achievement-sub {
+            font-size: 11px;
+            color: rgba(255,255,255,.7);
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-top: 2px
         }
 
         /* ===== PRE-RECORDING COUNTDOWN OVERLAY ===== */
@@ -1423,6 +1542,13 @@
         <!-- History -->
         <div id="history" class="screen">
             <div class="screen-title">HISTORY</div>
+            <div id="achievementBadge" class="achievement-badge" style="display:none">
+                <span class="achievement-icon">🏆</span>
+                <div>
+                    <div class="achievement-text" id="achievementText">100 Days Achievement!</div>
+                    <div class="achievement-sub" id="achievementSub">Keep it up!</div>
+                </div>
+            </div>
             <div class="cal-header">
                 <button onclick="changeMonth(-1)">◀</button>
                 <span class="cal-month" id="calMonth"></span>
@@ -1455,8 +1581,19 @@
                     <button class="lang-btn" id="langEn" onclick="setLanguage('en')">🇬🇧 English</button>
                 </div>
             </div>
+            <div class="setting-group">
+                <label data-i18n="settings_countdown_label">録画中カウントダウン</label>
+                <div class="setting-toggle-row">
+                    <span class="setting-toggle-hint" data-i18n="settings_countdown_hint">録画中に残り時間を表示</span>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="countdownToggle" checked>
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+            </div>
             <button class="btn-primary" onclick="saveSettings()" style="margin-bottom:16px" data-i18n="settings_save_btn">保存</button>
             <button class="btn-danger" onclick="resetAll()" data-i18n="settings_reset_btn">すべてのデータをリセット</button>
+            <button class="btn-debug" onclick="generateDemoData()" data-i18n="settings_debug_btn">🛠 デモデータを生成</button>
         </div>
 
         <!-- Paywall -->
@@ -1665,7 +1802,8 @@
             freePassCount: 0, paidPassCount: 0,
             onboarded: false, guideShown: false,
             lastPassGrant: '', notifyTime: '21:00',
-            subscribed: false
+            subscribed: false,
+            showRecordingCountdown: true
         };
         var db = null;
         var calYear, calMonth;
@@ -1874,6 +2012,7 @@
             if (name === 'settings') {
                 document.getElementById('goalEdit').value = state.goal;
                 document.getElementById('notifyTime').value = state.notifyTime || '21:00';
+                document.getElementById('countdownToggle').checked = state.showRecordingCountdown !== false;
             }
         }
 
@@ -1956,12 +2095,47 @@
         function saveSettings() {
             state.goal = document.getElementById('goalEdit').value.trim();
             state.notifyTime = document.getElementById('notifyTime').value;
+            state.showRecordingCountdown = document.getElementById('countdownToggle').checked;
             saveState();
             scheduleNotification();
             showToast(t('toast_settings_saved'));
             showScreen('home');
         }
         function resetAll() { if (confirm(t('confirm_reset'))) { localStorage.removeItem('oneshot_state'); localStorage.removeItem('oneshot_lang'); indexedDB.deleteDatabase('OneShotDB'); location.reload() } }
+
+        // ===== DEMO DATA =====
+        async function generateDemoData() {
+            if (!confirm(t('confirm_demo_data'))) return;
+            var today = getAppDate();
+            state.goal = currentLang === 'en' ? 'Daily Workout' : '毎日筋トレ';
+            state.streak = 100;
+            state.lastRecordDate = today;
+            state.onboarded = true;
+            state.subscribed = true;
+            state.guideShown = true;
+            state.freePassCount = 1;
+            state.paidPassCount = 2;
+            saveState();
+            try {
+                await new Promise(function(resolve) {
+                    var req = indexedDB.deleteDatabase('OneShotDB');
+                    req.onsuccess = resolve; req.onerror = resolve;
+                });
+                await openDB();
+                var fakeArr = new Uint8Array(200).fill(1);
+                var now = new Date();
+                for (var i = 0; i < 100; i++) {
+                    var d = new Date(now.getTime() - i * 86400000);
+                    var ds = getAppDate(d);
+                    var fakeBlob = new Blob([fakeArr], { type: 'image/png' });
+                    await saveVideoToDB(fakeBlob, ds, 100 - i);
+                }
+                showToast(t('toast_demo_generated'));
+                setTimeout(function() { location.reload(); }, 900);
+            } catch(e) {
+                showToast(t('toast_save_error') + ': ' + e.message, true);
+            }
+        }
 
         // ===== HISTORY =====
         function changeMonth(dir) { calMonth += dir; if (calMonth > 11) { calMonth = 0; calYear++ } if (calMonth < 0) { calMonth = 11; calYear-- } refreshHistory() }
@@ -1986,6 +2160,18 @@
             }
             var list = document.getElementById('historyList'); list.innerHTML = '';
             var all = []; try { all = await getAllVideos() } catch (e) { }
+            // 達成バッジ
+            var badge = document.getElementById('achievementBadge');
+            var totalDays = new Set(all.map(function(v){ return v.date; })).size;
+            if (totalDays >= 100) {
+                badge.style.display = 'flex';
+                document.getElementById('achievementText').textContent =
+                    currentLang === 'en' ? '🏆 100 Days Achievement!' : '🏆 100日達成！';
+                document.getElementById('achievementSub').textContent =
+                    currentLang === 'en' ? 'Keep it up — you\'re unstoppable!' : 'この調子で続けよう！';
+            } else {
+                badge.style.display = 'none';
+            }
             if (all.length === 0) { list.innerHTML = '<div class="no-history">' + t('no_history') + '</div>'; return }
             all.sort(function (a, b) { return b.ts - a.ts });
             all.slice(0, 50).forEach(function (v) {
@@ -2114,7 +2300,18 @@
                 }
                 if (isRecording) {
                     var elapsed = (Date.now() - recStart) / 1000;
+                    // 録画中カウントダウン表示（設定がONのときのみ）
+                    var timerEl = document.getElementById('camTimer');
+                    if (state.showRecordingCountdown) {
+                        var remaining = Math.ceil(3 - elapsed);
+                        if (remaining > 0) {
+                            timerEl.className = 'cam-timer cam-rec-countdown';
+                            timerEl.style.display = 'block';
+                            timerEl.textContent = remaining;
+                        }
+                    }
                     if (elapsed >= 3) {
+                        timerEl.style.display = 'none';
                         offCtx.filter = 'none'; offCtx.drawImage(canvas, 0, 0);
                         filtCtx.filter = 'brightness(0.7) contrast(1.4) saturate(0.7)';
                         filtCtx.drawImage(offCanvas, 0, 0); filtCtx.filter = 'none';
@@ -2125,7 +2322,9 @@
             if (isFrozen && frozenReady) {
                 ctx.filter = 'none'; ctx.drawImage(filtCanvas, 0, 0);
                 var elapsed2 = (Date.now() - recStart) / 1000;
-                var timer2 = document.getElementById('camTimer'); timer2.style.display = 'block'; timer2.textContent = '✓';
+                var timer2 = document.getElementById('camTimer');
+                timer2.className = 'cam-timer';
+                timer2.style.display = 'block'; timer2.textContent = '✓';
                 if (elapsed2 >= 5) { stopRecording(); return }
             }
             animFrame = requestAnimationFrame(drawLoop);
