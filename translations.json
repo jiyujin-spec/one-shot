@@ -89,6 +89,8 @@
     "cam_permission_back": "戻る",
     "settings_countdown_label": "録画中カウントダウン",
     "settings_countdown_hint": "録画中に残り時間を表示",
+    "settings_restore_btn": "🔄 購入の復元",
+    "settings_contact_btn": "✉️ お問い合わせ",
     "settings_debug_btn": "🛠 デモデータを生成",
     "confirm_demo_data": "デモデータを生成しますか？\n現在のデータはリセットされ、100日分の履歴が生成されます。",
     "toast_demo_generated": "✓ デモデータを生成しました"
@@ -183,6 +185,8 @@
     "cam_permission_back": "Go Back",
     "settings_countdown_label": "Recording Countdown",
     "settings_countdown_hint": "Show remaining time during recording",
+    "settings_restore_btn": "🔄 Restore Purchases",
+    "settings_contact_btn": "✉️ Contact Us",
     "settings_debug_btn": "🛠 Generate Demo Data",
     "confirm_demo_data": "Generate demo data?\nCurrent data will be reset and 100 days of history will be created.",
     "toast_demo_generated": "✓ Demo data generated"
