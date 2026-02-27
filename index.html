@@ -36,33 +36,6 @@
             --card2: #1a1a1a
         }
 
-        /* ライトモード自動対応 */
-        @media (prefers-color-scheme: light) {
-            :root {
-                --bg: #f5f5f5;
-                --fg: #111;
-                --accent: #8B0000;
-                --gray: #666;
-                --card: #fff;
-                --card2: #ececec
-            }
-            html, body { background: var(--bg); color: var(--fg) }
-            .bottom-nav { background: #fff; border-top-color: #ddd }
-            .cam-top-btn { background: rgba(0,0,0,.45) }
-            .toast { background: #333 }
-            .modal-overlay { background: rgba(255,255,255,.97) }
-            .modal-overlay video { box-shadow: 0 4px 32px rgba(0,0,0,.15) }
-            #guideModal { background: #f5f5f5 }
-            .guide-card { background: #fff }
-            .guide-card-body { color: #555 }
-            .guide-tip { color: #555 }
-            .guide-step span:last-child { color: #555 }
-            #paywall { background: #f5f5f5 }
-            .setting-group input { color: #111 }
-            .shutter-btn { border-color: #111 }
-            #countdownOverlay { background: rgba(0,0,0,.25) }
-        }
-
         html,
         body {
             height: 100%;
@@ -1043,7 +1016,13 @@
             cursor: pointer;
             font-size: 15px;
             font-weight: 700;
-            transition: background .2s
+            transition: background .2s;
+            color: var(--fg);
+            text-decoration: none;
+            border: none;
+            width: 100%;
+            text-align: left;
+            font-family: 'Inter', sans-serif
         }
 
         .setting-link:active {
@@ -1379,6 +1358,35 @@
             background: var(--card)
         }
 
+        /* ===== CAMERA SIDE BUTTON (pre-countdown toggle) ===== */
+        .cam-side-btn {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            background: rgba(0, 0, 0, .5);
+            border: 2px solid rgba(255, 255, 255, .25);
+            color: rgba(255, 255, 255, .4);
+            font-size: 22px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(10px);
+            transition: all .2s;
+            flex-shrink: 0
+        }
+
+        .cam-side-btn.active {
+            border-color: var(--accent);
+            color: #fff;
+            background: rgba(139, 0, 0, .45)
+        }
+
+        .cam-side-spacer {
+            width: 48px;
+            flex-shrink: 0
+        }
+
         /* ===== RECORDING LIVE COUNTDOWN ===== */
         .cam-rec-countdown {
             font-size: 96px;
@@ -1522,9 +1530,11 @@
                 </div>
 
                 <div class="cam-controls" id="camControls">
-                    <button class="shutter-btn" id="shutterBtn" onclick="startCountdown()">
+                    <button class="cam-side-btn active" id="preCountdownBtn" onclick="togglePreCountdown()" title="Pre-recording countdown">⏱</button>
+                    <button class="shutter-btn" id="shutterBtn" onclick="handleShutter()">
                         <div class="inner"></div>
                     </button>
+                    <div class="cam-side-spacer"></div>
                 </div>
                 <div class="preview-controls" id="previewControls">
                     <button class="prev-btn retry" onclick="retryRecording()" data-i18n="retry_btn">撮り直し</button>
@@ -1581,17 +1591,15 @@
                     <button class="lang-btn" id="langEn" onclick="setLanguage('en')">🇬🇧 English</button>
                 </div>
             </div>
-            <div class="setting-group">
-                <label data-i18n="settings_countdown_label">録画中カウントダウン</label>
-                <div class="setting-toggle-row">
-                    <span class="setting-toggle-hint" data-i18n="settings_countdown_hint">録画中に残り時間を表示</span>
-                    <label class="toggle-switch">
-                        <input type="checkbox" id="countdownToggle" checked>
-                        <span class="toggle-slider"></span>
-                    </label>
-                </div>
-            </div>
             <button class="btn-primary" onclick="saveSettings()" style="margin-bottom:16px" data-i18n="settings_save_btn">保存</button>
+            <div class="setting-link" onclick="restorePurchase()">
+                <span data-i18n="settings_restore_btn">🔄 購入の復元</span>
+                <span class="setting-link-arrow">›</span>
+            </div>
+            <a class="setting-link" id="contactLink" href="mailto:ristu.japan@gmail.com">
+                <span data-i18n="settings_contact_btn">✉️ お問い合わせ</span>
+                <span class="setting-link-arrow">›</span>
+            </a>
             <button class="btn-danger" onclick="resetAll()" data-i18n="settings_reset_btn">すべてのデータをリセット</button>
             <button class="btn-debug" onclick="generateDemoData()" data-i18n="settings_debug_btn">🛠 デモデータを生成</button>
         </div>
@@ -1812,6 +1820,31 @@
         var currentFacing = 'environment';
         var camMode = 'video';   // 'video' | 'photo'
         var isCounting = false;  // pre-recording countdown active
+        // 録画前カウントダウン ON/OFF（カメラ画面のトグルボタンで切替・localStorage永続化）
+        var preCountdownEnabled = localStorage.getItem('oneshot_pre_countdown') !== 'false';
+
+        function togglePreCountdown() {
+            preCountdownEnabled = !preCountdownEnabled;
+            localStorage.setItem('oneshot_pre_countdown', preCountdownEnabled ? 'true' : 'false');
+            syncPreCountdownBtn();
+        }
+
+        function syncPreCountdownBtn() {
+            var btn = document.getElementById('preCountdownBtn');
+            if (btn) btn.classList.toggle('active', preCountdownEnabled);
+        }
+
+        // シャッターボタン押下ハンドラ
+        function handleShutter() {
+            if (preCountdownEnabled) {
+                startCountdown();
+            } else {
+                // カウントダウンなしで即録画
+                if (isRecording || isCounting) return;
+                if (camMode === 'video') { beginVideoRecording(); }
+                else { takePhoto(); }
+            }
+        }
 
         function showToast(msg, isError) {
             var t = document.getElementById('toast');
@@ -2012,7 +2045,6 @@
             if (name === 'settings') {
                 document.getElementById('goalEdit').value = state.goal;
                 document.getElementById('notifyTime').value = state.notifyTime || '21:00';
-                document.getElementById('countdownToggle').checked = state.showRecordingCountdown !== false;
             }
         }
 
@@ -2095,7 +2127,6 @@
         function saveSettings() {
             state.goal = document.getElementById('goalEdit').value.trim();
             state.notifyTime = document.getElementById('notifyTime').value;
-            state.showRecordingCountdown = document.getElementById('countdownToggle').checked;
             saveState();
             scheduleNotification();
             showToast(t('toast_settings_saved'));
@@ -2215,6 +2246,7 @@
         function openCamera() {
             showScreen('camera');
             resetCameraStates();
+            syncPreCountdownBtn();
             initCamera().then(function () { drawLoop() }).catch(function (e) {
                 // NotAllowedError: カメラ/マイクのアクセス拒否
                 if (e.name === 'NotAllowedError' || e.name === 'PermissionDeniedError') {
@@ -2300,15 +2332,13 @@
                 }
                 if (isRecording) {
                     var elapsed = (Date.now() - recStart) / 1000;
-                    // 録画中カウントダウン表示（設定がONのときのみ）
+                    // 録画中カウントダウン表示（常時）
                     var timerEl = document.getElementById('camTimer');
-                    if (state.showRecordingCountdown) {
-                        var remaining = Math.ceil(3 - elapsed);
-                        if (remaining > 0) {
-                            timerEl.className = 'cam-timer cam-rec-countdown';
-                            timerEl.style.display = 'block';
-                            timerEl.textContent = remaining;
-                        }
+                    var remaining = Math.ceil(3 - elapsed);
+                    if (remaining > 0) {
+                        timerEl.className = 'cam-timer cam-rec-countdown';
+                        timerEl.style.display = 'block';
+                        timerEl.textContent = remaining;
                     }
                     if (elapsed >= 3) {
                         timerEl.style.display = 'none';
