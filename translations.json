@@ -95,7 +95,15 @@
     "confirm_demo_data": "デモデータを生成しますか？\n現在のデータはリセットされ、100日分の履歴が生成されます。",
     "toast_demo_generated": "✓ デモデータを生成しました",
     "alert_already_recorded": "本日の記録は完了しています。撮り直す場合は、履歴から今日のデータを削除してください。",
-    "confirm_no_pass_buy": "パスが不足しています。追加で購入しますか？"
+    "confirm_no_pass_buy": "パスが不足しています。追加で購入しますか？",
+    "modal_delete_btn": "🗑 削除",
+    "modal_save_btn": "💾 保存",
+    "modal_share_btn": "↑ 共有",
+    "confirm_delete_record": "この記録を削除しますか？",
+    "toast_deleted": "✓ 削除しました",
+    "toast_saved": "✓ 端末に保存しました",
+    "toast_share_not_supported": "このデバイスでは共有できません",
+    "toast_share_error": "共有に失敗しました"
   },
   "en": {
     "meta_description": "One video a day. Record your habits with video.",
@@ -193,6 +201,14 @@
     "confirm_demo_data": "Generate demo data?\nCurrent data will be reset and 100 days of history will be created.",
     "toast_demo_generated": "✓ Demo data generated",
     "alert_already_recorded": "Today's recording is complete. To re-record, delete today's data from History.",
-    "confirm_no_pass_buy": "Not enough passes. Would you like to purchase more?"
+    "confirm_no_pass_buy": "Not enough passes. Would you like to purchase more?",
+    "modal_delete_btn": "🗑 Delete",
+    "modal_save_btn": "💾 Save",
+    "modal_share_btn": "↑ Share",
+    "confirm_delete_record": "Delete this recording?",
+    "toast_deleted": "✓ Deleted",
+    "toast_saved": "✓ Saved to device",
+    "toast_share_not_supported": "Sharing is not supported on this device",
+    "toast_share_error": "Failed to share"
   }
 }

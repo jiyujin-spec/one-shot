@@ -632,34 +632,30 @@
         }
 
         .cal-day.has-video {
-            background: rgba(139, 0, 0, .18);
+            background: rgba(139, 0, 0, .2);
             color: #fff
         }
 
-        .cal-day.has-video::after {
-            content: '✓';
-            position: absolute;
-            top: 1px;
-            right: 3px;
-            font-size: 8px;
-            font-weight: 900;
-            color: var(--accent);
-            line-height: 1
-        }
-
-        .cal-day.milestone {
-            background: rgba(255, 200, 0, .18);
-            color: #FFD700
-        }
-
-        .cal-day.milestone::after {
-            content: '★';
+        .cal-mark {
             position: absolute;
             top: 1px;
             right: 2px;
             font-size: 9px;
-            color: #FFD700;
-            line-height: 1
+            font-weight: 900;
+            color: var(--accent);
+            line-height: 1;
+            pointer-events: none
+        }
+
+        .cal-day.milestone {
+            background: rgba(255, 200, 0, .15);
+            color: #FFD700
+        }
+
+        .cal-day.milestone .cal-mark {
+            font-size: 11px;
+            top: 0;
+            right: 1px
         }
 
         .history-list {
@@ -815,6 +811,43 @@
             color: #fff;
             font-size: 32px;
             cursor: pointer
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 16px;
+            padding: 0 12px;
+            width: 100%;
+            max-width: 420px;
+            box-sizing: border-box
+        }
+
+        .modal-action-btn {
+            flex: 1;
+            padding: 11px 6px;
+            background: rgba(255, 255, 255, .08);
+            border: 1px solid rgba(255, 255, 255, .18);
+            border-radius: 12px;
+            color: #fff;
+            font-size: 13px;
+            font-weight: 700;
+            font-family: 'Inter', sans-serif;
+            cursor: pointer;
+            transition: background .18s
+        }
+
+        .modal-action-btn:active {
+            background: rgba(255, 255, 255, .18)
+        }
+
+        .modal-action-btn.danger {
+            border-color: rgba(220, 60, 60, .45);
+            color: #ff7070
+        }
+
+        .modal-action-btn.danger:active {
+            background: rgba(220, 60, 60, .2)
         }
 
         .toast {
@@ -997,7 +1030,7 @@
 
         /* ===== USE PASS BUTTON ===== */
         .use-pass-btn {
-            display: none;
+            display: block;
             width: 100%;
             padding: 14px;
             background: transparent;
@@ -1012,10 +1045,6 @@
             letter-spacing: 1px;
             margin-top: 12px;
             transition: all .2s
-        }
-
-        .use-pass-btn.visible {
-            display: block
         }
 
         .use-pass-btn:active {
@@ -1670,7 +1699,12 @@
         <div class="modal-overlay" id="videoModal">
             <button class="modal-close" onclick="closeModal()">✕</button>
             <video id="modalVideo" controls playsinline></video>
-            <img id="modalImage" style="display:none;max-width:100%;max-height:90vh;border-radius:12px;object-fit:contain;" alt="">
+            <img id="modalImage" style="display:none;max-width:100%;max-height:74vh;border-radius:12px;object-fit:contain;" alt="">
+            <div class="modal-actions">
+                <button class="modal-action-btn danger" onclick="deleteCurrentRecord()" data-i18n="modal_delete_btn">🗑 削除</button>
+                <button class="modal-action-btn" onclick="saveCurrentRecord()" data-i18n="modal_save_btn">💾 保存</button>
+                <button class="modal-action-btn" onclick="shareCurrentRecord()" data-i18n="modal_share_btn">↑ 共有</button>
+            </div>
         </div>
         <div class="toast" id="toast"></div>
 
@@ -1803,10 +1837,9 @@
         }
 
         function updatePassBtn() {
-            var passRemainEl = document.getElementById('passRemain');
             var usePassBtn = document.getElementById('usePassBtn');
-            if (!passRemainEl || !usePassBtn) return;
-            usePassBtn.textContent = t('use_pass_btn_prefix') + passRemainEl.textContent + t('use_pass_btn_suffix');
+            if (!usePassBtn) return;
+            usePassBtn.textContent = t('use_pass_btn_prefix') + totalPassCount() + t('use_pass_btn_suffix');
         }
 
         function setLanguage(lang) {
@@ -2085,13 +2118,10 @@
                 st.textContent = '−'; st.className = 'val pending';
                 rb.classList.remove('recorded'); dl.classList.remove('show');
             }
-            // パスを使うボタン: 未記録かつパスあり の時のみ表示
+            // パスを使うボタン: 常時表示（0枚でも表示、押したら購入ダイアログ）
             var passBtn = document.getElementById('usePassBtn');
-            var passRemain = document.getElementById('passRemain');
             var total = totalPassCount();
-            passRemain.textContent = total;
             passBtn.textContent = t('use_pass_btn_prefix') + total + t('use_pass_btn_suffix');
-            passBtn.classList.toggle('visible', !recorded);
         }
 
         // ===== GUIDE =====
@@ -2210,16 +2240,20 @@
             var firstDay = new Date(calYear, calMonth, 1), lastDay = new Date(calYear, calMonth + 1, 0).getDate(), startDow = firstDay.getDay(), todayStr = getAppDate();
             for (var i = 0; i < startDow; i++) { var d = document.createElement('div'); d.className = 'cal-day'; grid.appendChild(d) }
             for (var i = 1; i <= lastDay; i++) {
-                var d = document.createElement('div'); d.className = 'cal-day current-month'; d.textContent = i;
+                var d = document.createElement('div'); d.className = 'cal-day current-month';
                 var ds = calYear + '-' + pad2(calMonth + 1) + '-' + pad2(i);
                 if (ds === todayStr) d.classList.add('today');
                 if (dates.indexOf(ds) >= 0) {
                     var rank = dateRankMap[ds];
                     if (rank % 10 === 0) {
                         d.classList.add('has-video', 'milestone');
+                        d.innerHTML = i + '<span class="cal-mark">🌟</span>';
                     } else {
                         d.classList.add('has-video');
+                        d.innerHTML = i + '<span class="cal-mark">✓</span>';
                     }
+                } else {
+                    d.textContent = i;
                 }
                 (function (date) { d.addEventListener('click', function () { showDayVideos(date) }) })(ds);
                 grid.appendChild(d);
@@ -2248,7 +2282,10 @@
             });
         }
         async function showDayVideos(date) { try { var v = await getVideosByDate(date); if (v.length > 0) playVideoRecord(v[0]) } catch (e) { } }
+        var currentRecord = null;
+
         function playVideoRecord(r) {
+            currentRecord = r;
             var blob = r.data ? arrayBufferToBlob(r.data, r.mime) : r.blob;
             if (!blob) { showToast(t('toast_no_data'), true); return }
             var isImage = r.mime && r.mime.startsWith('image/');
@@ -2267,6 +2304,7 @@
             }
             document.getElementById('videoModal').classList.add('active');
         }
+
         function closeModal() {
             var v = document.getElementById('modalVideo');
             var img = document.getElementById('modalImage');
@@ -2276,6 +2314,69 @@
             try { URL.revokeObjectURL(img.src) } catch (e) { }
             img.removeAttribute('src'); img.style.display = 'none';
             document.getElementById('videoModal').classList.remove('active');
+            currentRecord = null;
+        }
+
+        function deleteFromDB(id) {
+            return new Promise(function (resolve, reject) {
+                if (!db) { reject(new Error('no db')); return }
+                var tx = db.transaction('videos', 'readwrite');
+                tx.objectStore('videos').delete(id);
+                tx.oncomplete = resolve;
+                tx.onerror = reject;
+            });
+        }
+
+        async function deleteCurrentRecord() {
+            if (!currentRecord) return;
+            if (!confirm(t('confirm_delete_record'))) return;
+            try {
+                await deleteFromDB(currentRecord.id);
+                var today = getAppDate();
+                if (currentRecord.date === today) {
+                    // 今日のデータを削除: 同日の残件を確認してから lastRecordDate をクリア
+                    var remaining = await getVideosByDate(today);
+                    if (remaining.length === 0) {
+                        state.lastRecordDate = null;
+                        saveState();
+                    }
+                }
+                showToast(t('toast_deleted'));
+                closeModal();
+                refreshHome();
+                if (document.getElementById('history').classList.contains('active')) refreshHistory();
+            } catch (e) {
+                showToast(t('toast_save_error'), true);
+            }
+        }
+
+        function saveCurrentRecord() {
+            if (!currentRecord) return;
+            var blob = currentRecord.data ? arrayBufferToBlob(currentRecord.data, currentRecord.mime) : currentRecord.blob;
+            if (!blob) { showToast(t('toast_no_data'), true); return }
+            var ext = (currentRecord.mime && currentRecord.mime.includes('image')) ? 'png' : 'webm';
+            var filename = 'oneshot_' + (currentRecord.date || 'record') + '.' + ext;
+            var url = URL.createObjectURL(blob);
+            var a = document.createElement('a');
+            a.href = url; a.download = filename;
+            document.body.appendChild(a); a.click(); document.body.removeChild(a);
+            setTimeout(function () { URL.revokeObjectURL(url) }, 1500);
+            showToast(t('toast_saved'));
+        }
+
+        async function shareCurrentRecord() {
+            if (!currentRecord) return;
+            if (!navigator.share) { showToast(t('toast_share_not_supported'), true); return }
+            var blob = currentRecord.data ? arrayBufferToBlob(currentRecord.data, currentRecord.mime) : currentRecord.blob;
+            if (!blob) { showToast(t('toast_no_data'), true); return }
+            var ext = (currentRecord.mime && currentRecord.mime.includes('image')) ? 'png' : 'webm';
+            var filename = 'oneshot_' + (currentRecord.date || 'record') + '.' + ext;
+            var file = new File([blob], filename, { type: blob.type });
+            try {
+                await navigator.share({ files: [file] });
+            } catch (e) {
+                if (e.name !== 'AbortError') showToast(t('toast_share_error'), true);
+            }
         }
 
         // ===== CAMERA =====
