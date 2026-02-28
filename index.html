@@ -1515,6 +1515,8 @@
             100% { transform: scale(1); opacity: 1 }
         }
     </style>
+    <!-- RevenueCat Web SDK -->
+    <script src="https://cdn.jsdelivr.net/npm/@revenuecat/purchases-js@0/dist/index.umd.js"></script>
 </head>
 
 <body>
@@ -1857,6 +1859,11 @@
 
         // ===== STATE =====
         // freePassCount : 毎週月曜付与・溜め込み不可
+        // ===== REVENUECAT =====
+        var RC_API_KEY = 'test_TUZcQdoZgBMgYUNrvbPPsBvUquS';
+        var rcPurchases = null;
+        var rcOfferings = null;
+
         // paidPassCount : 有効期限なし・ストック可能
         // subscribed    : 月額サブスクリプション加入済みフラグ
         // guideShown    : 初回ガイド表示済みフラグ
@@ -2046,12 +2053,26 @@
             saveState();
         }
 
-        function purchasePass() {
-            if (confirm(t('confirm_purchase_pass'))) {
-                state.paidPassCount++; // 有料パスはストック可能
-                saveState();
-                refreshHome();
+        async function purchasePass() {
+            if (!rcPurchases) {
+                // SDK未ロード: フォールバック（テスト用）
+                if (confirm(t('confirm_purchase_pass'))) {
+                    state.paidPassCount++;
+                    saveState(); refreshHome();
+                    showToast(t('toast_paid_pass_added'));
+                }
+                return;
+            }
+            var pkg = findRCPackage('pass');
+            if (!pkg) { showToast('パス商品が見つかりません', true); return; }
+            try {
+                showToast('処理中...');
+                await rcPurchases.purchase({ rcPackage: pkg });
+                state.paidPassCount++;
+                saveState(); refreshHome();
                 showToast(t('toast_paid_pass_added'));
+            } catch (e) {
+                if (!e.userCancelled) { showToast('購入に失敗しました', true); console.error('[RC] purchasePass:', e); }
             }
         }
 
@@ -2078,24 +2099,92 @@
             }, ms);
         }
 
+        // ===== REVENUECAT HELPERS =====
+        async function initRevenueCat() {
+            if (typeof Purchases === 'undefined') { console.warn('[RC] SDK not loaded'); return; }
+            try {
+                if (!state.rcUserID) {
+                    state.rcUserID = 'user_' + Math.random().toString(36).substr(2, 12) + '_' + Date.now();
+                    saveState();
+                }
+                rcPurchases = Purchases.configure(RC_API_KEY, state.rcUserID);
+                rcOfferings = await rcPurchases.getOfferings();
+                console.log('[RC] Initialized. Current offering:', rcOfferings && rcOfferings.current && rcOfferings.current.identifier);
+                await syncRCEntitlements();
+            } catch (e) { console.warn('[RC] initRevenueCat error:', e.message); }
+        }
+
+        async function syncRCEntitlements() {
+            if (!rcPurchases) return;
+            try {
+                var info = await rcPurchases.getCustomerInfo();
+                var active = info.entitlements && info.entitlements.active
+                    ? Object.keys(info.entitlements.active).length > 0 : false;
+                if (active !== !!state.subscribed) { state.subscribed = active; saveState(); }
+                console.log('[RC] Entitlements active:', active);
+                return info;
+            } catch (e) { console.warn('[RC] syncRCEntitlements error:', e.message); }
+        }
+
+        function findRCPackage(type) {
+            if (!rcOfferings || !rcOfferings.current) return null;
+            var pkgs = rcOfferings.current.availablePackages;
+            if (type === 'monthly') {
+                return rcOfferings.current.monthly
+                    || pkgs.find(function(p){ return p.identifier.includes('month') || p.identifier === '$rc_monthly'; })
+                    || pkgs[0] || null;
+            }
+            if (type === 'pass') {
+                return pkgs.find(function(p){
+                    return p.identifier.toLowerCase().includes('pass') || p.packageType === 'CONSUMABLE';
+                }) || null;
+            }
+            return null;
+        }
+
         // ===== PAYWALL =====
-        function subscribePremium() {
-            // 本番では Apple IAP を起動。現在はテストモード。
-            if (confirm(t('confirm_subscribe'))) {
-                state.subscribed = true;
-                saveState();
-                showScreen('home');
-                if (!state.guideShown) showGuide();
+        async function subscribePremium() {
+            if (!rcPurchases) {
+                // SDK未ロード: フォールバック
+                if (confirm(t('confirm_subscribe'))) {
+                    state.subscribed = true; saveState();
+                    showScreen('home');
+                    if (!state.guideShown) showGuide();
+                }
+                return;
+            }
+            var pkg = findRCPackage('monthly');
+            if (!pkg) { showToast('商品情報の取得に失敗しました', true); return; }
+            try {
+                showToast('処理中...');
+                var result = await rcPurchases.purchase({ rcPackage: pkg });
+                var active = Object.keys(result.customerInfo.entitlements.active).length > 0;
+                if (active) {
+                    state.subscribed = true; saveState();
+                    showScreen('home');
+                    if (!state.guideShown) showGuide();
+                    showToast('✓ サブスクリプションが有効になりました');
+                }
+            } catch (e) {
+                if (!e.userCancelled) { showToast('購入に失敗しました', true); console.error('[RC] subscribePremium:', e); }
             }
         }
 
-        function restorePurchase() {
-            // 本番では Apple IAP の復元を呼ぶ
-            if (confirm(t('confirm_restore'))) {
-                state.subscribed = true;
-                saveState();
-                showScreen('home');
-            }
+        async function restorePurchase() {
+            if (!rcPurchases) { showToast('RevenueCat SDK が未初期化です', true); return; }
+            try {
+                showToast('復元中...');
+                var info = await rcPurchases.restorePurchases();
+                var active = info.entitlements && info.entitlements.active
+                    ? Object.keys(info.entitlements.active).length > 0 : false;
+                if (active) {
+                    state.subscribed = true; saveState();
+                    showScreen('home');
+                    showToast('✓ 購入内容を復元しました');
+                } else {
+                    showToast('復元できる購入履歴が見つかりませんでした', true);
+                }
+            } catch (e) { showToast('復元に失敗しました', true); console.error('[RC] restorePurchase:', e); }
         }
 
         // ===== SCREENS =====
@@ -2745,6 +2834,8 @@
             applyTranslations();
 
             loadState(); try { await openDB() } catch (e) { }
+            // RevenueCat 初期化（失敗してもアプリ継続）
+            initRevenueCat().catch(function(e){ console.warn('[RC] init failed:', e) });
             var n = new Date(); calYear = n.getFullYear(); calMonth = n.getMonth();
             if (!state.onboarded) {
                 showScreen('onboarding');
