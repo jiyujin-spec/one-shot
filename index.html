@@ -1666,10 +1666,11 @@
             </button>
         </nav>
 
-        <!-- Video Modal -->
+        <!-- Video / Photo Modal -->
         <div class="modal-overlay" id="videoModal">
             <button class="modal-close" onclick="closeModal()">✕</button>
             <video id="modalVideo" controls playsinline></video>
+            <img id="modalImage" style="display:none;max-width:100%;max-height:90vh;border-radius:12px;object-fit:contain;" alt="">
         </div>
         <div class="toast" id="toast"></div>
 
@@ -2114,7 +2115,9 @@
                 return;
             }
             if (totalPassCount() === 0) {
-                showToast(t('toast_no_pass'), true);
+                if (confirm(t('confirm_no_pass_buy'))) {
+                    showScreen('paywall');
+                }
                 return;
             }
             if (!confirm(t('confirm_use_pass'))) return;
@@ -2248,10 +2251,32 @@
         function playVideoRecord(r) {
             var blob = r.data ? arrayBufferToBlob(r.data, r.mime) : r.blob;
             if (!blob) { showToast(t('toast_no_data'), true); return }
-            var vid = document.getElementById('modalVideo'); vid.src = URL.createObjectURL(blob);
-            document.getElementById('videoModal').classList.add('active'); vid.play().catch(function () { });
+            var isImage = r.mime && r.mime.startsWith('image/');
+            var vid = document.getElementById('modalVideo');
+            var img = document.getElementById('modalImage');
+            var url = URL.createObjectURL(blob);
+            if (isImage) {
+                vid.style.display = 'none';
+                img.style.display = 'block';
+                img.src = url;
+            } else {
+                img.style.display = 'none';
+                vid.style.display = '';
+                vid.src = url;
+                vid.play().catch(function () { });
+            }
+            document.getElementById('videoModal').classList.add('active');
         }
-        function closeModal() { var v = document.getElementById('modalVideo'); v.pause(); try { URL.revokeObjectURL(v.src) } catch (e) { } v.removeAttribute('src'); v.load(); document.getElementById('videoModal').classList.remove('active') }
+        function closeModal() {
+            var v = document.getElementById('modalVideo');
+            var img = document.getElementById('modalImage');
+            v.pause();
+            try { URL.revokeObjectURL(v.src) } catch (e) { }
+            v.removeAttribute('src'); v.load(); v.style.display = '';
+            try { URL.revokeObjectURL(img.src) } catch (e) { }
+            img.removeAttribute('src'); img.style.display = 'none';
+            document.getElementById('videoModal').classList.remove('active');
+        }
 
         // ===== CAMERA =====
         var camStream = null, mediaRec = null, animFrame = null, chunks = [];
@@ -2276,6 +2301,11 @@
         }
 
         function openCamera() {
+            // 1日1枚制限: 今日すでに記録済みならブロック
+            if (state.lastRecordDate === getAppDate()) {
+                alert(t('alert_already_recorded'));
+                return;
+            }
             showScreen('camera');
             resetCameraStates();
             syncPreCountdownBtn();
