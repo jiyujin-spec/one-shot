@@ -1980,7 +1980,17 @@
         function getAllVideoDates() {
             return new Promise(function (resolve) {
                 if (!db) { resolve([]); return }
-                try { var r = db.transaction('videos', 'readonly').objectStore('videos').index('date').getAllKeys(); r.onsuccess = function () { resolve([...new Set(r.result || [])]) }; r.onerror = function () { resolve([]) } } catch (e) { resolve([]) }
+                // NOTE: index().getAllKeys() はプライマリキー(ID数値)を返すためNG
+                // getAll() でレコード全件取得し .date フィールドを抽出する
+                try {
+                    var r = db.transaction('videos', 'readonly').objectStore('videos').getAll();
+                    r.onsuccess = function () {
+                        var dates = (r.result || []).map(function (v) { return v.date; }).filter(Boolean);
+                        console.log('[OneShot] getAllVideoDates =>', dates.length, 'dates:', dates.slice(0, 5));
+                        resolve([...new Set(dates)]);
+                    };
+                    r.onerror = function () { resolve([]) };
+                } catch (e) { resolve([]) }
             });
         }
         function getVideosByDate(ds) {
@@ -2239,18 +2249,28 @@
             dayLabels.forEach(function (l) { var d = document.createElement('div'); d.className = 'cal-day-label'; d.textContent = l; grid.appendChild(d) });
             var firstDay = new Date(calYear, calMonth, 1), lastDay = new Date(calYear, calMonth + 1, 0).getDate(), startDow = firstDay.getDay(), todayStr = getAppDate();
             for (var i = 0; i < startDow; i++) { var d = document.createElement('div'); d.className = 'cal-day'; grid.appendChild(d) }
+            // Debug: log date list and first comparison
+            console.log('[OneShot] calYear/Month:', calYear, calMonth + 1, '| dates count:', dates.length);
+            if (dates.length > 0) console.log('[OneShot] dates[0]:', JSON.stringify(dates[0]), '| type:', typeof dates[0]);
             for (var i = 1; i <= lastDay; i++) {
                 var d = document.createElement('div'); d.className = 'cal-day current-month';
                 var ds = calYear + '-' + pad2(calMonth + 1) + '-' + pad2(i);
+                if (i === 1) console.log('[OneShot] compare ds:', JSON.stringify(ds), 'indexOf:', dates.indexOf(ds));
                 if (ds === todayStr) d.classList.add('today');
                 if (dates.indexOf(ds) >= 0) {
                     var rank = dateRankMap[ds];
                     if (rank % 10 === 0) {
-                        d.classList.add('has-video', 'milestone');
-                        d.innerHTML = i + '<span class="cal-mark">🌟</span>';
+                        // 10日刻みマイルストーン: inline styleで金色🌟
+                        d.innerHTML = '<span style="display:block;line-height:1.2;">' + i + '</span>'
+                            + '<span style="position:absolute;top:0;right:1px;font-size:12px;line-height:1;">🌟</span>';
+                        d.style.background = 'rgba(255,200,0,0.2)';
+                        d.style.color = '#FFD700';
                     } else {
-                        d.classList.add('has-video');
-                        d.innerHTML = i + '<span class="cal-mark">✓</span>';
+                        // 通常記録日: inline styleで赤✓
+                        d.innerHTML = '<span style="display:block;line-height:1.2;">' + i + '</span>'
+                            + '<span style="position:absolute;top:1px;right:2px;font-size:10px;font-weight:900;color:#CC0000;line-height:1;">✓</span>';
+                        d.style.background = 'rgba(139,0,0,0.2)';
+                        d.style.color = '#fff';
                     }
                 } else {
                     d.textContent = i;
