@@ -2487,13 +2487,24 @@ Minimum version required to store current data is: `+N+`.
 
         // ===== REVENUECAT HELPERS =====
         async function initRevenueCat() {
-            if (typeof Purchases === 'undefined') { console.warn('[RC] SDK not loaded'); return; }
+            // UMD インライン埋め込み時の構造:
+            //   window.Purchases          = { Purchases: class, ErrorCode, LogLevel, ... }
+            //   window.Purchases.Purchases = class Purchases { static configure(){} }
+            var PurchasesLib = (window.Purchases && typeof window.Purchases.configure === 'function')
+                ? window.Purchases                     // CDN版（旧来）
+                : (window.Purchases && typeof window.Purchases.Purchases === 'function' && typeof window.Purchases.Purchases.configure === 'function')
+                    ? window.Purchases.Purchases       // UMDインライン版
+                    : null;
+            if (!PurchasesLib) {
+                console.warn('[RC] Purchases.configure not found. window.Purchases =', typeof window.Purchases, window.Purchases ? Object.keys(window.Purchases).slice(0,10) : 'undefined');
+                return;
+            }
             try {
                 if (!state.rcUserID) {
                     state.rcUserID = 'user_' + Math.random().toString(36).substr(2, 12) + '_' + Date.now();
                     saveState();
                 }
-                rcPurchases = Purchases.configure(RC_API_KEY, state.rcUserID);
+                rcPurchases = PurchasesLib.configure(RC_API_KEY, state.rcUserID);
                 rcOfferings = await rcPurchases.getOfferings();
                 console.log('[RC] Initialized. Current offering:', rcOfferings && rcOfferings.current && rcOfferings.current.identifier);
                 await syncRCEntitlements();
