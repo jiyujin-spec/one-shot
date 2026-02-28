@@ -93,7 +93,9 @@
     "settings_contact_btn": "✉️ お問い合わせ",
     "settings_debug_btn": "🛠 デモデータを生成",
     "confirm_demo_data": "デモデータを生成しますか？\n現在のデータはリセットされ、100日分の履歴が生成されます。",
-    "toast_demo_generated": "✓ デモデータを生成しました"
+    "toast_demo_generated": "✓ デモデータを生成しました",
+    "alert_already_recorded": "本日の記録は完了しています。撮り直す場合は、履歴から今日のデータを削除してください。",
+    "confirm_no_pass_buy": "パスが不足しています。追加で購入しますか？"
   },
   "en": {
     "meta_description": "One video a day. Record your habits with video.",
@@ -189,6 +191,8 @@
     "settings_contact_btn": "✉️ Contact Us",
     "settings_debug_btn": "🛠 Generate Demo Data",
     "confirm_demo_data": "Generate demo data?\nCurrent data will be reset and 100 days of history will be created.",
-    "toast_demo_generated": "✓ Demo data generated"
+    "toast_demo_generated": "✓ Demo data generated",
+    "alert_already_recorded": "Today's recording is complete. To re-record, delete today's data from History.",
+    "confirm_no_pass_buy": "Not enough passes. Would you like to purchase more?"
   }
 }
