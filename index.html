@@ -5,6 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
     <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="One Shot">
     <meta name="theme-color" content="#000000">
@@ -149,14 +150,14 @@
             background: var(--accent);
             color: #fff;
             border: none;
-            border-radius: 12px;
-            font-size: 18px;
-            font-weight: 900;
+            border-radius: 14px;
+            font-size: 16px;
+            font-weight: 700;
             font-family: 'Inter', sans-serif;
             cursor: pointer;
             transition: all .2s;
             text-transform: uppercase;
-            letter-spacing: 2px
+            letter-spacing: 1.5px
         }
 
         .btn-primary:active {
@@ -189,8 +190,7 @@
         .settings-btn {
             background: none;
             border: none;
-            color: var(--fg);
-            font-size: 24px;
+            color: var(--gray);
             cursor: pointer;
             width: 44px;
             height: 44px;
@@ -198,7 +198,11 @@
             align-items: center;
             justify-content: center;
             border-radius: 12px;
-            transition: background .2s
+            transition: all .2s
+        }
+
+        .settings-btn:hover {
+            color: var(--fg)
         }
 
         .settings-btn:active {
@@ -339,11 +343,11 @@
             margin-top: 16px;
             padding: 14px;
             background: var(--card);
-            border: 2px solid var(--accent);
+            border: 1.5px solid var(--accent);
             border-radius: 12px;
             color: var(--accent);
-            font-size: 14px;
-            font-weight: 900;
+            font-size: 13px;
+            font-weight: 700;
             font-family: 'Inter', sans-serif;
             cursor: pointer;
             text-transform: uppercase;
@@ -378,10 +382,10 @@
             gap: 4px;
             padding: 8px;
             color: var(--gray);
-            font-size: 10px;
-            font-weight: 700;
+            font-size: 9px;
+            font-weight: 500;
             text-transform: uppercase;
-            letter-spacing: 1px;
+            letter-spacing: 0.8px;
             cursor: pointer;
             transition: color .2s;
             background: none;
@@ -693,7 +697,7 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 20px
+            color: var(--gray)
         }
 
         .hi-info .hi-date {
@@ -709,7 +713,8 @@
 
         .hi-play {
             color: var(--gray);
-            font-size: 20px
+            display: flex;
+            align-items: center
         }
 
         .no-history {
@@ -806,11 +811,17 @@
             position: absolute;
             top: 16px;
             right: 16px;
-            background: none;
+            background: rgba(255,255,255,.1);
             border: none;
             color: #fff;
-            font-size: 32px;
-            cursor: pointer
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            backdrop-filter: blur(10px)
         }
 
         .modal-actions {
@@ -830,11 +841,15 @@
             border: 1px solid rgba(255, 255, 255, .18);
             border-radius: 12px;
             color: #fff;
-            font-size: 13px;
-            font-weight: 700;
+            font-size: 12px;
+            font-weight: 600;
             font-family: 'Inter', sans-serif;
             cursor: pointer;
-            transition: background .18s
+            transition: background .18s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 5px
         }
 
         .modal-action-btn:active {
@@ -923,8 +938,13 @@
         }
 
         .guide-card-icon {
-            font-size: 22px;
-            line-height: 1
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            color: var(--accent)
         }
 
         .guide-card-title {
@@ -946,13 +966,13 @@
             background: var(--accent);
             color: #fff;
             border: none;
-            border-radius: 12px;
-            font-size: 18px;
-            font-weight: 900;
+            border-radius: 14px;
+            font-size: 16px;
+            font-weight: 700;
             font-family: 'Inter', sans-serif;
             cursor: pointer;
             text-transform: uppercase;
-            letter-spacing: 3px;
+            letter-spacing: 1.5px;
             margin-top: 24px;
             transition: opacity .2s
         }
@@ -1022,23 +1042,29 @@
         }
 
         .guide-tip-icon {
-            font-size: 16px;
             width: 22px;
-            text-align: center;
-            flex-shrink: 0
+            height: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            color: #888
         }
 
         /* ===== USE PASS BUTTON ===== */
         .use-pass-btn {
-            display: block;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 7px;
             width: 100%;
             padding: 14px;
             background: transparent;
-            border: 2px solid var(--accent);
+            border: 1.5px solid var(--accent);
             border-radius: 12px;
             color: var(--accent);
-            font-size: 14px;
-            font-weight: 900;
+            font-size: 13px;
+            font-weight: 700;
             font-family: 'Inter', sans-serif;
             cursor: pointer;
             text-transform: uppercase;
@@ -1150,10 +1176,13 @@
         }
 
         .paywall-feature-icon {
-            font-size: 22px;
             width: 32px;
-            text-align: center;
-            flex-shrink: 0
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            color: var(--accent)
         }
 
         .paywall-pass-note {
@@ -1239,8 +1268,8 @@
         }
 
         .cam-perm-icon {
-            font-size: 64px;
-            margin-bottom: 24px
+            margin-bottom: 24px;
+            color: var(--gray)
         }
 
         .cam-perm-title {
@@ -1458,8 +1487,18 @@
         }
 
         .achievement-icon {
-            font-size: 32px;
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             flex-shrink: 0
+        }
+
+        .setting-link-content {
+            display: flex;
+            align-items: center;
+            gap: 8px
         }
 
         .achievement-text {
@@ -1923,7 +1962,7 @@ Minimum version required to store current data is: `+N+`.
         <div id="home" class="screen">
             <div class="home-header">
                 <h2>ONE SHOT</h2>
-                <button class="settings-btn" onclick="showScreen('settings')">⚙️</button>
+                <button class="settings-btn" onclick="showScreen('settings')"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></svg></button>
             </div>
             <div class="streak-section">
                 <div class="streak-num" id="streakNum">0</div>
@@ -1943,8 +1982,8 @@ Minimum version required to store current data is: `+N+`.
                 </svg>
             </button>
             <div class="rec-done-label" id="recDoneLabel" data-i18n="recorded_today">✓ RECORDED TODAY</div>
-            <button class="use-pass-btn" id="usePassBtn" onclick="usePassToday()">🎟️ パスを使う（残り <span id="passRemain">0</span>枚）</button>
-            <button class="pass-purchase" id="passPurchaseBtn" onclick="purchasePass()" data-i18n="pass_purchase_btn">💳 パスを購入（¥100）</button>
+            <button class="use-pass-btn" id="usePassBtn" onclick="usePassToday()">パスを使う（残り 0 枚）</button>
+            <button class="pass-purchase" id="passPurchaseBtn" onclick="purchasePass()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg><span data-i18n="pass_purchase_btn">パスを購入（¥100）</span></button>
         </div>
 
         <!-- Camera -->
@@ -1952,8 +1991,8 @@ Minimum version required to store current data is: `+N+`.
             <div class="cam-container">
                 <canvas id="camCanvas" class="cam-canvas"></canvas>
                 <div class="cam-top-bar">
-                    <button class="cam-top-btn" onclick="closeCamera()">✕</button>
-                    <button class="cam-top-btn" id="camFlipBtn" onclick="flipCamera()">🔄</button>
+                    <button class="cam-top-btn" onclick="closeCamera()"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+                    <button class="cam-top-btn" id="camFlipBtn" onclick="flipCamera()"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 4v6h6"/><path d="M23 20v-6h-6"/><path d="M20.49 9A9 9 0 005.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 013.51 15"/></svg></button>
                 </div>
                 <div class="cam-timer" id="camTimer"></div>
                 <!-- Pre-recording countdown overlay -->
@@ -1968,7 +2007,7 @@ Minimum version required to store current data is: `+N+`.
                 </div>
 
                 <div class="cam-controls" id="camControls">
-                    <button class="cam-side-btn active" id="preCountdownBtn" onclick="togglePreCountdown()" title="Pre-recording countdown">⏱</button>
+                    <button class="cam-side-btn active" id="preCountdownBtn" onclick="togglePreCountdown()" title="Pre-recording countdown"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2 2"/><line x1="9" y1="3" x2="15" y2="3"/></svg></button>
                     <button class="shutter-btn" id="shutterBtn" onclick="handleShutter()">
                         <div class="inner"></div>
                     </button>
@@ -1980,7 +2019,7 @@ Minimum version required to store current data is: `+N+`.
                 </div>
                 <div class="share-controls" id="shareControls">
                     <button class="prev-btn share" id="shareBtn" onclick="shareRecording()">
-                        <span>&#8679;</span> <span data-i18n="share_btn">SNSにシェア</span>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:4px"><path d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg><span data-i18n="share_btn">SNSにシェア</span>
                     </button>
                     <button class="prev-btn retry" onclick="closeCamera()" data-i18n="close_btn">閉じる</button>
                 </div>
@@ -1991,16 +2030,16 @@ Minimum version required to store current data is: `+N+`.
         <div id="history" class="screen">
             <div class="screen-title">HISTORY</div>
             <div id="achievementBadge" class="achievement-badge" style="display:none">
-                <span class="achievement-icon">🏆</span>
+                <span class="achievement-icon"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9H4.5a2.5 2.5 0 010-5H6"/><path d="M18 9h1.5a2.5 2.5 0 000-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0012 0V2z"/></svg></span>
                 <div>
                     <div class="achievement-text" id="achievementText">100 Days Achievement!</div>
                     <div class="achievement-sub" id="achievementSub">Keep it up!</div>
                 </div>
             </div>
             <div class="cal-header">
-                <button onclick="changeMonth(-1)">◀</button>
+                <button onclick="changeMonth(-1)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></button>
                 <span class="cal-month" id="calMonth"></span>
-                <button onclick="changeMonth(1)">▶</button>
+                <button onclick="changeMonth(1)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></button>
             </div>
             <div class="cal-grid" id="calGrid"></div>
             <div class="history-list" id="historyList"></div>
@@ -2010,7 +2049,7 @@ Minimum version required to store current data is: `+N+`.
         <div id="settings" class="screen">
             <div class="screen-title" data-i18n="settings_title">SETTINGS</div>
             <div class="setting-link" onclick="showGuide()">
-                <span data-i18n="settings_guide">📖 アプリの使い方</span>
+                <span class="setting-link-content"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg><span data-i18n="settings_guide">アプリの使い方</span></span>
                 <span class="setting-link-arrow">›</span>
             </div>
             <div class="setting-group">
@@ -2025,21 +2064,21 @@ Minimum version required to store current data is: `+N+`.
             <div class="setting-group">
                 <label data-i18n="settings_language_label">言語 / Language</label>
                 <div class="lang-toggle">
-                    <button class="lang-btn active" id="langJa" onclick="setLanguage('ja')">🇯🇵 日本語</button>
-                    <button class="lang-btn" id="langEn" onclick="setLanguage('en')">🇬🇧 English</button>
+                    <button class="lang-btn active" id="langJa" onclick="setLanguage('ja')">日本語</button>
+                    <button class="lang-btn" id="langEn" onclick="setLanguage('en')">English</button>
                 </div>
             </div>
             <button class="btn-primary" onclick="saveSettings()" style="margin-bottom:16px" data-i18n="settings_save_btn">保存</button>
             <div class="setting-link" onclick="restorePurchase()">
-                <span data-i18n="settings_restore_btn">🔄 購入の復元</span>
+                <span class="setting-link-content"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 4v6h6"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg><span data-i18n="settings_restore_btn">購入の復元</span></span>
                 <span class="setting-link-arrow">›</span>
             </div>
             <a class="setting-link" id="contactLink" href="mailto:ristu.japan@gmail.com">
-                <span data-i18n="settings_contact_btn">✉️ お問い合わせ</span>
+                <span class="setting-link-content"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg><span data-i18n="settings_contact_btn">お問い合わせ</span></span>
                 <span class="setting-link-arrow">›</span>
             </a>
             <button class="btn-danger" onclick="resetAll()" data-i18n="settings_reset_btn">すべてのデータをリセット</button>
-            <button class="btn-debug" onclick="generateDemoData()" data-i18n="settings_debug_btn">🛠 デモデータを生成</button>
+            <button class="btn-debug" onclick="generateDemoData()" data-i18n="settings_debug_btn">デモデータを生成</button>
         </div>
 
         <!-- Paywall -->
@@ -2051,11 +2090,11 @@ Minimum version required to store current data is: `+N+`.
                 <div class="paywall-price-sub" data-i18n="paywall_price_sub">/ 月（税込）・自動更新</div>
             </div>
             <div class="paywall-features">
-                <div class="paywall-feature"><span class="paywall-feature-icon">🎬</span><span data-i18n="paywall_feature1">動画・写真の毎日撮影（無制限）</span></div>
-                <div class="paywall-feature"><span class="paywall-feature-icon">🔥</span><span data-i18n="paywall_feature2">ストリーク管理・継続記録</span></div>
-                <div class="paywall-feature"><span class="paywall-feature-icon">📤</span><span data-i18n="paywall_feature3">Instagram / TikTok への SNS シェア</span></div>
-                <div class="paywall-feature"><span class="paywall-feature-icon">🎟️</span><span data-i18n="paywall_feature4">毎週1枚の無料パス自動付与</span></div>
-                <div class="paywall-feature"><span class="paywall-feature-icon">📅</span><span data-i18n="paywall_feature5">撮影履歴・カレンダー表示</span></div>
+                <div class="paywall-feature"><span class="paywall-feature-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg></span><span data-i18n="paywall_feature1">動画・写真の毎日撮影（無制限）</span></div>
+                <div class="paywall-feature"><span class="paywall-feature-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></span><span data-i18n="paywall_feature2">ストリーク管理・継続記録</span></div>
+                <div class="paywall-feature"><span class="paywall-feature-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg></span><span data-i18n="paywall_feature3">Instagram / TikTok への SNS シェア</span></div>
+                <div class="paywall-feature"><span class="paywall-feature-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></span><span data-i18n="paywall_feature4">毎週1枚の無料パス自動付与</span></div>
+                <div class="paywall-feature"><span class="paywall-feature-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></span><span data-i18n="paywall_feature5">撮影履歴・カレンダー表示</span></div>
             </div>
             <button class="btn-primary" onclick="subscribePremium()" data-i18n="paywall_subscribe_btn">月額 ¥300 で始める</button>
             <p class="paywall-pass-note" data-i18n="paywall_pass_note">お休みパスは ¥100/枚 で別途購入できます</p>
@@ -2085,20 +2124,20 @@ Minimum version required to store current data is: `+N+`.
 
         <!-- Video / Photo Modal -->
         <div class="modal-overlay" id="videoModal">
-            <button class="modal-close" onclick="closeModal()">✕</button>
+            <button class="modal-close" onclick="closeModal()"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
             <video id="modalVideo" controls playsinline></video>
             <img id="modalImage" style="display:none;max-width:100%;max-height:74vh;border-radius:12px;object-fit:contain;" alt="">
             <div class="modal-actions">
-                <button class="modal-action-btn danger" onclick="deleteCurrentRecord()" data-i18n="modal_delete_btn">🗑 削除</button>
-                <button class="modal-action-btn" onclick="saveCurrentRecord()" data-i18n="modal_save_btn">💾 保存</button>
-                <button class="modal-action-btn" onclick="shareCurrentRecord()" data-i18n="modal_share_btn">↑ 共有</button>
+                <button class="modal-action-btn danger" onclick="deleteCurrentRecord()"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg><span data-i18n="modal_delete_btn">削除</span></button>
+                <button class="modal-action-btn" onclick="saveCurrentRecord()"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg><span data-i18n="modal_save_btn">保存</span></button>
+                <button class="modal-action-btn" onclick="shareCurrentRecord()"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg><span data-i18n="modal_share_btn">共有</span></button>
             </div>
         </div>
         <div class="toast" id="toast"></div>
 
         <!-- Camera Permission Error -->
         <div id="camPermission">
-            <div class="cam-perm-icon">📷</div>
+            <div class="cam-perm-icon"><svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg></div>
             <div class="cam-perm-title" data-i18n="cam_permission_title">カメラへのアクセスを許可してください</div>
             <div class="cam-perm-body" data-i18n="cam_permission_body">One Shot はカメラとマイクを使用して動画を記録します。ブラウザの設定からアクセスを許可してください。</div>
             <div class="cam-perm-hint">
@@ -2116,7 +2155,7 @@ Minimum version required to store current data is: `+N+`.
             <!-- Card 1: 習慣化の仕組み -->
             <div class="guide-card">
                 <div class="guide-card-head">
-                    <span class="guide-card-icon">🔥</span>
+                    <span class="guide-card-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></span>
                     <span class="guide-card-title" data-i18n="guide_card1_title">習慣化の仕組み</span>
                 </div>
                 <div class="guide-card-body" data-i18n="guide_card1_body">1日1回、継続したい習慣の動画を撮り、SNSにシェアしましょう。フォロワーが見ていることで、サボれない環境を作ります。</div>
@@ -2125,7 +2164,7 @@ Minimum version required to store current data is: `+N+`.
             <!-- Card 2: 撮影の流れ -->
             <div class="guide-card">
                 <div class="guide-card-head">
-                    <span class="guide-card-icon">🎬</span>
+                    <span class="guide-card-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg></span>
                     <span class="guide-card-title" data-i18n="guide_card2_title">撮影の流れ</span>
                 </div>
                 <div class="guide-card-body">
@@ -2144,15 +2183,15 @@ Minimum version required to store current data is: `+N+`.
             <!-- Card 3: Instagram 活用法 -->
             <div class="guide-card guide-card--instagram">
                 <div class="guide-card-head">
-                    <span class="guide-card-icon">📸</span>
+                    <span class="guide-card-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg></span>
                     <span class="guide-card-title" data-i18n="guide_card3_title">Instagram で継続を確実に</span>
                 </div>
                 <div class="guide-card-body">
                     <p data-i18n="guide_card3_body">動画はInstagramストーリーにアップし、「ハイライト」に保存しましょう。</p>
                     <div class="guide-instagram-tips">
-                        <div class="guide-tip"><span class="guide-tip-icon">👥</span><span data-i18n="guide_tip1">フォロワーが見ている＝サボれない</span></div>
-                        <div class="guide-tip"><span class="guide-tip-icon">📌</span><span data-i18n="guide_tip2">ハイライトに記録が積み上がる</span></div>
-                        <div class="guide-tip"><span class="guide-tip-icon">💪</span><span data-i18n="guide_tip3">継続を可視化して自信につなげる</span></div>
+                        <div class="guide-tip"><span class="guide-tip-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg></span><span data-i18n="guide_tip1">フォロワーが見ている＝サボれない</span></div>
+                        <div class="guide-tip"><span class="guide-tip-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg></span><span data-i18n="guide_tip2">ハイライトに記録が積み上がる</span></div>
+                        <div class="guide-tip"><span class="guide-tip-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></span><span data-i18n="guide_tip3">継続を可視化して自信につなげる</span></div>
                     </div>
                 </div>
             </div>
@@ -2160,7 +2199,7 @@ Minimum version required to store current data is: `+N+`.
             <!-- Card 4: パス機能 -->
             <div class="guide-card">
                 <div class="guide-card-head">
-                    <span class="guide-card-icon">🎟️</span>
+                    <span class="guide-card-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></span>
                     <span class="guide-card-title" data-i18n="guide_card4_title">パス（お休み）機能</span>
                 </div>
                 <div class="guide-card-body" data-i18n="guide_card4_body">週に1回、お休みできる「パス」が付与されます。どうしても継続できない時に使いましょう。ストリークがそのまま維持されます。</div>
@@ -2169,7 +2208,7 @@ Minimum version required to store current data is: `+N+`.
             <!-- Card 5: パスの購入 -->
             <div class="guide-card">
                 <div class="guide-card-head">
-                    <span class="guide-card-icon">💳</span>
+                    <span class="guide-card-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg></span>
                     <span class="guide-card-title" data-i18n="guide_card5_title">パスの購入</span>
                 </div>
                 <div class="guide-card-body" data-i18n="guide_card5_body">パスは1枚¥100で追加購入できます。有効期限なし、何枚でもストックできます。</div>
@@ -2227,7 +2266,8 @@ Minimum version required to store current data is: `+N+`.
         function updatePassBtn() {
             var usePassBtn = document.getElementById('usePassBtn');
             if (!usePassBtn) return;
-            usePassBtn.textContent = t('use_pass_btn_prefix') + totalPassCount() + t('use_pass_btn_suffix');
+            var svgTicket = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>';
+            usePassBtn.innerHTML = svgTicket + t('use_pass_btn_prefix') + totalPassCount() + t('use_pass_btn_suffix');
         }
 
         function setLanguage(lang) {
@@ -2479,7 +2519,7 @@ Minimum version required to store current data is: `+N+`.
             window._notifyTimer = setTimeout(function () {
                 if (Notification.permission === 'granted' && state.lastRecordDate !== getAppDate()) {
                     var notifyBody = currentLang === 'en' ? "You haven't recorded today. Start in 5 seconds!" : '今日の記録がまだです。5秒で始めよう！';
-                    new Notification('One Shot', { body: notifyBody, icon: '📷' });
+                    new Notification('One Shot', { body: notifyBody, icon: 'assets/icons/apple-touch-icon.png' });
                 }
                 scheduleNotification();
             }, ms);
@@ -2746,9 +2786,9 @@ Minimum version required to store current data is: `+N+`.
                 if (dates.indexOf(ds) >= 0) {
                     var rank = dateRankMap[ds];
                     if (rank % 10 === 0) {
-                        // 10日刻みマイルストーン: inline styleで金色🌟
+                        // 10日刻みマイルストーン: inline styleで金色★
                         d.innerHTML = '<span style="display:block;line-height:1.2;">' + i + '</span>'
-                            + '<span style="position:absolute;top:0;right:1px;font-size:12px;line-height:1;">🌟</span>';
+                            + '<span style="position:absolute;top:0;right:1px;line-height:1;"><svg width="9" height="9" viewBox="0 0 24 24" fill="#FFD700" stroke="none"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></span>';
                         d.style.background = 'rgba(255,200,0,0.2)';
                         d.style.color = '#FFD700';
                     } else {
@@ -2772,7 +2812,7 @@ Minimum version required to store current data is: `+N+`.
             if (totalDays >= 100) {
                 badge.style.display = 'flex';
                 document.getElementById('achievementText').textContent =
-                    currentLang === 'en' ? '🏆 100 Days Achievement!' : '🏆 100日達成！';
+                    currentLang === 'en' ? '100 Days Achievement!' : '100日達成！';
                 document.getElementById('achievementSub').textContent =
                     currentLang === 'en' ? 'Keep it up — you\'re unstoppable!' : 'この調子で続けよう！';
             } else {
@@ -2782,8 +2822,11 @@ Minimum version required to store current data is: `+N+`.
             all.sort(function (a, b) { return b.ts - a.ts });
             all.slice(0, 50).forEach(function (v) {
                 var item = document.createElement('div'); item.className = 'history-item';
-                var thumb = (v.mime && v.mime.includes('image')) ? '📷' : '🎬';
-                item.innerHTML = '<div class="hi-left"><div class="hi-thumb">' + thumb + '</div><div class="hi-info"><div class="hi-date">' + v.date + '</div><div class="hi-day">DAY ' + v.day + '</div></div></div><div class="hi-play">▶</div>';
+                var thumb = (v.mime && v.mime.includes('image'))
+                    ? '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>'
+                    : '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>';
+                var playIcon = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>';
+                item.innerHTML = '<div class="hi-left"><div class="hi-thumb">' + thumb + '</div><div class="hi-info"><div class="hi-date">' + v.date + '</div><div class="hi-day">DAY ' + v.day + '</div></div></div><div class="hi-play">' + playIcon + '</div>';
                 item.addEventListener('click', function () { playVideoRecord(v) }); list.appendChild(item);
             });
         }
