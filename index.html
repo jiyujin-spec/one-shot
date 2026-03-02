@@ -2077,6 +2077,12 @@ Minimum version required to store current data is: `+N+`.
                 <span class="setting-link-content"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg><span data-i18n="settings_contact_btn">お問い合わせ</span></span>
                 <span class="setting-link-arrow">›</span>
             </a>
+            <!-- プレミアム未加入時のみ表示 -->
+            <div class="setting-group" id="settingsPremiumCard" style="display:none;border:1.5px solid var(--accent)">
+                <label data-i18n="paywall_sub">プレミアム会員</label>
+                <div style="font-size:13px;color:var(--gray);margin-bottom:12px;line-height:1.5" data-i18n="paywall_price_sub">/ 月（税込）・自動更新</div>
+                <button class="btn-primary" onclick="subscribePremium()" data-i18n="paywall_subscribe_btn">月額 ¥300 で始める</button>
+            </div>
             <button class="btn-danger" onclick="resetAll()" data-i18n="settings_reset_btn">すべてのデータをリセット</button>
             <button class="btn-debug" onclick="generateDemoData()" data-i18n="settings_debug_btn">デモデータを生成</button>
         </div>
@@ -2491,11 +2497,14 @@ Minimum version required to store current data is: `+N+`.
             }
             var pkg = findRCPackage('pass');
             if (!pkg) { showToast('パス商品が見つかりません', true); return; }
+            console.log('[RC] purchasePass: Package ID =', pkg.identifier);
             try {
                 showToast('処理中...');
                 await rcPurchases.purchase({ rcPackage: pkg });
                 state.paidPassCount++;
-                saveState(); refreshHome();
+                saveState();
+                refreshHome();
+                updatePassBtn();
                 showToast(t('toast_paid_pass_added'));
             } catch (e) {
                 if (!e.userCancelled) { showToast('購入に失敗しました', true); console.error('[RC] purchasePass:', e); }
@@ -2566,15 +2575,25 @@ Minimum version required to store current data is: `+N+`.
         function findRCPackage(type) {
             if (!rcOfferings || !rcOfferings.current) return null;
             var pkgs = rcOfferings.current.availablePackages;
-            if (type === 'monthly') {
+            if (type === 'subscription') {
+                // 1st: Product ID で正確にマッチ
+                var byProduct = pkgs.find(function(p) {
+                    return p.webBillingProduct && p.webBillingProduct.identifier === 'com.jin.oneshot.premium';
+                });
+                if (byProduct) return byProduct;
+                // 2nd: Package ID or RC monthly フォールバック
                 return rcOfferings.current.monthly
-                    || pkgs.find(function(p){ return p.identifier.includes('month') || p.identifier === '$rc_monthly'; })
+                    || pkgs.find(function(p){ return p.identifier === '$rc_monthly' || p.identifier.toLowerCase().includes('month'); })
                     || pkgs[0] || null;
             }
             if (type === 'pass') {
-                return pkgs.find(function(p){
-                    return p.identifier.toLowerCase().includes('pass') || p.packageType === 'CONSUMABLE';
-                }) || null;
+                // 1st: Package ID 'pass' で完全一致
+                return pkgs.find(function(p){ return p.identifier === 'pass'; })
+                    // 2nd: 'pass' を含む identifier
+                    || pkgs.find(function(p){ return p.identifier.toLowerCase().includes('pass'); })
+                    // 3rd: CONSUMABLE タイプのフォールバック
+                    || pkgs.find(function(p){ return p.packageType === 'CONSUMABLE'; })
+                    || null;
             }
             return null;
         }
@@ -2590,14 +2609,16 @@ Minimum version required to store current data is: `+N+`.
                 }
                 return;
             }
-            var pkg = findRCPackage('monthly');
+            var pkg = findRCPackage('subscription');
             if (!pkg) { showToast('商品情報の取得に失敗しました', true); return; }
             try {
                 showToast('処理中...');
                 var result = await rcPurchases.purchase({ rcPackage: pkg });
-                var active = Object.keys(result.customerInfo.entitlements.active).length > 0;
+                var active = result.customerInfo.entitlements && result.customerInfo.entitlements.active
+                    ? Object.keys(result.customerInfo.entitlements.active).length > 0 : false;
                 if (active) {
                     state.subscribed = true; saveState();
+                    refreshHome();
                     showScreen('home');
                     if (!state.guideShown) showGuide();
                     showToast('✓ サブスクリプションが有効になりました');
@@ -2636,6 +2657,9 @@ Minimum version required to store current data is: `+N+`.
             if (name === 'settings') {
                 document.getElementById('goalEdit').value = state.goal;
                 document.getElementById('notifyTime').value = state.notifyTime || '21:00';
+                // プレミアム未加入の場合のみ購入カードを表示
+                var premCard = document.getElementById('settingsPremiumCard');
+                if (premCard) premCard.style.display = state.subscribed ? 'none' : 'block';
             }
         }
 
@@ -2655,9 +2679,7 @@ Minimum version required to store current data is: `+N+`.
                 rb.classList.remove('recorded'); dl.classList.remove('show');
             }
             // パスを使うボタン: 常時表示（0枚でも表示、押したら購入ダイアログ）
-            var passBtn = document.getElementById('usePassBtn');
-            var total = totalPassCount();
-            passBtn.textContent = t('use_pass_btn_prefix') + total + t('use_pass_btn_suffix');
+            updatePassBtn();
         }
 
         // ===== GUIDE =====
@@ -2681,9 +2703,8 @@ Minimum version required to store current data is: `+N+`.
                 return;
             }
             if (totalPassCount() === 0) {
-                if (confirm(t('confirm_no_pass_buy'))) {
-                    showScreen('paywall');
-                }
+                // パス残数0 → Package ID 'pass' の購入フローを直接起動
+                purchasePass();
                 return;
             }
             if (!confirm(t('confirm_use_pass'))) return;
