@@ -1,0 +1,1826 @@
+/**
+ * One Shot – app/index.tsx
+ * Expo Router main screen (export default function Page)
+ * React Native port of the web PWA
+ */
+
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  ScrollView,
+  StyleSheet,
+  Alert,
+  Platform,
+  StatusBar,
+  Modal,
+  Switch,
+  Dimensions,
+  ActivityIndicator,
+} from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { CameraView, CameraType, useCameraPermissions } from 'expo-camera';
+import * as MediaLibrary from 'expo-media-library';
+import * as Sharing from 'expo-sharing';
+import { Feather, Ionicons } from '@expo/vector-icons';
+import Purchases, {
+  PurchasesOfferings,
+  PurchasesPackage,
+  CustomerInfo,
+} from 'react-native-purchases';
+
+// ─── Constants ───────────────────────────────────────────────────────────────
+
+const RC_API_KEY = 'appl_hxzNKcnblLemtdWosMHSIFpQWYR';
+const HOUR_BOUNDARY = 3; // Day resets at 3 AM
+const STORAGE_KEY = 'oneshot_state_v2';
+const LANG_KEY = 'oneshot_lang';
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+type Screen = 'onboarding' | 'paywall' | 'home' | 'camera' | 'history' | 'settings' | 'guide';
+type Lang = 'ja' | 'en';
+
+interface AppState {
+  goal: string;
+  streak: number;
+  lastRecordDate: string;
+  freePassCount: number;
+  paidPassCount: number;
+  onboarded: boolean;
+  guideShown: boolean;
+  lastPassGrant: string;
+  notifyTime: string;
+  subscribed: boolean;
+  showRecordingCountdown: boolean;
+  rcUserID: string;
+}
+
+interface RecordEntry {
+  date: string;
+  day: number;
+  ts: number;
+  uri?: string;
+}
+
+// ─── Translations ─────────────────────────────────────────────────────────────
+
+const TRANSLATIONS: Record<Lang, Record<string, string>> = {
+  ja: {
+    meta_description: '1日1本。習慣を動画で記録するアプリ。',
+    onboarding_subtitle: '5秒で記録する、ストイックな習慣',
+    onboarding_label: '目標を入力',
+    onboarding_placeholder: '例: 筋トレ毎日',
+    streak_label: 'Day Streak',
+    today_label: '今日',
+    pass_remain_label: 'パス残',
+    mode_video: '動画',
+    mode_photo: '写真',
+    retry_btn: '撮り直し',
+    save_btn: '保存',
+    share_btn: 'SNSにシェア',
+    close_btn: '閉じる',
+    settings_title: 'SETTINGS',
+    settings_guide: 'アプリの使い方',
+    settings_goal_label: '目標',
+    settings_notify_label: 'リマインド通知',
+    settings_notify_hint: '毎日この時刻に通知します',
+    settings_save_btn: '保存',
+    settings_reset_btn: 'すべてのデータをリセット',
+    settings_language_label: '言語 / Language',
+    paywall_sub: 'プレミアム会員',
+    paywall_price_sub: '/ 月（税込）・自動更新',
+    paywall_feature1: '動画・写真の毎日撮影（無制限）',
+    paywall_feature2: 'ストリーク管理・継続記録',
+    paywall_feature3: 'Instagram / TikTok への SNS シェア',
+    paywall_feature4: '毎週1枚の無料パス自動付与',
+    paywall_feature5: '撮影履歴・カレンダー表示',
+    paywall_subscribe_btn: '月額 ¥300 で始める',
+    paywall_pass_note: 'お休みパスは ¥100/枚 で別途購入できます',
+    paywall_restore_btn: '購入を復元する',
+    paywall_terms: '利用規約',
+    paywall_privacy: 'プライバシーポリシー',
+    nav_today: 'TODAY',
+    nav_history: 'HISTORY',
+    guide_sub: '使い方ガイド',
+    guide_card1_title: '習慣化の仕組み',
+    guide_card1_body: '1日1回、継続したい習慣の動画を撮り、SNSにシェアしましょう。フォロワーが見ていることで、サボれない環境を作ります。',
+    guide_card2_title: '撮影の流れ',
+    guide_step1: 'カメラボタンを押す',
+    guide_step2: '3・2・1 カウントダウン',
+    guide_step3: '自動で3秒録画・停止',
+    guide_step4: '保存 → シェア',
+    guide_card3_title: 'Instagram で継続を確実に',
+    guide_card3_body: '動画はInstagramストーリーにアップし、「ハイライト」に保存しましょう。',
+    guide_tip1: 'フォロワーが見ている＝サボれない',
+    guide_tip2: 'ハイライトに記録が積み上がる',
+    guide_tip3: '継続を可視化して自信につなげる',
+    guide_card4_title: 'パス（お休み）機能',
+    guide_card4_body: '週に1回、お休みできる「パス」が付与されます。どうしても継続できない時に使いましょう。ストリークがそのまま維持されます。',
+    guide_card5_title: 'パスの購入',
+    guide_card5_body: 'パスは1枚¥100で追加購入できます。有効期限なし、何枚でもストックできます。',
+    guide_start_btn: 'はじめる',
+    pass_purchase_btn: 'パスを購入（¥100）',
+    use_pass_btn_prefix: 'パスを使う（残り ',
+    use_pass_btn_suffix: '枚）',
+    toast_save_error: '保存エラー',
+    toast_db_error: 'ストレージエラー',
+    toast_free_pass_granted: '今週の無料パスが付与されました',
+    toast_pass_used_auto: 'パスを使用してストリークを維持しました',
+    toast_settings_saved: '設定を保存しました',
+    toast_camera_error: 'カメラエラー: ',
+    toast_retry: '撮り直します',
+    toast_no_data: 'データなし',
+    toast_save_complete: 'DAY {day} 保存完了！',
+    toast_share_done: 'シェアしました！',
+    toast_share_fail: 'シェア失敗: ',
+    toast_share_unsupported: 'シェア非対応',
+    toast_download_done: '動画を端末に保存しました',
+    toast_already_recorded: '今日はすでに記録済みです',
+    toast_no_pass: 'パスがありません',
+    toast_pass_used: 'パスを使用しました。お疲れ様！',
+    toast_paid_pass_added: '有料パス +1 追加されました（ストック中）',
+    confirm_purchase_pass: 'パスを1回分購入しますか？（¥100）',
+    confirm_subscribe: '月額¥300のサブスクリプションを開始しますか？',
+    confirm_restore: '購入を復元しますか？',
+    confirm_use_pass: '本日はパス（お休み）を使用しますか？\nストリークがそのまま維持されます。',
+    confirm_reset: 'すべてのデータを削除しますか？',
+    no_history: 'まだ記録がありません',
+    recorded_today: 'RECORDED TODAY',
+    share_hashtag: '#oneshot #習慣化',
+    cam_permission_title: 'カメラへのアクセスを許可してください',
+    cam_permission_body: 'One Shot はカメラとマイクを使用して動画を記録します。設定からアクセスを許可してください。',
+    cam_permission_btn: 'カメラ設定を開く',
+    cam_permission_back: '戻る',
+    settings_countdown_label: '録画中カウントダウン',
+    settings_countdown_hint: '録画中に残り時間を表示',
+    settings_restore_btn: '購入の復元',
+    settings_contact_btn: 'お問い合わせ',
+    confirm_use_pass_ok: 'はい',
+    cancel: 'キャンセル',
+    processing: '処理中...',
+    restoring: '復元中...',
+    subscribe_success: 'サブスクリプションが有効になりました',
+    restore_success: '購入内容を復元しました',
+    restore_none: '復元できる購入履歴が見つかりませんでした',
+    purchase_failed: '購入に失敗しました',
+    restore_failed: '復元に失敗しました',
+    pass_not_found: 'パス商品が見つかりません',
+    product_not_found: '商品情報の取得に失敗しました',
+  },
+  en: {
+    meta_description: 'One video a day. Record your habits with video.',
+    onboarding_subtitle: 'Stoic habit tracking in 5 seconds',
+    onboarding_label: 'Enter your goal',
+    onboarding_placeholder: 'e.g. Daily workout',
+    streak_label: 'Day Streak',
+    today_label: 'Today',
+    pass_remain_label: 'Passes',
+    mode_video: 'Video',
+    mode_photo: 'Photo',
+    retry_btn: 'Retake',
+    save_btn: 'Save',
+    share_btn: 'Share to SNS',
+    close_btn: 'Close',
+    settings_title: 'SETTINGS',
+    settings_guide: 'How to use',
+    settings_goal_label: 'Goal',
+    settings_notify_label: 'Reminder Notification',
+    settings_notify_hint: "You'll be notified at this time every day",
+    settings_save_btn: 'Save',
+    settings_reset_btn: 'Reset All Data',
+    settings_language_label: '言語 / Language',
+    paywall_sub: 'Premium',
+    paywall_price_sub: '/ month (tax incl.) · Auto-renews',
+    paywall_feature1: 'Unlimited daily video & photo recording',
+    paywall_feature2: 'Streak tracking & continuous records',
+    paywall_feature3: 'Share to Instagram / TikTok',
+    paywall_feature4: '1 free pass auto-granted every week',
+    paywall_feature5: 'Recording history & calendar view',
+    paywall_subscribe_btn: 'Start for ¥300/month',
+    paywall_pass_note: 'Rest passes available separately at ¥100/pass',
+    paywall_restore_btn: 'Restore Purchases',
+    paywall_terms: 'Terms of Service',
+    paywall_privacy: 'Privacy Policy',
+    nav_today: 'TODAY',
+    nav_history: 'HISTORY',
+    guide_sub: 'How to Use',
+    guide_card1_title: 'How habit building works',
+    guide_card1_body: 'Record a short video of your habit once a day and share it on social media. Knowing your followers are watching keeps you accountable.',
+    guide_card2_title: 'How to record',
+    guide_step1: 'Tap the camera button',
+    guide_step2: '3 · 2 · 1 countdown',
+    guide_step3: 'Auto-records & stops at 3 sec',
+    guide_step4: 'Save → Share',
+    guide_card3_title: 'Make it stick with Instagram',
+    guide_card3_body: 'Post your video to Instagram Stories and save it to a Highlight.',
+    guide_tip1: "Followers watching = can't skip",
+    guide_tip2: 'Highlights become your streak archive',
+    guide_tip3: 'Visible progress builds confidence',
+    guide_card4_title: 'Pass (Rest day) feature',
+    guide_card4_body: "You get one free pass per week to take a day off. Use it when you really can't continue. Your streak is maintained.",
+    guide_card5_title: 'Buying passes',
+    guide_card5_body: 'Extra passes can be purchased for ¥100 each. No expiry — stock as many as you like.',
+    guide_start_btn: 'Get Started',
+    pass_purchase_btn: 'Buy a Pass (¥100)',
+    use_pass_btn_prefix: 'Use Pass (',
+    use_pass_btn_suffix: ' remaining)',
+    toast_save_error: 'Save error',
+    toast_db_error: 'Storage error',
+    toast_free_pass_granted: 'Your weekly free pass has been granted',
+    toast_pass_used_auto: 'Pass used to maintain streak',
+    toast_settings_saved: 'Settings saved',
+    toast_camera_error: 'Camera error: ',
+    toast_retry: 'Retaking...',
+    toast_no_data: 'No data',
+    toast_save_complete: 'DAY {day} saved!',
+    toast_share_done: 'Shared!',
+    toast_share_fail: 'Share failed: ',
+    toast_share_unsupported: 'Sharing not supported',
+    toast_download_done: 'Video saved to device',
+    toast_already_recorded: 'Already recorded today',
+    toast_no_pass: 'No passes available',
+    toast_pass_used: 'Pass used. Good work!',
+    toast_paid_pass_added: 'Paid pass +1 added (stocked)',
+    confirm_purchase_pass: 'Purchase 1 pass? (¥100)',
+    confirm_subscribe: 'Start ¥300/month subscription?',
+    confirm_restore: 'Restore purchases?',
+    confirm_use_pass: 'Use a pass (rest day) for today?\nYour streak will be maintained.',
+    confirm_reset: 'Delete all data?',
+    no_history: 'No records yet',
+    recorded_today: 'RECORDED TODAY',
+    share_hashtag: '#oneshot #habitbuilding',
+    cam_permission_title: 'Camera Access Required',
+    cam_permission_body: 'One Shot needs camera and microphone access to record videos. Please allow access in settings.',
+    cam_permission_btn: 'Open Camera Settings',
+    cam_permission_back: 'Go Back',
+    settings_countdown_label: 'Recording Countdown',
+    settings_countdown_hint: 'Show remaining time during recording',
+    settings_restore_btn: 'Restore Purchases',
+    settings_contact_btn: 'Contact Us',
+    confirm_use_pass_ok: 'Yes',
+    cancel: 'Cancel',
+    processing: 'Processing...',
+    restoring: 'Restoring...',
+    subscribe_success: 'Subscription activated',
+    restore_success: 'Purchases restored',
+    restore_none: 'No restorable purchases found',
+    purchase_failed: 'Purchase failed',
+    restore_failed: 'Restore failed',
+    pass_not_found: 'Pass product not found',
+    product_not_found: 'Product info unavailable',
+  },
+};
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function pad2(n: number): string {
+  return n < 10 ? '0' + n : '' + n;
+}
+
+function getAppDate(d?: Date): string {
+  const date = d || new Date();
+  const adj = new Date(date.getTime() - HOUR_BOUNDARY * 3600000);
+  return `${adj.getFullYear()}-${pad2(adj.getMonth() + 1)}-${pad2(adj.getDate())}`;
+}
+
+function getAppDayOfWeek(d?: Date): number {
+  const date = d || new Date();
+  const adj = new Date(date.getTime() - HOUR_BOUNDARY * 3600000);
+  return adj.getDay();
+}
+
+function daysBetween(a: string, b: string): number {
+  return Math.round((new Date(b).getTime() - new Date(a).getTime()) / 86400000);
+}
+
+const defaultState: AppState = {
+  goal: '',
+  streak: 0,
+  lastRecordDate: '',
+  freePassCount: 0,
+  paidPassCount: 0,
+  onboarded: false,
+  guideShown: false,
+  lastPassGrant: '',
+  notifyTime: '21:00',
+  subscribed: false,
+  showRecordingCountdown: true,
+  rcUserID: '',
+};
+
+// ─── Toast Component ──────────────────────────────────────────────────────────
+
+interface ToastProps {
+  message: string;
+  isError?: boolean;
+}
+
+const Toast: React.FC<ToastProps> = ({ message, isError }) => {
+  if (!message) return null;
+  return (
+    <View style={[styles.toast, isError && styles.toastError]}>
+      <Text style={styles.toastText}>{message}</Text>
+    </View>
+  );
+};
+
+// ─── Main Page Component ──────────────────────────────────────────────────────
+
+export default function Page() {
+  const [appState, setAppState] = useState<AppState>(defaultState);
+  const [lang, setLang] = useState<Lang>('ja');
+  const [screen, setScreen] = useState<Screen>('onboarding');
+  const [toastMsg, setToastMsg] = useState('');
+  const [toastError, setToastError] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [guideVisible, setGuideVisible] = useState(false);
+
+  // Camera state
+  const [camPermission, requestCamPermission] = useCameraPermissions();
+  const [mediaPermission, requestMediaPermission] = MediaLibrary.usePermissions();
+  const [facing, setFacing] = useState<CameraType>('front');
+  const [camMode, setCamMode] = useState<'video' | 'photo'>('video');
+  const [isRecording, setIsRecording] = useState(false);
+  const [countdown, setCountdown] = useState<number | null>(null);
+  const [recordingTimer, setRecordingTimer] = useState<number | null>(null);
+  const [capturedUri, setCapturedUri] = useState<string | null>(null);
+  const cameraRef = useRef<CameraView>(null);
+
+  // History state
+  const [records, setRecords] = useState<RecordEntry[]>([]);
+  const [calYear, setCalYear] = useState(new Date().getFullYear());
+  const [calMonth, setCalMonth] = useState(new Date().getMonth());
+
+  // RevenueCat state
+  const [rcOfferings, setRcOfferings] = useState<PurchasesOfferings | null>(null);
+
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ── Translation helper ──────────────────────────────────────────────────────
+
+  const t = useCallback((key: string, vars?: Record<string, string | number>): string => {
+    let str = TRANSLATIONS[lang][key] ?? TRANSLATIONS['ja'][key] ?? key;
+    if (vars) {
+      Object.entries(vars).forEach(([k, v]) => {
+        str = str.replace(`{${k}}`, String(v));
+      });
+    }
+    return str;
+  }, [lang]);
+
+  // ── Toast ───────────────────────────────────────────────────────────────────
+
+  const showToast = useCallback((msg: string, isError = false) => {
+    setToastMsg(msg);
+    setToastError(isError);
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToastMsg(''), 3000);
+  }, []);
+
+  // ── State persistence ───────────────────────────────────────────────────────
+
+  const saveAppState = useCallback(async (newState: AppState) => {
+    try {
+      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(newState));
+    } catch {
+      // silent
+    }
+  }, []);
+
+  const updateState = useCallback((updates: Partial<AppState>) => {
+    setAppState(prev => {
+      const next = { ...prev, ...updates };
+      saveAppState(next);
+      return next;
+    });
+  }, [saveAppState]);
+
+  // ── Date helpers ────────────────────────────────────────────────────────────
+
+  const totalPassCount = useCallback((s?: AppState): number => {
+    const st = s || appState;
+    return st.freePassCount + st.paidPassCount;
+  }, [appState]);
+
+  const consumePass = useCallback((s: AppState): AppState => {
+    if (s.freePassCount > 0) return { ...s, freePassCount: s.freePassCount - 1 };
+    if (s.paidPassCount > 0) return { ...s, paidPassCount: s.paidPassCount - 1 };
+    return s;
+  }, []);
+
+  const checkPassGrant = useCallback((s: AppState): AppState => {
+    const today = getAppDate();
+    const dow = getAppDayOfWeek();
+    if (dow === 1 && s.lastPassGrant !== today) {
+      return { ...s, freePassCount: 1, lastPassGrant: today };
+    }
+    return s;
+  }, []);
+
+  const updateStreak = useCallback((s: AppState): { state: AppState; toastKey?: string } => {
+    const today = getAppDate();
+    if (!s.lastRecordDate) return { state: s };
+    const diff = daysBetween(s.lastRecordDate, today);
+    if (diff === 2 && totalPassCount(s) > 0) {
+      const yesterday = getAppDate(new Date(Date.now() - 86400000));
+      const consumed = consumePass(s);
+      return {
+        state: { ...consumed, lastRecordDate: yesterday },
+        toastKey: 'toast_pass_used_auto',
+      };
+    } else if (diff >= 2) {
+      return { state: { ...s, streak: 0 } };
+    }
+    return { state: s };
+  }, [totalPassCount, consumePass]);
+
+  // ── RevenueCat helpers ──────────────────────────────────────────────────────
+
+  const findRCPackage = useCallback((type: 'pass' | 'subscription'): PurchasesPackage | null => {
+    if (!rcOfferings?.current) return null;
+    const pkgs = rcOfferings.current.availablePackages;
+    if (type === 'subscription') {
+      return pkgs.find(p => p.product.identifier === 'com.jin.oneshot.premium')
+        ?? rcOfferings.current.monthly
+        ?? pkgs.find(p => p.identifier === '$rc_monthly' || p.identifier.toLowerCase().includes('month'))
+        ?? pkgs[0]
+        ?? null;
+    }
+    if (type === 'pass') {
+      return pkgs.find(p => p.identifier === 'pass')
+        ?? pkgs.find(p => p.identifier.toLowerCase().includes('pass'))
+        ?? null;
+    }
+    return null;
+  }, [rcOfferings]);
+
+  const syncRCEntitlements = useCallback(async (): Promise<boolean> => {
+    try {
+      const info: CustomerInfo = await Purchases.getCustomerInfo();
+      const active = Object.keys(info.entitlements.active).length > 0;
+      return active;
+    } catch {
+      return false;
+    }
+  }, []);
+
+  // ── Purchase flows ──────────────────────────────────────────────────────────
+
+  const purchasePass = useCallback(async () => {
+    const pkg = findRCPackage('pass');
+    if (!pkg) {
+      showToast(t('pass_not_found'), true);
+      return;
+    }
+    showToast(t('processing'));
+    try {
+      await Purchases.purchasePackage(pkg);
+      setAppState(prev => {
+        const next = { ...prev, paidPassCount: prev.paidPassCount + 1 };
+        saveAppState(next);
+        return next;
+      });
+      showToast(t('toast_paid_pass_added'));
+    } catch (e: any) {
+      if (!e.userCancelled) {
+        showToast(t('purchase_failed'), true);
+      }
+    }
+  }, [findRCPackage, showToast, t, saveAppState]);
+
+  const subscribePremium = useCallback(async () => {
+    const pkg = findRCPackage('subscription');
+    if (!pkg) {
+      showToast(t('product_not_found'), true);
+      return;
+    }
+    showToast(t('processing'));
+    try {
+      const { customerInfo } = await Purchases.purchasePackage(pkg);
+      const active = Object.keys(customerInfo.entitlements.active).length > 0;
+      if (active) {
+        updateState({ subscribed: true });
+        showToast(t('subscribe_success'));
+        setScreen('home');
+        setAppState(prev => {
+          if (!prev.guideShown) {
+            setTimeout(() => setGuideVisible(true), 400);
+          }
+          return prev;
+        });
+      }
+    } catch (e: any) {
+      if (!e.userCancelled) {
+        showToast(t('purchase_failed'), true);
+      }
+    }
+  }, [findRCPackage, showToast, t, updateState]);
+
+  const restorePurchase = useCallback(async () => {
+    showToast(t('restoring'));
+    try {
+      const info = await Purchases.restorePurchases();
+      const active = Object.keys(info.entitlements.active).length > 0;
+      if (active) {
+        updateState({ subscribed: true });
+        showToast(t('restore_success'));
+        setScreen('home');
+      } else {
+        showToast(t('restore_none'), true);
+      }
+    } catch {
+      showToast(t('restore_failed'), true);
+    }
+  }, [showToast, t, updateState]);
+
+  // ── Use pass ────────────────────────────────────────────────────────────────
+
+  const usePassToday = useCallback(() => {
+    const today = getAppDate();
+    if (appState.lastRecordDate === today) {
+      showToast(t('toast_already_recorded'));
+      return;
+    }
+    if (totalPassCount() === 0) {
+      purchasePass();
+      return;
+    }
+    Alert.alert('', t('confirm_use_pass'), [
+      { text: t('cancel'), style: 'cancel' },
+      {
+        text: t('confirm_use_pass_ok'),
+        onPress: () => {
+          setAppState(prev => {
+            const diff = prev.lastRecordDate ? daysBetween(prev.lastRecordDate, today) : 999;
+            const newStreak = diff <= 1 ? prev.streak + 1 : 1;
+            const consumed = consumePass({ ...prev, streak: newStreak, lastRecordDate: today });
+            saveAppState(consumed);
+            return consumed;
+          });
+          showToast(t('toast_pass_used'));
+        },
+      },
+    ]);
+  }, [appState, totalPassCount, purchasePass, consumePass, saveAppState, showToast, t]);
+
+  // ── Record today ────────────────────────────────────────────────────────────
+
+  const recordToday = useCallback((uri: string) => {
+    setAppState(prev => {
+      const today = getAppDate();
+      if (prev.lastRecordDate === today) return prev;
+      const diff = prev.lastRecordDate ? daysBetween(prev.lastRecordDate, today) : 999;
+      const newStreak = diff <= 1 ? prev.streak + 1 : 1;
+      const newEntry: RecordEntry = { date: today, day: newStreak, ts: Date.now(), uri };
+      setRecords(r => [newEntry, ...r]);
+      const next = { ...prev, streak: newStreak, lastRecordDate: today };
+      saveAppState(next);
+      showToast(t('toast_save_complete', { day: newStreak }));
+      return next;
+    });
+  }, [saveAppState, showToast, t]);
+
+  // ── Init ────────────────────────────────────────────────────────────────────
+
+  useEffect(() => {
+    (async () => {
+      try {
+        // Load lang
+        const savedLang = await AsyncStorage.getItem(LANG_KEY);
+        if (savedLang === 'en' || savedLang === 'ja') setLang(savedLang);
+
+        // Load state
+        const raw = await AsyncStorage.getItem(STORAGE_KEY);
+        let loaded: AppState = { ...defaultState };
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          loaded = { ...defaultState, ...parsed };
+        }
+
+        // Ensure rcUserID
+        if (!loaded.rcUserID) {
+          loaded.rcUserID = 'user_' + Math.random().toString(36).substr(2, 12) + '_' + Date.now();
+        }
+
+        // Load records
+        const recRaw = await AsyncStorage.getItem('oneshot_records_v2');
+        if (recRaw) setRecords(JSON.parse(recRaw));
+
+        setAppState(loaded);
+        await saveAppState(loaded);
+
+        // Init RevenueCat
+        try {
+          Purchases.configure({ apiKey: RC_API_KEY, appUserID: loaded.rcUserID });
+          const offerings = await Purchases.getOfferings();
+          setRcOfferings(offerings);
+          const active = await syncRCEntitlements();
+          if (active !== loaded.subscribed) {
+            const next = { ...loaded, subscribed: active };
+            setAppState(next);
+            await saveAppState(next);
+            loaded = next;
+          }
+        } catch (e) {
+          console.warn('[RC] init error:', e);
+        }
+
+        // Navigate
+        if (!loaded.onboarded) {
+          setScreen('onboarding');
+        } else if (!loaded.subscribed) {
+          setScreen('paywall');
+        } else {
+          setScreen('home');
+          if (!loaded.guideShown) setGuideVisible(true);
+        }
+      } finally {
+        setIsLoading(false);
+      }
+    })();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Save records ────────────────────────────────────────────────────────────
+
+  useEffect(() => {
+    if (!isLoading) {
+      AsyncStorage.setItem('oneshot_records_v2', JSON.stringify(records)).catch(() => {});
+    }
+  }, [records, isLoading]);
+
+  // ── Refresh home (streak/pass) ──────────────────────────────────────────────
+
+  useEffect(() => {
+    if (screen === 'home') {
+      setAppState(prev => {
+        const { state: withStreak, toastKey } = updateStreak(prev);
+        const withPass = checkPassGrant(withStreak);
+        if (toastKey) showToast(t(toastKey));
+        if (withPass !== prev) saveAppState(withPass);
+        return withPass;
+      });
+    }
+  }, [screen]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Camera recording ────────────────────────────────────────────────────────
+
+  const startRecording = useCallback(async () => {
+    if (!cameraRef.current || isRecording) return;
+    if (!camPermission?.granted) {
+      await requestCamPermission();
+      return;
+    }
+    // 3-2-1 countdown
+    for (let i = 3; i >= 1; i--) {
+      setCountdown(i);
+      await new Promise(r => setTimeout(r, 1000));
+    }
+    setCountdown(null);
+    setIsRecording(true);
+
+    try {
+      const promise = cameraRef.current.recordAsync({ maxDuration: 3 });
+      // Auto-stop after 3s
+      const timer = setTimeout(async () => {
+        cameraRef.current?.stopRecording();
+      }, 3100) as unknown as number;
+      setRecordingTimer(timer);
+
+      const result = await promise;
+      setCapturedUri(result?.uri ?? null);
+    } catch (e) {
+      showToast(t('toast_camera_error') + String(e), true);
+    } finally {
+      setIsRecording(false);
+      setCountdown(null);
+    }
+  }, [camPermission, requestCamPermission, isRecording, showToast, t]);
+
+  const retake = useCallback(() => {
+    setCapturedUri(null);
+  }, []);
+
+  const saveCapture = useCallback(async () => {
+    if (!capturedUri) return;
+    try {
+      if (!mediaPermission?.granted) await requestMediaPermission();
+      await MediaLibrary.saveToLibraryAsync(capturedUri);
+      recordToday(capturedUri);
+      setCapturedUri(null);
+      setScreen('home');
+    } catch (e) {
+      showToast(t('toast_save_error'), true);
+    }
+  }, [capturedUri, mediaPermission, requestMediaPermission, recordToday, showToast, t]);
+
+  const shareCapture = useCallback(async () => {
+    if (!capturedUri) return;
+    try {
+      const canShare = await Sharing.isAvailableAsync();
+      if (!canShare) { showToast(t('toast_share_unsupported')); return; }
+      await Sharing.shareAsync(capturedUri);
+      showToast(t('toast_share_done'));
+    } catch (e) {
+      showToast(t('toast_share_fail') + String(e), true);
+    }
+  }, [capturedUri, showToast, t]);
+
+  // ── Language switch ─────────────────────────────────────────────────────────
+
+  const switchLang = useCallback((l: Lang) => {
+    setLang(l);
+    AsyncStorage.setItem(LANG_KEY, l).catch(() => {});
+  }, []);
+
+  // ── Reset all ───────────────────────────────────────────────────────────────
+
+  const resetAll = useCallback(() => {
+    Alert.alert('', t('confirm_reset'), [
+      { text: t('cancel'), style: 'cancel' },
+      {
+        text: 'OK',
+        style: 'destructive',
+        onPress: async () => {
+          await AsyncStorage.multiRemove([STORAGE_KEY, LANG_KEY, 'oneshot_records_v2']);
+          setAppState(defaultState);
+          setRecords([]);
+          setScreen('onboarding');
+        },
+      },
+    ]);
+  }, [t]);
+
+  // ─── Screens ─────────────────────────────────────────────────────────────────
+
+  if (isLoading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <StatusBar barStyle="light-content" backgroundColor="#000" />
+        <ActivityIndicator size="large" color="#8B0000" />
+      </View>
+    );
+  }
+
+  const today = getAppDate();
+  const recordedToday = appState.lastRecordDate === today;
+
+  // ─── Onboarding Screen ───────────────────────────────────────────────────────
+
+  const OnboardingScreen = () => {
+    const [goal, setGoal] = useState('');
+    return (
+      <View style={styles.screenCenter}>
+        <Text style={styles.appTitle}>ONE SHOT</Text>
+        <Text style={styles.subtitle}>{t('onboarding_subtitle')}</Text>
+        <View style={styles.inputGroup}>
+          <Text style={styles.inputLabel}>{t('onboarding_label')}</Text>
+          <TextInput
+            style={styles.textInput}
+            placeholder={t('onboarding_placeholder')}
+            placeholderTextColor="#555"
+            value={goal}
+            onChangeText={setGoal}
+            maxLength={40}
+            returnKeyType="done"
+          />
+        </View>
+        <TouchableOpacity
+          style={[styles.btnPrimary, !goal.trim() && styles.btnDisabled]}
+          disabled={!goal.trim()}
+          onPress={() => {
+            const next = { ...appState, goal: goal.trim(), onboarded: true };
+            setAppState(next);
+            saveAppState(next);
+            if (!next.subscribed) setScreen('paywall');
+            else { setScreen('home'); if (!next.guideShown) setGuideVisible(true); }
+          }}
+        >
+          <Text style={styles.btnPrimaryText}>START</Text>
+        </TouchableOpacity>
+        <View style={styles.langRow}>
+          <TouchableOpacity onPress={() => switchLang('ja')}>
+            <Text style={[styles.langBtn, lang === 'ja' && styles.langBtnActive]}>日本語</Text>
+          </TouchableOpacity>
+          <Text style={styles.langSep}>|</Text>
+          <TouchableOpacity onPress={() => switchLang('en')}>
+            <Text style={[styles.langBtn, lang === 'en' && styles.langBtnActive]}>English</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  };
+
+  // ─── Paywall Screen ──────────────────────────────────────────────────────────
+
+  const PaywallScreen = () => (
+    <ScrollView style={styles.screen} contentContainerStyle={styles.paywallContent}>
+      <Text style={styles.appTitle}>ONE SHOT</Text>
+      <Text style={styles.paywallSub}>{t('paywall_sub')}</Text>
+      <Text style={styles.paywallPrice}>{t('paywall_subscribe_btn')}</Text>
+      <Text style={styles.paywallPriceSub}>{t('paywall_price_sub')}</Text>
+      {[1, 2, 3, 4, 5].map(i => (
+        <View key={i} style={styles.featureRow}>
+          <Feather name="check-circle" size={16} color="#8B0000" />
+          <Text style={styles.featureText}>{t(`paywall_feature${i}`)}</Text>
+        </View>
+      ))}
+      <TouchableOpacity style={styles.btnPrimary} onPress={subscribePremium}>
+        <Text style={styles.btnPrimaryText}>{t('paywall_subscribe_btn')}</Text>
+      </TouchableOpacity>
+      <Text style={styles.paywallPassNote}>{t('paywall_pass_note')}</Text>
+      <TouchableOpacity onPress={restorePurchase}>
+        <Text style={styles.linkText}>{t('paywall_restore_btn')}</Text>
+      </TouchableOpacity>
+      <View style={styles.paywallLinks}>
+        <Text style={styles.linkSmall}>{t('paywall_terms')}</Text>
+        <Text style={styles.linkSmall}>  ·  </Text>
+        <Text style={styles.linkSmall}>{t('paywall_privacy')}</Text>
+      </View>
+    </ScrollView>
+  );
+
+  // ─── Home Screen ─────────────────────────────────────────────────────────────
+
+  const HomeScreen = () => (
+    <View style={styles.screen}>
+      <View style={styles.homeHeader}>
+        <Text style={styles.goalText}>{appState.goal || '—'}</Text>
+      </View>
+      <View style={styles.statsRow}>
+        <View style={styles.statCard}>
+          <Text style={styles.statVal}>{appState.streak}</Text>
+          <Text style={styles.statLabel}>{t('streak_label')}</Text>
+        </View>
+        <View style={styles.statCard}>
+          <Text style={[styles.statVal, recordedToday ? styles.statDone : styles.statPending]}>
+            {recordedToday ? '✓' : '−'}
+          </Text>
+          <Text style={styles.statLabel}>{t('today_label')}</Text>
+        </View>
+        <View style={styles.statCard}>
+          <Text style={styles.statVal}>{totalPassCount()}</Text>
+          <Text style={styles.statLabel}>{t('pass_remain_label')}</Text>
+        </View>
+      </View>
+      <View style={styles.homeCenterArea}>
+        {recordedToday && (
+          <Text style={styles.recordedLabel}>{t('recorded_today')}</Text>
+        )}
+        <TouchableOpacity
+          style={[styles.recBtn, recordedToday && styles.recBtnDone]}
+          onPress={() => {
+            if (recordedToday) {
+              Alert.alert('', t('alert_already_recorded') ?? 'Already recorded today.');
+              return;
+            }
+            setScreen('camera');
+          }}
+        >
+          <Feather name="video" size={32} color="#fff" />
+        </TouchableOpacity>
+      </View>
+      <TouchableOpacity style={styles.passBtn} onPress={usePassToday}>
+        <Ionicons name="ticket-outline" size={14} color="#fff" />
+        <Text style={styles.passBtnText}>
+          {t('use_pass_btn_prefix')}{totalPassCount()}{t('use_pass_btn_suffix')}
+        </Text>
+      </TouchableOpacity>
+    </View>
+  );
+
+  // ─── Camera Screen ────────────────────────────────────────────────────────────
+
+  const CameraScreen = () => {
+    if (!camPermission) return <ActivityIndicator style={styles.screenCenter} />;
+    if (!camPermission.granted) {
+      return (
+        <View style={styles.screenCenter}>
+          <Text style={styles.permTitle}>{t('cam_permission_title')}</Text>
+          <Text style={styles.permBody}>{t('cam_permission_body')}</Text>
+          <TouchableOpacity style={styles.btnPrimary} onPress={requestCamPermission}>
+            <Text style={styles.btnPrimaryText}>{t('cam_permission_btn')}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => setScreen('home')}>
+            <Text style={styles.linkText}>{t('cam_permission_back')}</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
+    if (capturedUri) {
+      return (
+        <View style={styles.screen}>
+          <View style={styles.previewPlaceholder}>
+            <Feather name="film" size={64} color="#444" />
+            <Text style={styles.previewLabel}>DAY {appState.streak + 1}</Text>
+          </View>
+          <View style={styles.previewActions}>
+            <TouchableOpacity style={styles.btnOutline} onPress={retake}>
+              <Text style={styles.btnOutlineText}>{t('retry_btn')}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.btnPrimary} onPress={saveCapture}>
+              <Text style={styles.btnPrimaryText}>{t('save_btn')}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.btnOutline} onPress={shareCapture}>
+              <Text style={styles.btnOutlineText}>{t('share_btn')}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      );
+    }
+
+    return (
+      <View style={styles.cameraContainer}>
+        <CameraView
+          ref={cameraRef}
+          style={styles.camera}
+          facing={facing}
+          mode={camMode === 'video' ? 'video' : 'picture'}
+        />
+        {countdown !== null && (
+          <View style={styles.countdownOverlay}>
+            <Text style={styles.countdownText}>{countdown}</Text>
+          </View>
+        )}
+        {isRecording && appState.showRecordingCountdown && (
+          <View style={styles.recIndicator}>
+            <View style={styles.recDot} />
+            <Text style={styles.recText}>REC</Text>
+          </View>
+        )}
+        <View style={styles.camControls}>
+          <TouchableOpacity onPress={() => setScreen('home')}>
+            <Feather name="x" size={28} color="#fff" />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.shutterBtn, isRecording && styles.shutterBtnActive]}
+            onPress={startRecording}
+            disabled={isRecording || countdown !== null}
+          >
+            <View style={styles.shutterInner} />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => setFacing(f => f === 'front' ? 'back' : 'front')}>
+            <Feather name="refresh-cw" size={24} color="#fff" />
+          </TouchableOpacity>
+        </View>
+        <View style={styles.camModeRow}>
+          {(['video', 'photo'] as const).map(m => (
+            <TouchableOpacity key={m} onPress={() => setCamMode(m)}>
+              <Text style={[styles.camModeBtn, camMode === m && styles.camModeBtnActive]}>
+                {t(m === 'video' ? 'mode_video' : 'mode_photo')}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </View>
+    );
+  };
+
+  // ─── History Screen ───────────────────────────────────────────────────────────
+
+  const HistoryScreen = () => {
+    const firstDay = new Date(calYear, calMonth, 1).getDay();
+    const lastDate = new Date(calYear, calMonth + 1, 0).getDate();
+    const recordedDates = new Set(records.map(r => r.date));
+    const todayStr = getAppDate();
+    const dayLabels = lang === 'en'
+      ? ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+      : ['日', '月', '火', '水', '木', '金', '土'];
+
+    return (
+      <ScrollView style={styles.screen} contentContainerStyle={styles.historyContent}>
+        <View style={styles.calHeader}>
+          <TouchableOpacity onPress={() => {
+            if (calMonth === 0) { setCalMonth(11); setCalYear(y => y - 1); }
+            else setCalMonth(m => m - 1);
+          }}>
+            <Feather name="chevron-left" size={22} color="#fff" />
+          </TouchableOpacity>
+          <Text style={styles.calMonthLabel}>{calYear}.{pad2(calMonth + 1)}</Text>
+          <TouchableOpacity onPress={() => {
+            if (calMonth === 11) { setCalMonth(0); setCalYear(y => y + 1); }
+            else setCalMonth(m => m + 1);
+          }}>
+            <Feather name="chevron-right" size={22} color="#fff" />
+          </TouchableOpacity>
+        </View>
+        <View style={styles.calGrid}>
+          {dayLabels.map(l => (
+            <View key={l} style={styles.calCell}>
+              <Text style={styles.calDayLabel}>{l}</Text>
+            </View>
+          ))}
+          {Array.from({ length: firstDay }).map((_, i) => (
+            <View key={`empty-${i}`} style={styles.calCell} />
+          ))}
+          {Array.from({ length: lastDate }, (_, i) => i + 1).map(day => {
+            const ds = `${calYear}-${pad2(calMonth + 1)}-${pad2(day)}`;
+            const recorded = recordedDates.has(ds);
+            const isToday = ds === todayStr;
+            return (
+              <View
+                key={ds}
+                style={[
+                  styles.calCell,
+                  styles.calDayCell,
+                  recorded && styles.calDayCellRecorded,
+                  isToday && styles.calDayCellToday,
+                ]}
+              >
+                <Text style={[styles.calDayNum, recorded && styles.calDayNumRecorded]}>
+                  {day}
+                </Text>
+                {recorded && <Text style={styles.calCheck}>✓</Text>}
+              </View>
+            );
+          })}
+        </View>
+        {records.length === 0 && (
+          <Text style={styles.noHistoryText}>{t('no_history')}</Text>
+        )}
+      </ScrollView>
+    );
+  };
+
+  // ─── Settings Screen ──────────────────────────────────────────────────────────
+
+  const SettingsScreen = () => {
+    const [goalEdit, setGoalEdit] = useState(appState.goal);
+    return (
+      <ScrollView style={styles.screen} contentContainerStyle={styles.settingsContent}>
+        <Text style={styles.settingsTitle}>{t('settings_title')}</Text>
+
+        <View style={styles.settingGroup}>
+          <Text style={styles.settingLabel}>{t('settings_goal_label')}</Text>
+          <TextInput
+            style={styles.textInput}
+            value={goalEdit}
+            onChangeText={setGoalEdit}
+            maxLength={40}
+          />
+        </View>
+
+        {!appState.subscribed && (
+          <View style={[styles.settingGroup, styles.premiumCard]}>
+            <Text style={styles.settingLabel}>{t('paywall_sub')}</Text>
+            <Text style={styles.settingHint}>{t('paywall_price_sub')}</Text>
+            <TouchableOpacity style={styles.btnPrimary} onPress={subscribePremium}>
+              <Text style={styles.btnPrimaryText}>{t('paywall_subscribe_btn')}</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        <View style={styles.settingGroup}>
+          <Text style={styles.settingLabel}>{t('settings_countdown_label')}</Text>
+          <Text style={styles.settingHint}>{t('settings_countdown_hint')}</Text>
+          <Switch
+            value={appState.showRecordingCountdown}
+            onValueChange={v => updateState({ showRecordingCountdown: v })}
+            thumbColor="#fff"
+            trackColor={{ false: '#333', true: '#8B0000' }}
+          />
+        </View>
+
+        <View style={styles.settingGroup}>
+          <Text style={styles.settingLabel}>{t('settings_language_label')}</Text>
+          <View style={styles.langRow}>
+            <TouchableOpacity onPress={() => switchLang('ja')}>
+              <Text style={[styles.langBtn, lang === 'ja' && styles.langBtnActive]}>日本語</Text>
+            </TouchableOpacity>
+            <Text style={styles.langSep}>|</Text>
+            <TouchableOpacity onPress={() => switchLang('en')}>
+              <Text style={[styles.langBtn, lang === 'en' && styles.langBtnActive]}>English</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        <TouchableOpacity
+          style={styles.btnPrimary}
+          onPress={() => {
+            updateState({ goal: goalEdit.trim() });
+            showToast(t('toast_settings_saved'));
+            setScreen('home');
+          }}
+        >
+          <Text style={styles.btnPrimaryText}>{t('settings_save_btn')}</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.btnOutline} onPress={restorePurchase}>
+          <Text style={styles.btnOutlineText}>{t('settings_restore_btn')}</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.btnDanger} onPress={resetAll}>
+          <Text style={styles.btnDangerText}>{t('settings_reset_btn')}</Text>
+        </TouchableOpacity>
+      </ScrollView>
+    );
+  };
+
+  // ─── Guide Modal ──────────────────────────────────────────────────────────────
+
+  const GuideModal = () => (
+    <Modal visible={guideVisible} animationType="slide" transparent>
+      <View style={styles.modalOverlay}>
+        <ScrollView style={styles.guideSheet} contentContainerStyle={styles.guideContent}>
+          <Text style={styles.guideTitle}>ONE SHOT</Text>
+          <Text style={styles.guideSub}>{t('guide_sub')}</Text>
+
+          {[
+            { title: t('guide_card1_title'), body: t('guide_card1_body') },
+            { title: t('guide_card3_title'), body: t('guide_card3_body') },
+            { title: t('guide_card4_title'), body: t('guide_card4_body') },
+            { title: t('guide_card5_title'), body: t('guide_card5_body') },
+          ].map((card, i) => (
+            <View key={i} style={styles.guideCard}>
+              <Text style={styles.guideCardTitle}>{card.title}</Text>
+              <Text style={styles.guideCardBody}>{card.body}</Text>
+            </View>
+          ))}
+
+          <View style={styles.guideCard}>
+            <Text style={styles.guideCardTitle}>{t('guide_card2_title')}</Text>
+            {[1, 2, 3, 4].map(i => (
+              <Text key={i} style={styles.guideStep}>{i}. {t(`guide_step${i}`)}</Text>
+            ))}
+          </View>
+
+          <TouchableOpacity
+            style={[styles.btnPrimary, { marginTop: 8 }]}
+            onPress={() => {
+              setGuideVisible(false);
+              if (!appState.guideShown) updateState({ guideShown: true });
+            }}
+          >
+            <Text style={styles.btnPrimaryText}>{t('guide_start_btn')}</Text>
+          </TouchableOpacity>
+        </ScrollView>
+      </View>
+    </Modal>
+  );
+
+  // ─── Bottom Nav ───────────────────────────────────────────────────────────────
+
+  const hideNav = screen === 'onboarding' || screen === 'camera' || screen === 'paywall';
+
+  // ─── Render ───────────────────────────────────────────────────────────────────
+
+  return (
+    <View style={styles.container}>
+      <StatusBar barStyle="light-content" backgroundColor="#000" />
+
+      {screen === 'onboarding' && <OnboardingScreen />}
+      {screen === 'paywall' && <PaywallScreen />}
+      {screen === 'home' && <HomeScreen />}
+      {screen === 'camera' && <CameraScreen />}
+      {screen === 'history' && <HistoryScreen />}
+      {screen === 'settings' && <SettingsScreen />}
+
+      {!hideNav && (
+        <View style={styles.bottomNav}>
+          <TouchableOpacity
+            style={[styles.navItem, screen === 'home' && styles.navItemActive]}
+            onPress={() => setScreen('home')}
+          >
+            <Feather name="home" size={20} color={screen === 'home' ? '#fff' : '#555'} />
+            <Text style={[styles.navLabel, screen === 'home' && styles.navLabelActive]}>
+              {t('nav_today')}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.navItem, screen === 'history' && styles.navItemActive]}
+            onPress={() => setScreen('history')}
+          >
+            <Feather name="calendar" size={20} color={screen === 'history' ? '#fff' : '#555'} />
+            <Text style={[styles.navLabel, screen === 'history' && styles.navLabelActive]}>
+              {t('nav_history')}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.navItem, screen === 'settings' && styles.navItemActive]}
+            onPress={() => setScreen('settings')}
+          >
+            <Feather name="settings" size={20} color={screen === 'settings' ? '#fff' : '#555'} />
+            <Text style={[styles.navLabel, screen === 'settings' && styles.navLabelActive]}>
+              {t('settings_title')}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      <GuideModal />
+      {toastMsg ? <Toast message={toastMsg} isError={toastError} /> : null}
+    </View>
+  );
+}
+
+// ─── Styles ───────────────────────────────────────────────────────────────────
+
+const { width } = Dimensions.get('window');
+const CELL_SIZE = Math.floor((width - 32) / 7);
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#000',
+  },
+  loadingContainer: {
+    flex: 1,
+    backgroundColor: '#000',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  screen: {
+    flex: 1,
+    backgroundColor: '#000',
+  },
+  screenCenter: {
+    flex: 1,
+    backgroundColor: '#000',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+
+  // ── Typography ──
+  appTitle: {
+    fontSize: 28,
+    fontWeight: '900',
+    color: '#fff',
+    letterSpacing: 6,
+    marginBottom: 8,
+  },
+  subtitle: {
+    fontSize: 14,
+    color: '#888',
+    textAlign: 'center',
+    marginBottom: 40,
+    letterSpacing: 0.5,
+  },
+
+  // ── Inputs ──
+  inputGroup: {
+    width: '100%',
+    marginBottom: 24,
+  },
+  inputLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#888',
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
+    marginBottom: 8,
+  },
+  textInput: {
+    backgroundColor: '#111',
+    color: '#fff',
+    borderRadius: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    fontSize: 16,
+    borderWidth: 1,
+    borderColor: '#222',
+  },
+
+  // ── Buttons ──
+  btnPrimary: {
+    backgroundColor: '#8B0000',
+    borderRadius: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    alignItems: 'center',
+    marginBottom: 12,
+    width: '100%',
+  },
+  btnPrimaryText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 15,
+    letterSpacing: 1,
+  },
+  btnDisabled: {
+    opacity: 0.4,
+  },
+  btnOutline: {
+    borderWidth: 1,
+    borderColor: '#333',
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    alignItems: 'center',
+    marginBottom: 12,
+    width: '100%',
+  },
+  btnOutlineText: {
+    color: '#aaa',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  btnDanger: {
+    borderWidth: 1,
+    borderColor: '#500',
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    alignItems: 'center',
+    marginBottom: 12,
+    width: '100%',
+  },
+  btnDangerText: {
+    color: '#8B0000',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  linkText: {
+    color: '#888',
+    fontSize: 13,
+    textDecorationLine: 'underline',
+    marginBottom: 12,
+  },
+
+  // ── Lang row ──
+  langRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  langBtn: {
+    color: '#555',
+    fontSize: 13,
+    paddingHorizontal: 8,
+  },
+  langBtnActive: {
+    color: '#fff',
+    fontWeight: '700',
+  },
+  langSep: {
+    color: '#333',
+  },
+
+  // ── Paywall ──
+  paywallContent: {
+    padding: 24,
+    paddingTop: 60,
+    alignItems: 'center',
+  },
+  paywallSub: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#8B0000',
+    marginBottom: 4,
+    letterSpacing: 1,
+  },
+  paywallPrice: {
+    fontSize: 22,
+    fontWeight: '900',
+    color: '#fff',
+    marginBottom: 4,
+  },
+  paywallPriceSub: {
+    fontSize: 13,
+    color: '#888',
+    marginBottom: 24,
+  },
+  featureRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+    alignSelf: 'stretch',
+  },
+  featureText: {
+    color: '#ccc',
+    fontSize: 14,
+    marginLeft: 10,
+    flex: 1,
+  },
+  paywallPassNote: {
+    fontSize: 12,
+    color: '#555',
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  paywallLinks: {
+    flexDirection: 'row',
+    marginTop: 8,
+  },
+  linkSmall: {
+    color: '#444',
+    fontSize: 11,
+  },
+
+  // ── Home ──
+  homeHeader: {
+    paddingTop: Platform.OS === 'ios' ? 56 : 24,
+    paddingHorizontal: 24,
+    paddingBottom: 12,
+  },
+  goalText: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#fff',
+    letterSpacing: 0.5,
+  },
+  statsRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    gap: 8,
+  },
+  statCard: {
+    flex: 1,
+    backgroundColor: '#111',
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+  },
+  statVal: {
+    fontSize: 28,
+    fontWeight: '900',
+    color: '#fff',
+  },
+  statDone: {
+    color: '#8B0000',
+  },
+  statPending: {
+    color: '#444',
+  },
+  statLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#555',
+    letterSpacing: 1,
+    marginTop: 4,
+    textTransform: 'uppercase',
+  },
+  homeCenterArea: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  recordedLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#8B0000',
+    letterSpacing: 2,
+    marginBottom: 16,
+    textTransform: 'uppercase',
+  },
+  recBtn: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#8B0000',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#8B0000',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.6,
+    shadowRadius: 20,
+    elevation: 8,
+  },
+  recBtnDone: {
+    backgroundColor: '#1a1a1a',
+    shadowOpacity: 0,
+  },
+  passBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 14,
+    marginHorizontal: 24,
+    marginBottom: 8,
+    backgroundColor: '#111',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#222',
+  },
+  passBtnText: {
+    color: '#aaa',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+
+  // ── Camera ──
+  cameraContainer: {
+    flex: 1,
+    backgroundColor: '#000',
+  },
+  camera: {
+    flex: 1,
+  },
+  countdownOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.4)',
+  },
+  countdownText: {
+    fontSize: 80,
+    fontWeight: '900',
+    color: '#fff',
+  },
+  recIndicator: {
+    position: 'absolute',
+    top: 16,
+    left: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  recDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#f00',
+  },
+  recText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  camControls: {
+    position: 'absolute',
+    bottom: 40,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    paddingHorizontal: 40,
+  },
+  shutterBtn: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    borderWidth: 3,
+    borderColor: '#fff',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  shutterBtnActive: {
+    borderColor: '#f00',
+  },
+  shutterInner: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#fff',
+  },
+  camModeRow: {
+    position: 'absolute',
+    bottom: 120,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 24,
+  },
+  camModeBtn: {
+    color: '#888',
+    fontSize: 13,
+    fontWeight: '600',
+    letterSpacing: 1,
+  },
+  camModeBtnActive: {
+    color: '#fff',
+  },
+  previewPlaceholder: {
+    flex: 1,
+    backgroundColor: '#0a0a0a',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 16,
+  },
+  previewLabel: {
+    fontSize: 24,
+    fontWeight: '900',
+    color: '#444',
+    letterSpacing: 4,
+  },
+  previewActions: {
+    padding: 20,
+    gap: 8,
+  },
+
+  // ── History ──
+  historyContent: {
+    padding: 16,
+    paddingTop: Platform.OS === 'ios' ? 56 : 24,
+  },
+  calHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+    paddingHorizontal: 8,
+  },
+  calMonthLabel: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#fff',
+    letterSpacing: 2,
+  },
+  calGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  calCell: {
+    width: CELL_SIZE,
+    height: CELL_SIZE,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  calDayLabel: {
+    fontSize: 11,
+    color: '#555',
+    fontWeight: '700',
+  },
+  calDayCell: {
+    borderRadius: 6,
+    position: 'relative',
+  },
+  calDayCellRecorded: {
+    backgroundColor: 'rgba(139,0,0,0.2)',
+  },
+  calDayCellToday: {
+    borderWidth: 1,
+    borderColor: '#8B0000',
+  },
+  calDayNum: {
+    fontSize: 13,
+    color: '#777',
+    fontWeight: '600',
+  },
+  calDayNumRecorded: {
+    color: '#fff',
+  },
+  calCheck: {
+    position: 'absolute',
+    top: 2,
+    right: 3,
+    fontSize: 9,
+    color: '#CC0000',
+    fontWeight: '900',
+  },
+  noHistoryText: {
+    color: '#555',
+    fontSize: 14,
+    textAlign: 'center',
+    marginTop: 40,
+  },
+
+  // ── Settings ──
+  settingsContent: {
+    padding: 20,
+    paddingTop: Platform.OS === 'ios' ? 56 : 24,
+  },
+  settingsTitle: {
+    fontSize: 16,
+    fontWeight: '900',
+    color: '#fff',
+    letterSpacing: 4,
+    marginBottom: 24,
+  },
+  settingGroup: {
+    backgroundColor: '#111',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+  },
+  premiumCard: {
+    borderWidth: 1.5,
+    borderColor: '#8B0000',
+  },
+  settingLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#888',
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
+    marginBottom: 8,
+  },
+  settingHint: {
+    fontSize: 12,
+    color: '#555',
+    marginBottom: 12,
+  },
+
+  // ── Guide Modal ──
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.8)',
+    justifyContent: 'flex-end',
+  },
+  guideSheet: {
+    backgroundColor: '#0a0a0a',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '85%',
+  },
+  guideContent: {
+    padding: 24,
+  },
+  guideTitle: {
+    fontSize: 22,
+    fontWeight: '900',
+    color: '#fff',
+    letterSpacing: 6,
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  guideSub: {
+    fontSize: 13,
+    color: '#888',
+    textAlign: 'center',
+    marginBottom: 24,
+  },
+  guideCard: {
+    backgroundColor: '#111',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+  },
+  guideCardTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#fff',
+    marginBottom: 8,
+  },
+  guideCardBody: {
+    fontSize: 13,
+    color: '#aaa',
+    lineHeight: 20,
+  },
+  guideStep: {
+    fontSize: 13,
+    color: '#aaa',
+    paddingVertical: 4,
+    lineHeight: 20,
+  },
+
+  // ── Bottom Nav ──
+  bottomNav: {
+    flexDirection: 'row',
+    backgroundColor: '#000',
+    borderTopWidth: 1,
+    borderTopColor: '#1a1a1a',
+    paddingBottom: Platform.OS === 'ios' ? 24 : 8,
+  },
+  navItem: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 10,
+    gap: 4,
+  },
+  navItemActive: {
+    // highlight via label/icon color
+  },
+  navLabel: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#555',
+    letterSpacing: 1.5,
+  },
+  navLabelActive: {
+    color: '#fff',
+  },
+
+  // ── Permission ──
+  permTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#fff',
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  permBody: {
+    fontSize: 14,
+    color: '#888',
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 22,
+  },
+
+  // ── Toast ──
+  toast: {
+    position: 'absolute',
+    bottom: 100,
+    left: 24,
+    right: 24,
+    backgroundColor: '#1a1a1a',
+    borderRadius: 10,
+    padding: 14,
+    alignItems: 'center',
+  },
+  toastError: {
+    backgroundColor: '#3a0000',
+  },
+  toastText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+});
