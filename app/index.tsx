@@ -10,6 +10,7 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
+  Pressable,
   ScrollView,
   StyleSheet,
   Alert,
@@ -347,7 +348,9 @@ export default function Page() {
   const [countdown, setCountdown] = useState<number | null>(null);
   const [recordingTimer, setRecordingTimer] = useState<number | null>(null);
   const [capturedUri, setCapturedUri] = useState<string | null>(null);
+  const [isPreviewPlaying, setIsPreviewPlaying] = useState(false);
   const cameraRef = useRef<CameraView>(null);
+  const previewVideoRef = useRef<Video>(null);
 
   // History state
   const [records, setRecords] = useState<RecordEntry[]>([]);
@@ -694,6 +697,7 @@ export default function Page() {
 
   const retake = useCallback(() => {
     setCapturedUri(null);
+    setIsPreviewPlaying(false);
   }, []);
 
   const saveCapture = useCallback(async () => {
@@ -905,19 +909,45 @@ export default function Page() {
     if (capturedUri) {
       return (
         <View style={styles.cameraContainer}>
-          {/* 撮影動画をループ自動再生（全画面COVER） */}
+          {/* 動画: 初期は静止（shouldPlay=false）、長押し中のみ再生 */}
           <Video
+            ref={previewVideoRef}
             source={{ uri: capturedUri }}
             style={StyleSheet.absoluteFill}
             resizeMode={ResizeMode.COVER}
             isLooping
-            shouldPlay
+            shouldPlay={isPreviewPlaying}
             isMuted={false}
+            positionMillis={0}
           />
+
+          {/* 長押し検知エリア（ボタン領域を除いた全画面） */}
+          <Pressable
+            style={styles.previewPressArea}
+            onLongPress={() => setIsPreviewPlaying(true)}
+            onPressOut={async () => {
+              setIsPreviewPlaying(false);
+              // 指を離したら先頭フレームに戻す
+              await previewVideoRef.current?.setPositionAsync(0);
+            }}
+            delayLongPress={150}
+          />
+
           {/* DAY バッジ */}
           <View style={styles.previewDayBadge}>
             <Text style={styles.previewDayText}>DAY {appState.streak + 1}</Text>
           </View>
+
+          {/* 長押しガイド（再生中は非表示） */}
+          {!isPreviewPlaying && (
+            <View style={styles.previewHint}>
+              <Feather name="play-circle" size={18} color="rgba(255,255,255,0.7)" />
+              <Text style={styles.previewHintText}>
+                {lang === 'en' ? 'Hold to preview' : '長押しで再生'}
+              </Text>
+            </View>
+          )}
+
           {/* アクションボタン */}
           <View style={styles.previewActions}>
             <TouchableOpacity style={styles.previewBtn} onPress={retake}>
@@ -1609,6 +1639,28 @@ const styles = StyleSheet.create({
   },
   camModeBtnActive: {
     color: '#fff',
+  },
+  previewPressArea: {
+    ...StyleSheet.absoluteFillObject,
+    // ボタン行の高さ（約80px）を除いた領域を長押しエリアに
+    bottom: 80,
+  },
+  previewHint: {
+    position: 'absolute',
+    top: '45%',
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  previewHintText: {
+    color: 'rgba(255,255,255,0.85)',
+    fontSize: 13,
+    fontWeight: '600',
   },
   previewDayBadge: {
     position: 'absolute',
