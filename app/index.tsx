@@ -870,54 +870,76 @@ export default function Page() {
   // ─── Home Screen ─────────────────────────────────────────────────────────────
 
   const HomeScreen = () => (
-    <View style={styles.screen}>
+    <ScrollView style={styles.screen} contentContainerStyle={styles.homeContent}>
+
+      {/* ── Header: ONE SHOT + settings gear ── */}
       <View style={styles.homeHeader}>
-        <Text style={styles.goalText}>{appState.goal || '—'}</Text>
-      </View>
-      <View style={styles.statsRow}>
-        <View style={styles.statCard}>
-          <Text style={styles.statVal}>{appState.streak}</Text>
-          <Text style={styles.statLabel}>{t('streak_label')}</Text>
-        </View>
-        <View style={styles.statCard}>
-          <Text style={[styles.statVal, recordedToday ? styles.statDone : styles.statPending]}>
-            {recordedToday ? '✓' : '−'}
-          </Text>
-          <Text style={styles.statLabel}>{t('today_label')}</Text>
-        </View>
-        <View style={styles.statCard}>
-          <Text style={styles.statVal}>{totalPassCount()}</Text>
-          <Text style={styles.statLabel}>{t('pass_remain_label')}</Text>
-        </View>
-      </View>
-      <View style={styles.homeCenterArea}>
-        {recordedToday && (
-          <Text style={styles.recordedLabel}>{t('recorded_today')}</Text>
-        )}
-        <TouchableOpacity
-          style={[styles.recBtn, recordedToday && styles.recBtnDone]}
-          onPress={() => {
-            if (recordedToday) {
-              Alert.alert('', t('alert_already_recorded') ?? 'Already recorded today.');
-              return;
-            }
-            setScreen('camera');
-          }}
-        >
-          <Feather name="video" size={32} color="#fff" />
+        <Text style={styles.homeLogo}>ONE SHOT</Text>
+        <TouchableOpacity style={styles.settingsIconBtn} onPress={() => setScreen('settings')}>
+          <Feather name="settings" size={22} color="#888" />
         </TouchableOpacity>
       </View>
+
+      {/* ── Huge streak number ── */}
+      <View style={styles.streakSection}>
+        <Text style={styles.streakNum}>{appState.streak}</Text>
+        <Text style={styles.streakLabel}>{t('streak_label')}</Text>
+      </View>
+
+      {/* ── Goal card with 2 status pills ── */}
+      <View style={styles.goalCard}>
+        <Text style={styles.goalTitle}>
+          <Text style={styles.goalHash}># </Text>
+          {appState.goal || '—'}
+        </Text>
+        <View style={styles.statusRow}>
+          <View style={styles.statusPill}>
+            <Text style={[styles.statusVal, recordedToday ? styles.statusValDone : styles.statusValPending]}>
+              {recordedToday ? '✓' : '−'}
+            </Text>
+            <Text style={styles.statusLabel}>{t('today_label')}</Text>
+          </View>
+          <View style={styles.statusPill}>
+            <Text style={styles.statusVal}>{totalPassCount()}</Text>
+            <Text style={styles.statusLabel}>{t('pass_remain_label')}</Text>
+          </View>
+        </View>
+      </View>
+
+      {/* ── Record button (photo-camera icon, glow) ── */}
+      <TouchableOpacity
+        style={[styles.recBtn, recordedToday && styles.recBtnDone]}
+        onPress={() => {
+          if (recordedToday) {
+            Alert.alert('', t('alert_already_recorded') ?? 'Already recorded today.');
+            return;
+          }
+          setScreen('camera');
+        }}
+      >
+        <Ionicons name="camera-outline" size={36} color={recordedToday ? '#555' : '#fff'} />
+      </TouchableOpacity>
+
+      {/* ── Recorded-today label (green) ── */}
+      {recordedToday && (
+        <Text style={styles.recDoneLabel}>✓ {t('recorded_today')}</Text>
+      )}
+
+      {/* ── Use pass button (red outline) ── */}
       <TouchableOpacity style={styles.passBtn} onPress={usePassToday}>
-        <Ionicons name="ticket-outline" size={14} color="#fff" />
+        <Ionicons name="ticket-outline" size={14} color="#8B0000" />
         <Text style={styles.passBtnText}>
           {t('use_pass_btn_prefix')}{totalPassCount()}{t('use_pass_btn_suffix')}
         </Text>
       </TouchableOpacity>
+
+      {/* ── Buy pass button (red outline) ── */}
       <TouchableOpacity style={styles.passBuyBtn} onPress={purchasePass}>
-        <Ionicons name="add-circle-outline" size={14} color="#8B0000" />
+        <Ionicons name="card-outline" size={14} color="#8B0000" />
         <Text style={styles.passBuyBtnText}>{t('pass_purchase_btn')}</Text>
       </TouchableOpacity>
-    </View>
+
+    </ScrollView>
   );
 
   // ─── Camera Screen ────────────────────────────────────────────────────────────
@@ -1483,60 +1505,90 @@ const styles = StyleSheet.create({
   },
 
   // ── Home ──
+  homeContent: {
+    padding: 24,
+    paddingBottom: 32,
+  },
   homeHeader: {
-    paddingTop: 16,
-    paddingHorizontal: 24,
-    paddingBottom: 12,
-  },
-  goalText: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#fff',
-    letterSpacing: 0.5,
-  },
-  statsRow: {
     flexDirection: 'row',
-    paddingHorizontal: 16,
-    gap: 8,
-  },
-  statCard: {
-    flex: 1,
-    backgroundColor: '#111',
-    borderRadius: 12,
-    padding: 16,
+    justifyContent: 'space-between',
     alignItems: 'center',
+    marginBottom: 32,
   },
-  statVal: {
-    fontSize: 28,
+  homeLogo: {
+    fontSize: 24,
+    fontWeight: '900',
+    color: '#fff',
+    letterSpacing: -1,
+  },
+  settingsIconBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  streakSection: {
+    alignItems: 'center',
+    marginBottom: 40,
+  },
+  streakNum: {
+    fontSize: 96,
+    fontWeight: '900',
+    color: '#fff',
+    letterSpacing: -4,
+    lineHeight: 96,
+    includeFontPadding: false,
+  } as any,
+  streakLabel: {
+    fontSize: 14,
+    color: '#888',
+    textTransform: 'uppercase',
+    letterSpacing: 4,
+    marginTop: 6,
+  },
+  goalCard: {
+    backgroundColor: '#111',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 16,
+  },
+  goalTitle: {
+    fontSize: 20,
     fontWeight: '900',
     color: '#fff',
   },
-  statDone: {
+  goalHash: {
     color: '#8B0000',
   },
-  statPending: {
-    color: '#444',
+  statusRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 12,
   },
-  statLabel: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#555',
-    letterSpacing: 1,
-    marginTop: 4,
-    textTransform: 'uppercase',
-  },
-  homeCenterArea: {
+  statusPill: {
     flex: 1,
-    justifyContent: 'center',
+    padding: 10,
+    borderRadius: 10,
+    backgroundColor: '#1a1a1a',
     alignItems: 'center',
   },
-  recordedLabel: {
-    fontSize: 11,
-    fontWeight: '700',
+  statusVal: {
+    fontSize: 20,
+    fontWeight: '900',
+    color: '#fff',
+    marginBottom: 2,
+  },
+  statusValDone: {
+    color: '#00FF88',
+  },
+  statusValPending: {
     color: '#8B0000',
-    letterSpacing: 2,
-    marginBottom: 16,
-    textTransform: 'uppercase',
+  },
+  statusLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#888',
   },
   recBtn: {
     width: 80,
@@ -1545,6 +1597,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#8B0000',
     justifyContent: 'center',
     alignItems: 'center',
+    alignSelf: 'center',
+    marginTop: 32,
     shadowColor: '#8B0000',
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.6,
@@ -1555,40 +1609,52 @@ const styles = StyleSheet.create({
     backgroundColor: '#1a1a1a',
     shadowOpacity: 0,
   },
+  recDoneLabel: {
+    textAlign: 'center',
+    marginTop: 10,
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#00FF88',
+    textTransform: 'uppercase',
+    letterSpacing: 2,
+  },
   passBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
+    gap: 7,
+    marginTop: 12,
     paddingVertical: 14,
-    marginHorizontal: 24,
-    marginBottom: 8,
-    backgroundColor: '#111',
     borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#222',
+    borderWidth: 1.5,
+    borderColor: '#8B0000',
+    backgroundColor: 'transparent',
   },
   passBtnText: {
-    color: '#aaa',
+    color: '#8B0000',
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
   },
   passBuyBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 11,
-    marginHorizontal: 24,
-    marginBottom: 16,
+    gap: 8,
+    marginTop: 8,
+    paddingVertical: 14,
     borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#3a1010',
+    borderWidth: 1.5,
+    borderColor: '#8B0000',
+    backgroundColor: '#111',
   },
   passBuyBtnText: {
     color: '#8B0000',
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
   },
 
   // ── Camera ──
