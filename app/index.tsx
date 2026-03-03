@@ -870,7 +870,7 @@ export default function Page() {
   // ─── Home Screen ─────────────────────────────────────────────────────────────
 
   const HomeScreen = () => (
-    <ScrollView style={styles.screen} contentContainerStyle={styles.homeContent}>
+    <View style={styles.homeScreen}>
 
       {/* ── Header: ONE SHOT + settings gear ── */}
       <View style={styles.homeHeader}>
@@ -880,13 +880,13 @@ export default function Page() {
         </TouchableOpacity>
       </View>
 
-      {/* ── Huge streak number ── */}
+      {/* ── 大きいストリーク数字 (flex:1 で残りを占有) ── */}
       <View style={styles.streakSection}>
         <Text style={styles.streakNum}>{appState.streak}</Text>
         <Text style={styles.streakLabel}>{t('streak_label')}</Text>
       </View>
 
-      {/* ── Goal card with 2 status pills ── */}
+      {/* ── ゴールカード + 2ステータスピル ── */}
       <View style={styles.goalCard}>
         <Text style={styles.goalTitle}>
           <Text style={styles.goalHash}># </Text>
@@ -906,7 +906,7 @@ export default function Page() {
         </View>
       </View>
 
-      {/* ── Record button (photo-camera icon, glow) ── */}
+      {/* ── カメラボタン（写真カメラアイコン・赤グロー） ── */}
       <TouchableOpacity
         style={[styles.recBtn, recordedToday && styles.recBtnDone]}
         onPress={() => {
@@ -917,15 +917,15 @@ export default function Page() {
           setScreen('camera');
         }}
       >
-        <Ionicons name="camera-outline" size={36} color={recordedToday ? '#555' : '#fff'} />
+        <Ionicons name="camera-outline" size={32} color={recordedToday ? '#555' : '#fff'} />
       </TouchableOpacity>
 
-      {/* ── Recorded-today label (green) ── */}
+      {/* ── 記録済みラベル（緑） ── */}
       {recordedToday && (
         <Text style={styles.recDoneLabel}>✓ {t('recorded_today')}</Text>
       )}
 
-      {/* ── Use pass button (red outline) ── */}
+      {/* ── パスを使うボタン（赤アウトライン） ── */}
       <TouchableOpacity style={styles.passBtn} onPress={usePassToday}>
         <Ionicons name="ticket-outline" size={14} color="#8B0000" />
         <Text style={styles.passBtnText}>
@@ -933,13 +933,13 @@ export default function Page() {
         </Text>
       </TouchableOpacity>
 
-      {/* ── Buy pass button (red outline) ── */}
+      {/* ── パス購入ボタン（赤アウトライン） ── */}
       <TouchableOpacity style={styles.passBuyBtn} onPress={purchasePass}>
         <Ionicons name="card-outline" size={14} color="#8B0000" />
         <Text style={styles.passBuyBtnText}>{t('pass_purchase_btn')}</Text>
       </TouchableOpacity>
 
-    </ScrollView>
+    </View>
   );
 
   // ─── Camera Screen ────────────────────────────────────────────────────────────
@@ -1318,21 +1318,21 @@ const CELL_SIZE = Math.floor((width - 32) / 7);
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000',
+    backgroundColor: 'transparent',
   },
   loadingContainer: {
     flex: 1,
-    backgroundColor: '#000',
+    backgroundColor: 'transparent',
     justifyContent: 'center',
     alignItems: 'center',
   },
   screen: {
     flex: 1,
-    backgroundColor: '#000',
+    backgroundColor: 'transparent',
   },
   screenCenter: {
     flex: 1,
-    backgroundColor: '#000',
+    backgroundColor: 'transparent',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 24,
@@ -1505,56 +1505,61 @@ const styles = StyleSheet.create({
   },
 
   // ── Home ──
-  homeContent: {
-    padding: 24,
-    paddingBottom: 32,
+  homeScreen: {
+    flex: 1,
+    paddingHorizontal: 20,
+    paddingTop: 4,
+    paddingBottom: 4,
   },
   homeHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 32,
+    paddingVertical: 10,
   },
   homeLogo: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: '900',
     color: '#fff',
     letterSpacing: -1,
   },
   settingsIconBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
+    width: 40,
+    height: 40,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  // flex:1 で残りの縦空間をすべて占有 → 画面サイズに応じて自動伸縮
   streakSection: {
+    flex: 1,
+    justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 40,
+    minHeight: 80,
   },
   streakNum: {
-    fontSize: 96,
+    fontSize: 80,
     fontWeight: '900',
     color: '#fff',
     letterSpacing: -4,
-    lineHeight: 96,
+    lineHeight: 80,
     includeFontPadding: false,
   } as any,
   streakLabel: {
-    fontSize: 14,
+    fontSize: 12,
     color: '#888',
     textTransform: 'uppercase',
     letterSpacing: 4,
-    marginTop: 6,
+    marginTop: 4,
   },
   goalCard: {
     backgroundColor: '#111',
     borderRadius: 16,
-    padding: 20,
-    marginBottom: 16,
+    padding: 16,
+    marginBottom: 10,
   },
   goalTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '900',
     color: '#fff',
   },
@@ -1563,18 +1568,19 @@ const styles = StyleSheet.create({
   },
   statusRow: {
     flexDirection: 'row',
-    gap: 12,
-    marginTop: 12,
+    gap: 10,
+    marginTop: 10,
   },
   statusPill: {
     flex: 1,
-    padding: 10,
+    paddingVertical: 9,
+    paddingHorizontal: 10,
     borderRadius: 10,
     backgroundColor: '#1a1a1a',
     alignItems: 'center',
   },
   statusVal: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '900',
     color: '#fff',
     marginBottom: 2,
@@ -1586,23 +1592,23 @@ const styles = StyleSheet.create({
     color: '#8B0000',
   },
   statusLabel: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
     color: '#888',
   },
   recBtn: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+    width: 72,
+    height: 72,
+    borderRadius: 36,
     backgroundColor: '#8B0000',
     justifyContent: 'center',
     alignItems: 'center',
     alignSelf: 'center',
-    marginTop: 32,
+    marginVertical: 14,
     shadowColor: '#8B0000',
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.6,
-    shadowRadius: 20,
+    shadowOpacity: 0.65,
+    shadowRadius: 18,
     elevation: 8,
   },
   recBtnDone: {
@@ -1611,8 +1617,9 @@ const styles = StyleSheet.create({
   },
   recDoneLabel: {
     textAlign: 'center',
-    marginTop: 10,
-    fontSize: 12,
+    marginTop: 4,
+    marginBottom: 6,
+    fontSize: 11,
     fontWeight: '700',
     color: '#00FF88',
     textTransform: 'uppercase',
@@ -1623,8 +1630,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 7,
-    marginTop: 12,
-    paddingVertical: 14,
+    marginBottom: 8,
+    paddingVertical: 13,
     borderRadius: 12,
     borderWidth: 1.5,
     borderColor: '#8B0000',
@@ -1642,8 +1649,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    marginTop: 8,
-    paddingVertical: 14,
+    paddingVertical: 13,
     borderRadius: 12,
     borderWidth: 1.5,
     borderColor: '#8B0000',
@@ -1990,9 +1996,9 @@ const styles = StyleSheet.create({
   // ── Bottom Nav ──
   bottomNav: {
     flexDirection: 'row',
-    backgroundColor: '#000',
+    backgroundColor: 'rgba(5,2,2,0.92)',
     borderTopWidth: 1,
-    borderTopColor: '#1a1a1a',
+    borderTopColor: '#1f0a0a',
     paddingBottom: 4,
   },
   navItem: {
