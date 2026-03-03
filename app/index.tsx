@@ -24,6 +24,7 @@ import { CameraView, CameraType, useCameraPermissions } from 'expo-camera';
 import * as MediaLibrary from 'expo-media-library';
 import * as Sharing from 'expo-sharing';
 import { Feather, Ionicons } from '@expo/vector-icons';
+import { Video, ResizeMode } from 'expo-av';
 import Purchases, {
   PurchasesOfferings,
   PurchasesPackage,
@@ -168,6 +169,12 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     restore_failed: '復元に失敗しました',
     pass_not_found: 'パス商品が見つかりません',
     product_not_found: '商品情報の取得に失敗しました',
+    rescue_title: '昨日の記録がありません',
+    rescue_body: 'パスを1枚使って昨日分を補完し、ストリークを維持しますか？',
+    rescue_use_pass: 'パスを使う（残り {count} 枚）',
+    rescue_skip: 'スキップ（ストリーク0に）',
+    toast_streak_rescued: 'パスで昨日分を補完しました！',
+    toast_streak_reset: 'ストリークがリセットされました',
   },
   en: {
     meta_description: 'One video a day. Record your habits with video.',
@@ -270,6 +277,12 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     restore_failed: 'Restore failed',
     pass_not_found: 'Pass product not found',
     product_not_found: 'Product info unavailable',
+    rescue_title: "Yesterday's record is missing",
+    rescue_body: 'Use a pass to fill in yesterday and maintain your streak?',
+    rescue_use_pass: 'Use pass ({count} remaining)',
+    rescue_skip: 'Skip (reset streak)',
+    toast_streak_rescued: 'Pass used — yesterday filled in!',
+    toast_streak_reset: 'Streak has been reset',
   },
 };
 
@@ -336,6 +349,7 @@ export default function Page() {
   const [toastError, setToastError] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [guideVisible, setGuideVisible] = useState(false);
+  const [showStreakRescue, setShowStreakRescue] = useState(false);
 
   // Camera state
   const [camPermission, requestCamPermission] = useCameraPermissions();
@@ -419,22 +433,13 @@ export default function Page() {
     return s;
   }, []);
 
-  const updateStreak = useCallback((s: AppState): { state: AppState; toastKey?: string } => {
-    const today = getAppDate();
-    if (!s.lastRecordDate) return { state: s };
-    const diff = daysBetween(s.lastRecordDate, today);
-    if (diff === 2 && totalPassCount(s) > 0) {
-      const yesterday = getAppDate(new Date(Date.now() - 86400000));
-      const consumed = consumePass(s);
-      return {
-        state: { ...consumed, lastRecordDate: yesterday },
-        toastKey: 'toast_pass_used_auto',
-      };
-    } else if (diff >= 2) {
-      return { state: { ...s, streak: 0 } };
-    }
-    return { state: s };
-  }, [totalPassCount, consumePass]);
+  // updateStreak: 自動パス消費なし。2日以上放置でリセット、1日ギャップは救済バナーで別途処理
+  const updateStreak = useCallback((s: AppState): AppState => {
+    if (!s.lastRecordDate) return s;
+    const diff = daysBetween(s.lastRecordDate, getAppDate());
+    if (diff >= 3) return { ...s, streak: 0 }; // 2日以上放置 → リセット
+    return s; // diff=1(正常) or diff=2(1日ギャップ) はそのまま返す
+  }, []);
 
   // ── RevenueCat helpers ──────────────────────────────────────────────────────
 
@@ -449,7 +454,10 @@ export default function Page() {
         ?? null;
     }
     if (type === 'pass') {
-      return pkgs.find(p => p.identifier === 'pass')
+      // 1st: Product ID で完全一致
+      return pkgs.find(p => p.product.identifier === 'com.jin.oneshot.1pass')
+        // 2nd: Package ID フォールバック
+        ?? pkgs.find(p => p.identifier === 'pass')
         ?? pkgs.find(p => p.identifier.toLowerCase().includes('pass'))
         ?? null;
     }
@@ -534,6 +542,31 @@ export default function Page() {
       showToast(t('restore_failed'), true);
     }
   }, [showToast, t, updateState]);
+
+  // ── Streak rescue (manual, 1-day gap) ──────────────────────────────────────
+
+  const rescueStreak = useCallback(() => {
+    const yesterday = getAppDate(new Date(Date.now() - 86400000));
+    setAppState(prev => {
+      const consumed = consumePass(prev);
+      const rescued = { ...consumed, lastRecordDate: yesterday };
+      saveAppState(rescued);
+      return rescued;
+    });
+    setShowStreakRescue(false);
+    showToast(t('toast_streak_rescued'));
+  }, [consumePass, saveAppState, showToast, t]);
+
+  const dismissRescue = useCallback(() => {
+    // パスを使わずスキップ → ストリークをリセット
+    setAppState(prev => {
+      const reset = { ...prev, streak: 0 };
+      saveAppState(reset);
+      return reset;
+    });
+    setShowStreakRescue(false);
+    showToast(t('toast_streak_reset'));
+  }, [saveAppState, showToast, t]);
 
   // ── Use pass ────────────────────────────────────────────────────────────────
 
@@ -655,11 +688,18 @@ export default function Page() {
   useEffect(() => {
     if (screen === 'home') {
       setAppState(prev => {
-        const { state: withStreak, toastKey } = updateStreak(prev);
-        const withPass = checkPassGrant(withStreak);
-        if (toastKey) showToast(t(toastKey));
-        if (withPass !== prev) saveAppState(withPass);
-        return withPass;
+        const afterStreak = updateStreak(prev);       // diff>=3 → streak=0, otherwise unchanged
+        const afterPass = checkPassGrant(afterStreak); // 月曜パス付与
+        if (afterPass !== prev) saveAppState(afterPass);
+
+        // 1日ギャップ（diff===2）: 救済バナーを表示するか判定
+        const diff = afterPass.lastRecordDate
+          ? daysBetween(afterPass.lastRecordDate, getAppDate())
+          : 0;
+        const canRescue = diff === 2 && (afterPass.freePassCount + afterPass.paidPassCount) > 0;
+        setShowStreakRescue(canRescue);
+
+        return afterPass;
       });
     }
   }, [screen]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -880,6 +920,26 @@ export default function Page() {
           <Feather name="video" size={32} color="#fff" />
         </TouchableOpacity>
       </View>
+      {/* ── ストリーク救済バナー（1日ギャップ・パスあり時のみ） ── */}
+      {showStreakRescue && (
+        <View style={styles.rescueBanner}>
+          <Feather name="alert-circle" size={16} color="#FFD700" style={{ marginBottom: 4 }} />
+          <Text style={styles.rescueTitle}>{t('rescue_title')}</Text>
+          <Text style={styles.rescueBody}>{t('rescue_body')}</Text>
+          <View style={styles.rescueActions}>
+            <TouchableOpacity style={styles.rescueSkipBtn} onPress={dismissRescue}>
+              <Text style={styles.rescueSkipText}>{t('rescue_skip')}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.rescueUseBtn} onPress={rescueStreak}>
+              <Ionicons name="ticket-outline" size={13} color="#fff" />
+              <Text style={styles.rescueUseText}>
+                {t('rescue_use_pass', { count: totalPassCount() })}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
       <TouchableOpacity style={styles.passBtn} onPress={usePassToday}>
         <Ionicons name="ticket-outline" size={14} color="#fff" />
         <Text style={styles.passBtnText}>
@@ -910,20 +970,33 @@ export default function Page() {
 
     if (capturedUri) {
       return (
-        <View style={styles.screen}>
-          <View style={styles.previewPlaceholder}>
-            <Feather name="film" size={64} color="#444" />
-            <Text style={styles.previewLabel}>DAY {appState.streak + 1}</Text>
+        <View style={styles.cameraContainer}>
+          {/* 撮影動画をループ自動再生（全画面COVER） */}
+          <Video
+            source={{ uri: capturedUri }}
+            style={StyleSheet.absoluteFill}
+            resizeMode={ResizeMode.COVER}
+            isLooping
+            shouldPlay
+            isMuted={false}
+          />
+          {/* DAY バッジ */}
+          <View style={styles.previewDayBadge}>
+            <Text style={styles.previewDayText}>DAY {appState.streak + 1}</Text>
           </View>
+          {/* アクションボタン */}
           <View style={styles.previewActions}>
-            <TouchableOpacity style={styles.btnOutline} onPress={retake}>
-              <Text style={styles.btnOutlineText}>{t('retry_btn')}</Text>
+            <TouchableOpacity style={styles.previewBtn} onPress={retake}>
+              <Feather name="rotate-ccw" size={16} color="#fff" />
+              <Text style={styles.previewBtnText}>{t('retry_btn')}</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.btnPrimary} onPress={saveCapture}>
-              <Text style={styles.btnPrimaryText}>{t('save_btn')}</Text>
+            <TouchableOpacity style={styles.previewBtnPrimary} onPress={saveCapture}>
+              <Feather name="check" size={16} color="#fff" />
+              <Text style={styles.previewBtnText}>{t('save_btn')}</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.btnOutline} onPress={shareCapture}>
-              <Text style={styles.btnOutlineText}>{t('share_btn')}</Text>
+            <TouchableOpacity style={styles.previewBtn} onPress={shareCapture}>
+              <Feather name="share-2" size={16} color="#fff" />
+              <Text style={styles.previewBtnText}>{t('share_btn')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -1493,6 +1566,63 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#222',
   },
+  // ── Streak Rescue Banner ──
+  rescueBanner: {
+    marginHorizontal: 16,
+    marginBottom: 8,
+    backgroundColor: '#1a1200',
+    borderWidth: 1,
+    borderColor: '#FFD700',
+    borderRadius: 12,
+    padding: 14,
+    alignItems: 'center',
+  },
+  rescueTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#FFD700',
+    marginBottom: 4,
+  },
+  rescueBody: {
+    fontSize: 12,
+    color: '#ccc',
+    textAlign: 'center',
+    marginBottom: 10,
+    lineHeight: 18,
+  },
+  rescueActions: {
+    flexDirection: 'row',
+    gap: 8,
+    width: '100%',
+  },
+  rescueSkipBtn: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#444',
+    borderRadius: 8,
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  rescueSkipText: {
+    color: '#777',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  rescueUseBtn: {
+    flex: 2,
+    backgroundColor: '#8B0000',
+    borderRadius: 8,
+    paddingVertical: 10,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 6,
+  },
+  rescueUseText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '700',
+  },
   passBtnText: {
     color: '#aaa',
     fontSize: 13,
@@ -1583,22 +1713,57 @@ const styles = StyleSheet.create({
   camModeBtnActive: {
     color: '#fff',
   },
-  previewPlaceholder: {
-    flex: 1,
-    backgroundColor: '#0a0a0a',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 16,
+  previewDayBadge: {
+    position: 'absolute',
+    top: 20,
+    left: 20,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
   },
-  previewLabel: {
-    fontSize: 24,
+  previewDayText: {
+    fontSize: 14,
     fontWeight: '900',
-    color: '#444',
-    letterSpacing: 4,
+    color: '#fff',
+    letterSpacing: 3,
   },
   previewActions: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
     padding: 20,
     gap: 8,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+  },
+  previewBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.3)',
+    borderRadius: 12,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+  },
+  previewBtnPrimary: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: '#8B0000',
+  },
+  previewBtnText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '700',
   },
 
   // ── History ──
