@@ -92,7 +92,7 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     settings_save_btn: '保存',
     settings_reset_btn: 'すべてのデータをリセット',
     settings_language_label: '言語 / Language',
-    paywall_sub: 'プレミアム会員',
+    paywall_sub: 'メンバーシップ',
     paywall_price_sub: '/ 月（税込）・自動更新',
     paywall_feature1: '動画・写真の毎日撮影（無制限）',
     paywall_feature2: 'ストリーク管理・継続記録',
@@ -145,7 +145,7 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     toast_pass_used: 'パスを使用しました。お疲れ様！',
     toast_paid_pass_added: '有料パス +1 追加されました（ストック中）',
     confirm_purchase_pass: 'パスを1回分購入しますか？（¥100）',
-    confirm_subscribe: '月額¥300のサブスクリプションを開始しますか？',
+    confirm_subscribe: '月額¥300のメンバーシップを開始しますか？',
     confirm_restore: '購入を復元しますか？',
     confirm_use_pass: '本日はパス（お休み）を使用しますか？\nストリークがそのまま維持されます。',
     confirm_reset: 'すべてのデータを削除しますか？',
@@ -164,7 +164,7 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     cancel: 'キャンセル',
     processing: '処理中...',
     restoring: '復元中...',
-    subscribe_success: 'サブスクリプションが有効になりました',
+    subscribe_success: 'メンバーシップが有効になりました',
     restore_success: '購入内容を復元しました',
     restore_none: '復元できる購入履歴が見つかりませんでした',
     purchase_failed: '購入に失敗しました',
@@ -194,7 +194,7 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     settings_save_btn: 'Save',
     settings_reset_btn: 'Reset All Data',
     settings_language_label: '言語 / Language',
-    paywall_sub: 'Premium',
+    paywall_sub: 'Membership',
     paywall_price_sub: '/ month (tax incl.) · Auto-renews',
     paywall_feature1: 'Unlimited daily video & photo recording',
     paywall_feature2: 'Streak tracking & continuous records',
@@ -247,7 +247,7 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     toast_pass_used: 'Pass used. Good work!',
     toast_paid_pass_added: 'Paid pass +1 added (stocked)',
     confirm_purchase_pass: 'Purchase 1 pass? (¥100)',
-    confirm_subscribe: 'Start ¥300/month subscription?',
+    confirm_subscribe: 'Start ¥300/month membership?',
     confirm_restore: 'Restore purchases?',
     confirm_use_pass: 'Use a pass (rest day) for today?\nYour streak will be maintained.',
     confirm_reset: 'Delete all data?',
@@ -266,7 +266,7 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     cancel: 'Cancel',
     processing: 'Processing...',
     restoring: 'Restoring...',
-    subscribe_success: 'Subscription activated',
+    subscribe_success: 'Membership activated',
     restore_success: 'Purchases restored',
     restore_none: 'No restorable purchases found',
     purchase_failed: 'Purchase failed',
@@ -346,8 +346,8 @@ export default function Page() {
   const [camMode, setCamMode] = useState<'video' | 'photo'>('video');
   const [isRecording, setIsRecording] = useState(false);
   const [countdown, setCountdown] = useState<number | null>(null);
-  const [recordingTimer, setRecordingTimer] = useState<number | null>(null);
   const [capturedUri, setCapturedUri] = useState<string | null>(null);
+  const recordingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isPreviewPlaying, setIsPreviewPlaying] = useState(false);
   const cameraRef = useRef<CameraView>(null);
   const previewVideoRef = useRef<Video>(null);
@@ -664,38 +664,67 @@ export default function Page() {
   // ── Camera recording ────────────────────────────────────────────────────────
 
   const startRecording = useCallback(async () => {
-    if (!cameraRef.current || isRecording) return;
+    if (isRecording || countdown !== null) return;
+
+    // 権限確認（未許可なら再リクエスト）
     if (!camPermission?.granted) {
-      await requestCamPermission();
-      return;
+      const result = await requestCamPermission();
+      if (!result.granted) return;
     }
-    // 3-2-1 countdown
+    if (!cameraRef.current) return;
+
+    // 3-2-1 カウントダウン
     for (let i = 3; i >= 1; i--) {
       setCountdown(i);
-      await new Promise(r => setTimeout(r, 1000));
+      await new Promise<void>(r => setTimeout(r, 1000));
     }
     setCountdown(null);
-    setIsRecording(true);
 
+    // 写真モード
+    if (camMode === 'photo') {
+      try {
+        const photo = await cameraRef.current.takePictureAsync({ quality: 0.9 });
+        setCapturedUri(photo?.uri ?? null);
+      } catch (e) {
+        showToast(t('toast_camera_error') + String(e), true);
+      }
+      return;
+    }
+
+    // 動画モード
+    setIsRecording(true);
     try {
-      const promise = cameraRef.current.recordAsync({ maxDuration: 3 });
-      // Auto-stop after 3s
-      const timer = setTimeout(async () => {
+      // maxDuration を少し長めにして、手動 stopRecording に委ねる
+      const promise = cameraRef.current.recordAsync({ maxDuration: 5 });
+
+      // 3秒後に自動停止
+      if (recordingTimerRef.current) clearTimeout(recordingTimerRef.current);
+      recordingTimerRef.current = setTimeout(() => {
         cameraRef.current?.stopRecording();
-      }, 3100) as unknown as number;
-      setRecordingTimer(timer);
+      }, 3000);
 
       const result = await promise;
+      if (recordingTimerRef.current) {
+        clearTimeout(recordingTimerRef.current);
+        recordingTimerRef.current = null;
+      }
       setCapturedUri(result?.uri ?? null);
-    } catch (e) {
-      showToast(t('toast_camera_error') + String(e), true);
+    } catch (e: any) {
+      // ユーザーキャンセル or 権限エラーは静かに無視
+      if (!String(e).includes('cancel') && !String(e).includes('stopped')) {
+        showToast(t('toast_camera_error') + String(e), true);
+      }
     } finally {
       setIsRecording(false);
       setCountdown(null);
     }
-  }, [camPermission, requestCamPermission, isRecording, showToast, t]);
+  }, [camPermission, requestCamPermission, isRecording, countdown, camMode, showToast, t]);
 
   const retake = useCallback(() => {
+    if (recordingTimerRef.current) {
+      clearTimeout(recordingTimerRef.current);
+      recordingTimerRef.current = null;
+    }
     setCapturedUri(null);
     setIsPreviewPlaying(false);
   }, []);
@@ -883,6 +912,10 @@ export default function Page() {
         <Text style={styles.passBtnText}>
           {t('use_pass_btn_prefix')}{totalPassCount()}{t('use_pass_btn_suffix')}
         </Text>
+      </TouchableOpacity>
+      <TouchableOpacity style={styles.passBuyBtn} onPress={purchasePass}>
+        <Ionicons name="add-circle-outline" size={14} color="#8B0000" />
+        <Text style={styles.passBuyBtnText}>{t('pass_purchase_btn')}</Text>
       </TouchableOpacity>
     </View>
   );
@@ -1537,6 +1570,23 @@ const styles = StyleSheet.create({
   },
   passBtnText: {
     color: '#aaa',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  passBuyBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 11,
+    marginHorizontal: 24,
+    marginBottom: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#3a1010',
+  },
+  passBuyBtnText: {
+    color: '#8B0000',
     fontSize: 13,
     fontWeight: '600',
   },
