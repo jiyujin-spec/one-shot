@@ -26,6 +26,8 @@ import * as MediaLibrary from 'expo-media-library';
 import * as Sharing from 'expo-sharing';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import { Video, ResizeMode } from 'expo-av';
+import { LinearGradient } from 'expo-linear-gradient';
+import MaskedView from '@react-native-masked-view/masked-view';
 import { differenceInCalendarDays, subHours, getDay, format } from 'date-fns';
 import Purchases, {
   PurchasesOfferings,
@@ -880,9 +882,20 @@ export default function Page() {
         </TouchableOpacity>
       </View>
 
-      {/* ── 大きいストリーク数字 (flex:1 で残りを占有) ── */}
+      {/* ── ストリーク数字（Web版と同じ縦グラデーション: 白→グレー） ── */}
       <View style={styles.streakSection}>
-        <Text style={styles.streakNum}>{appState.streak}</Text>
+        {/* MaskedView: テキスト形状をマスクとして LinearGradient を型抜き */}
+        <MaskedView maskElement={<Text style={styles.streakNum}>{appState.streak}</Text>}>
+          <LinearGradient
+            colors={['#ffffff', '#ffffff', '#555555']}
+            locations={[0, 0.3, 1.0]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 0, y: 1 }}
+          >
+            {/* opacity:0 でグラデーションのサイズをテキストに合わせる */}
+            <Text style={[styles.streakNum, { opacity: 0 }]}>{appState.streak}</Text>
+          </LinearGradient>
+        </MaskedView>
         <Text style={styles.streakLabel}>{t('streak_label')}</Text>
       </View>
 
@@ -1318,21 +1331,21 @@ const CELL_SIZE = Math.floor((width - 32) / 7);
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: 'transparent',
+    backgroundColor: '#000',
   },
   loadingContainer: {
     flex: 1,
-    backgroundColor: 'transparent',
+    backgroundColor: '#000',
     justifyContent: 'center',
     alignItems: 'center',
   },
   screen: {
     flex: 1,
-    backgroundColor: 'transparent',
+    backgroundColor: '#000',
   },
   screenCenter: {
     flex: 1,
-    backgroundColor: 'transparent',
+    backgroundColor: '#000',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 24,
@@ -1996,9 +2009,9 @@ const styles = StyleSheet.create({
   // ── Bottom Nav ──
   bottomNav: {
     flexDirection: 'row',
-    backgroundColor: 'rgba(5,2,2,0.92)',
+    backgroundColor: '#000',
     borderTopWidth: 1,
-    borderTopColor: '#1f0a0a',
+    borderTopColor: '#1a1a1a',
     paddingBottom: 4,
   },
   navItem: {
