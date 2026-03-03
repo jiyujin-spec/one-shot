@@ -25,6 +25,7 @@ import * as MediaLibrary from 'expo-media-library';
 import * as Sharing from 'expo-sharing';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import { Video, ResizeMode } from 'expo-av';
+import { differenceInCalendarDays, subHours, getDay, format } from 'date-fns';
 import Purchases, {
   PurchasesOfferings,
   PurchasesPackage,
@@ -169,12 +170,6 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     restore_failed: '復元に失敗しました',
     pass_not_found: 'パス商品が見つかりません',
     product_not_found: '商品情報の取得に失敗しました',
-    rescue_title: '昨日の記録がありません',
-    rescue_body: 'パスを1枚使って昨日分を補完し、ストリークを維持しますか？',
-    rescue_use_pass: 'パスを使う（残り {count} 枚）',
-    rescue_skip: 'スキップ（ストリーク0に）',
-    toast_streak_rescued: 'パスで昨日分を補完しました！',
-    toast_streak_reset: 'ストリークがリセットされました',
   },
   en: {
     meta_description: 'One video a day. Record your habits with video.',
@@ -277,12 +272,6 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     restore_failed: 'Restore failed',
     pass_not_found: 'Pass product not found',
     product_not_found: 'Product info unavailable',
-    rescue_title: "Yesterday's record is missing",
-    rescue_body: 'Use a pass to fill in yesterday and maintain your streak?',
-    rescue_use_pass: 'Use pass ({count} remaining)',
-    rescue_skip: 'Skip (reset streak)',
-    toast_streak_rescued: 'Pass used — yesterday filled in!',
-    toast_streak_reset: 'Streak has been reset',
   },
 };
 
@@ -292,20 +281,19 @@ function pad2(n: number): string {
   return n < 10 ? '0' + n : '' + n;
 }
 
+// AM3:00 を日付境界として「アプリ上の今日」の日付文字列を返す
 function getAppDate(d?: Date): string {
-  const date = d || new Date();
-  const adj = new Date(date.getTime() - HOUR_BOUNDARY * 3600000);
-  return `${adj.getFullYear()}-${pad2(adj.getMonth() + 1)}-${pad2(adj.getDate())}`;
+  return format(subHours(d ?? new Date(), HOUR_BOUNDARY), 'yyyy-MM-dd');
 }
 
+// 週の曜日（0=日, 1=月 … 6=土）を AM3:00 基準で返す
 function getAppDayOfWeek(d?: Date): number {
-  const date = d || new Date();
-  const adj = new Date(date.getTime() - HOUR_BOUNDARY * 3600000);
-  return adj.getDay();
+  return getDay(subHours(d ?? new Date(), HOUR_BOUNDARY));
 }
 
+// date-fns でカレンダー日数差を計算（切り捨て誤差なし）
 function daysBetween(a: string, b: string): number {
-  return Math.round((new Date(b).getTime() - new Date(a).getTime()) / 86400000);
+  return differenceInCalendarDays(new Date(b), new Date(a));
 }
 
 const defaultState: AppState = {
@@ -349,7 +337,6 @@ export default function Page() {
   const [toastError, setToastError] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [guideVisible, setGuideVisible] = useState(false);
-  const [showStreakRescue, setShowStreakRescue] = useState(false);
 
   // Camera state
   const [camPermission, requestCamPermission] = useCameraPermissions();
@@ -433,12 +420,12 @@ export default function Page() {
     return s;
   }, []);
 
-  // updateStreak: 自動パス消費なし。2日以上放置でリセット、1日ギャップは救済バナーで別途処理
+  // 当日限定モデル: 前日までに記録もパスもなければ容赦なくリセット
   const updateStreak = useCallback((s: AppState): AppState => {
     if (!s.lastRecordDate) return s;
     const diff = daysBetween(s.lastRecordDate, getAppDate());
-    if (diff >= 3) return { ...s, streak: 0 }; // 2日以上放置 → リセット
-    return s; // diff=1(正常) or diff=2(1日ギャップ) はそのまま返す
+    if (diff >= 2) return { ...s, streak: 0 }; // 昨日以前から未記録 → 即リセット
+    return s; // diff=0(今日済) or diff=1(昨日済・今日まだ) はそのまま
   }, []);
 
   // ── RevenueCat helpers ──────────────────────────────────────────────────────
@@ -467,8 +454,8 @@ export default function Page() {
   const syncRCEntitlements = useCallback(async (): Promise<boolean> => {
     try {
       const info: CustomerInfo = await Purchases.getCustomerInfo();
-      const active = Object.keys(info.entitlements.active).length > 0;
-      return active;
+      // Entitlement ID 'premium' で判定
+      return !!info.entitlements.active['premium'];
     } catch {
       return false;
     }
@@ -507,7 +494,7 @@ export default function Page() {
     showToast(t('processing'));
     try {
       const { customerInfo } = await Purchases.purchasePackage(pkg);
-      const active = Object.keys(customerInfo.entitlements.active).length > 0;
+      const active = !!customerInfo.entitlements.active['premium'];
       if (active) {
         updateState({ subscribed: true });
         showToast(t('subscribe_success'));
@@ -530,7 +517,7 @@ export default function Page() {
     showToast(t('restoring'));
     try {
       const info = await Purchases.restorePurchases();
-      const active = Object.keys(info.entitlements.active).length > 0;
+      const active = !!info.entitlements.active['premium'];
       if (active) {
         updateState({ subscribed: true });
         showToast(t('restore_success'));
@@ -542,31 +529,6 @@ export default function Page() {
       showToast(t('restore_failed'), true);
     }
   }, [showToast, t, updateState]);
-
-  // ── Streak rescue (manual, 1-day gap) ──────────────────────────────────────
-
-  const rescueStreak = useCallback(() => {
-    const yesterday = getAppDate(new Date(Date.now() - 86400000));
-    setAppState(prev => {
-      const consumed = consumePass(prev);
-      const rescued = { ...consumed, lastRecordDate: yesterday };
-      saveAppState(rescued);
-      return rescued;
-    });
-    setShowStreakRescue(false);
-    showToast(t('toast_streak_rescued'));
-  }, [consumePass, saveAppState, showToast, t]);
-
-  const dismissRescue = useCallback(() => {
-    // パスを使わずスキップ → ストリークをリセット
-    setAppState(prev => {
-      const reset = { ...prev, streak: 0 };
-      saveAppState(reset);
-      return reset;
-    });
-    setShowStreakRescue(false);
-    showToast(t('toast_streak_reset'));
-  }, [saveAppState, showToast, t]);
 
   // ── Use pass ────────────────────────────────────────────────────────────────
 
@@ -688,17 +650,9 @@ export default function Page() {
   useEffect(() => {
     if (screen === 'home') {
       setAppState(prev => {
-        const afterStreak = updateStreak(prev);       // diff>=3 → streak=0, otherwise unchanged
-        const afterPass = checkPassGrant(afterStreak); // 月曜パス付与
+        const afterStreak = updateStreak(prev);        // diff>=2 → streak=0
+        const afterPass = checkPassGrant(afterStreak); // 月曜フリーパス付与
         if (afterPass !== prev) saveAppState(afterPass);
-
-        // 1日ギャップ（diff===2）: 救済バナーを表示するか判定
-        const diff = afterPass.lastRecordDate
-          ? daysBetween(afterPass.lastRecordDate, getAppDate())
-          : 0;
-        const canRescue = diff === 2 && (afterPass.freePassCount + afterPass.paidPassCount) > 0;
-        setShowStreakRescue(canRescue);
-
         return afterPass;
       });
     }
@@ -920,26 +874,6 @@ export default function Page() {
           <Feather name="video" size={32} color="#fff" />
         </TouchableOpacity>
       </View>
-      {/* ── ストリーク救済バナー（1日ギャップ・パスあり時のみ） ── */}
-      {showStreakRescue && (
-        <View style={styles.rescueBanner}>
-          <Feather name="alert-circle" size={16} color="#FFD700" style={{ marginBottom: 4 }} />
-          <Text style={styles.rescueTitle}>{t('rescue_title')}</Text>
-          <Text style={styles.rescueBody}>{t('rescue_body')}</Text>
-          <View style={styles.rescueActions}>
-            <TouchableOpacity style={styles.rescueSkipBtn} onPress={dismissRescue}>
-              <Text style={styles.rescueSkipText}>{t('rescue_skip')}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.rescueUseBtn} onPress={rescueStreak}>
-              <Ionicons name="ticket-outline" size={13} color="#fff" />
-              <Text style={styles.rescueUseText}>
-                {t('rescue_use_pass', { count: totalPassCount() })}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      )}
-
       <TouchableOpacity style={styles.passBtn} onPress={usePassToday}>
         <Ionicons name="ticket-outline" size={14} color="#fff" />
         <Text style={styles.passBtnText}>
@@ -1016,6 +950,11 @@ export default function Page() {
             <Text style={styles.countdownText}>{countdown}</Text>
           </View>
         )}
+        {/* 🔥 ストリーク表示 (常時) */}
+        <View style={styles.camStreakBadge}>
+          <Text style={styles.camStreakText}>🔥 {appState.streak}{lang === 'en' ? ' days' : '日連続'}</Text>
+        </View>
+
         {isRecording && appState.showRecordingCountdown && (
           <View style={styles.recIndicator}>
             <View style={styles.recDot} />
@@ -1566,63 +1505,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#222',
   },
-  // ── Streak Rescue Banner ──
-  rescueBanner: {
-    marginHorizontal: 16,
-    marginBottom: 8,
-    backgroundColor: '#1a1200',
-    borderWidth: 1,
-    borderColor: '#FFD700',
-    borderRadius: 12,
-    padding: 14,
-    alignItems: 'center',
-  },
-  rescueTitle: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#FFD700',
-    marginBottom: 4,
-  },
-  rescueBody: {
-    fontSize: 12,
-    color: '#ccc',
-    textAlign: 'center',
-    marginBottom: 10,
-    lineHeight: 18,
-  },
-  rescueActions: {
-    flexDirection: 'row',
-    gap: 8,
-    width: '100%',
-  },
-  rescueSkipBtn: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: '#444',
-    borderRadius: 8,
-    paddingVertical: 10,
-    alignItems: 'center',
-  },
-  rescueSkipText: {
-    color: '#777',
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  rescueUseBtn: {
-    flex: 2,
-    backgroundColor: '#8B0000',
-    borderRadius: 8,
-    paddingVertical: 10,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 6,
-  },
-  rescueUseText: {
-    color: '#fff',
-    fontSize: 11,
-    fontWeight: '700',
-  },
   passBtnText: {
     color: '#aaa',
     fontSize: 13,
@@ -1647,6 +1529,21 @@ const styles = StyleSheet.create({
     fontSize: 80,
     fontWeight: '900',
     color: '#fff',
+  },
+  camStreakBadge: {
+    position: 'absolute',
+    top: 16,
+    alignSelf: 'center',
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+  },
+  camStreakText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '800',
+    letterSpacing: 0.5,
   },
   recIndicator: {
     position: 'absolute',
