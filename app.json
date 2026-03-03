@@ -1,0 +1,42 @@
+{
+  "expo": {
+    "name": "One Shot",
+    "slug": "one-shot",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icons/AppIcon.appiconset/icon-1024.png",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "backgroundColor": "#000000"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.jin.oneshot",
+      "icon": "./assets/icons/AppIcon.appiconset/icon-1024.png"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/icons/AppIcon.appiconset/icon-1024.png",
+        "backgroundColor": "#000000"
+      },
+      "package": "com.jin.oneshot"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-camera",
+      "expo-media-library",
+      [
+        "expo-av",
+        {
+          "microphonePermission": "Allow $(PRODUCT_NAME) to access your microphone."
+        }
+      ]
+    ],
+    "scheme": "oneshot",
+    "extra": {
+      "eas": {
+        "projectId": ""
+      }
+    }
+  }
+}
