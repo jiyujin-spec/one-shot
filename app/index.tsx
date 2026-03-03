@@ -13,14 +13,13 @@ import {
   ScrollView,
   StyleSheet,
   Alert,
-  Platform,
-  StatusBar,
   Modal,
   Switch,
   Dimensions,
   ActivityIndicator,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { CameraView, CameraType, useCameraPermissions } from 'expo-camera';
 import * as MediaLibrary from 'expo-media-library';
 import * as Sharing from 'expo-sharing';
@@ -757,10 +756,9 @@ export default function Page() {
 
   if (isLoading) {
     return (
-      <View style={styles.loadingContainer}>
-        <StatusBar barStyle="light-content" backgroundColor="#000" />
+      <SafeAreaView style={styles.loadingContainer} edges={['top', 'bottom']}>
         <ActivityIndicator size="large" color="#8B0000" />
-      </View>
+      </SafeAreaView>
     );
   }
 
@@ -1168,8 +1166,7 @@ export default function Page() {
   // ─── Render ───────────────────────────────────────────────────────────────────
 
   return (
-    <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#000" />
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
 
       {screen === 'onboarding' && <OnboardingScreen />}
       {screen === 'paywall' && <PaywallScreen />}
@@ -1212,7 +1209,7 @@ export default function Page() {
 
       <GuideModal />
       {toastMsg ? <Toast message={toastMsg} isError={toastError} /> : null}
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -1412,7 +1409,7 @@ const styles = StyleSheet.create({
 
   // ── Home ──
   homeHeader: {
-    paddingTop: Platform.OS === 'ios' ? 56 : 24,
+    paddingTop: 16,
     paddingHorizontal: 24,
     paddingBottom: 12,
   },
@@ -1607,7 +1604,7 @@ const styles = StyleSheet.create({
   // ── History ──
   historyContent: {
     padding: 16,
-    paddingTop: Platform.OS === 'ios' ? 56 : 24,
+    paddingTop: 16,
   },
   calHeader: {
     flexDirection: 'row',
@@ -1674,7 +1671,7 @@ const styles = StyleSheet.create({
   // ── Settings ──
   settingsContent: {
     padding: 20,
-    paddingTop: Platform.OS === 'ios' ? 56 : 24,
+    paddingTop: 16,
   },
   settingsTitle: {
     fontSize: 16,
@@ -1766,7 +1763,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#000',
     borderTopWidth: 1,
     borderTopColor: '#1a1a1a',
-    paddingBottom: Platform.OS === 'ios' ? 24 : 8,
+    paddingBottom: 4,
   },
   navItem: {
     flex: 1,
