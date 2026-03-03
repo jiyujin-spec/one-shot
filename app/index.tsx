@@ -25,6 +25,7 @@ import * as MediaLibrary from 'expo-media-library';
 import * as Sharing from 'expo-sharing';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import { Video, ResizeMode } from 'expo-av';
+import { differenceInCalendarDays, subHours, getDay, format } from 'date-fns';
 import Purchases, {
   PurchasesOfferings,
   PurchasesPackage,
@@ -292,20 +293,19 @@ function pad2(n: number): string {
   return n < 10 ? '0' + n : '' + n;
 }
 
+// AM3:00 を日付境界として「アプリ上の今日」の日付文字列を返す
 function getAppDate(d?: Date): string {
-  const date = d || new Date();
-  const adj = new Date(date.getTime() - HOUR_BOUNDARY * 3600000);
-  return `${adj.getFullYear()}-${pad2(adj.getMonth() + 1)}-${pad2(adj.getDate())}`;
+  return format(subHours(d ?? new Date(), HOUR_BOUNDARY), 'yyyy-MM-dd');
 }
 
+// 週の曜日（0=日, 1=月 … 6=土）を AM3:00 基準で返す
 function getAppDayOfWeek(d?: Date): number {
-  const date = d || new Date();
-  const adj = new Date(date.getTime() - HOUR_BOUNDARY * 3600000);
-  return adj.getDay();
+  return getDay(subHours(d ?? new Date(), HOUR_BOUNDARY));
 }
 
+// date-fns でカレンダー日数差を計算（切り捨て誤差なし）
 function daysBetween(a: string, b: string): number {
-  return Math.round((new Date(b).getTime() - new Date(a).getTime()) / 86400000);
+  return differenceInCalendarDays(new Date(b), new Date(a));
 }
 
 const defaultState: AppState = {
@@ -467,8 +467,8 @@ export default function Page() {
   const syncRCEntitlements = useCallback(async (): Promise<boolean> => {
     try {
       const info: CustomerInfo = await Purchases.getCustomerInfo();
-      const active = Object.keys(info.entitlements.active).length > 0;
-      return active;
+      // Entitlement ID 'premium' で判定
+      return !!info.entitlements.active['premium'];
     } catch {
       return false;
     }
@@ -507,7 +507,7 @@ export default function Page() {
     showToast(t('processing'));
     try {
       const { customerInfo } = await Purchases.purchasePackage(pkg);
-      const active = Object.keys(customerInfo.entitlements.active).length > 0;
+      const active = !!customerInfo.entitlements.active['premium'];
       if (active) {
         updateState({ subscribed: true });
         showToast(t('subscribe_success'));
@@ -530,7 +530,7 @@ export default function Page() {
     showToast(t('restoring'));
     try {
       const info = await Purchases.restorePurchases();
-      const active = Object.keys(info.entitlements.active).length > 0;
+      const active = !!info.entitlements.active['premium'];
       if (active) {
         updateState({ subscribed: true });
         showToast(t('restore_success'));
@@ -546,7 +546,7 @@ export default function Page() {
   // ── Streak rescue (manual, 1-day gap) ──────────────────────────────────────
 
   const rescueStreak = useCallback(() => {
-    const yesterday = getAppDate(new Date(Date.now() - 86400000));
+    const yesterday = getAppDate(subHours(new Date(Date.now() - 86400000), 0));
     setAppState(prev => {
       const consumed = consumePass(prev);
       const rescued = { ...consumed, lastRecordDate: yesterday };
@@ -556,6 +556,29 @@ export default function Page() {
     setShowStreakRescue(false);
     showToast(t('toast_streak_rescued'));
   }, [consumePass, saveAppState, showToast, t]);
+
+  // パスを持っていない場合: 購入→即座に救済
+  const purchaseAndRescue = useCallback(async () => {
+    const pkg = findRCPackage('pass');
+    if (!pkg) { showToast(t('pass_not_found'), true); return; }
+    showToast(t('processing'));
+    try {
+      await Purchases.purchasePackage(pkg);
+      // 購入成功 → paidPassCount+1 してから即座に消費・救済
+      const yesterday = getAppDate(new Date(Date.now() - 86400000));
+      setAppState(prev => {
+        const withPass = { ...prev, paidPassCount: prev.paidPassCount + 1 };
+        const consumed = consumePass(withPass);
+        const rescued = { ...consumed, lastRecordDate: yesterday };
+        saveAppState(rescued);
+        return rescued;
+      });
+      setShowStreakRescue(false);
+      showToast(t('toast_streak_rescued'));
+    } catch (e: any) {
+      if (!e.userCancelled) showToast(t('purchase_failed'), true);
+    }
+  }, [findRCPackage, consumePass, saveAppState, showToast, t]);
 
   const dismissRescue = useCallback(() => {
     // パスを使わずスキップ → ストリークをリセット
@@ -696,8 +719,8 @@ export default function Page() {
         const diff = afterPass.lastRecordDate
           ? daysBetween(afterPass.lastRecordDate, getAppDate())
           : 0;
-        const canRescue = diff === 2 && (afterPass.freePassCount + afterPass.paidPassCount) > 0;
-        setShowStreakRescue(canRescue);
+        // 1日ギャップならパス所持数に関わらずバナー表示（購入フローも用意するため）
+        setShowStreakRescue(diff === 2);
 
         return afterPass;
       });
@@ -930,12 +953,21 @@ export default function Page() {
             <TouchableOpacity style={styles.rescueSkipBtn} onPress={dismissRescue}>
               <Text style={styles.rescueSkipText}>{t('rescue_skip')}</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.rescueUseBtn} onPress={rescueStreak}>
-              <Ionicons name="ticket-outline" size={13} color="#fff" />
-              <Text style={styles.rescueUseText}>
-                {t('rescue_use_pass', { count: totalPassCount() })}
-              </Text>
-            </TouchableOpacity>
+            {totalPassCount() > 0 ? (
+              // パスを持っている → 即消費して救済
+              <TouchableOpacity style={styles.rescueUseBtn} onPress={rescueStreak}>
+                <Ionicons name="ticket-outline" size={13} color="#fff" />
+                <Text style={styles.rescueUseText}>
+                  {t('rescue_use_pass', { count: totalPassCount() })}
+                </Text>
+              </TouchableOpacity>
+            ) : (
+              // パスなし → 購入して救済
+              <TouchableOpacity style={styles.rescueUseBtn} onPress={purchaseAndRescue}>
+                <Feather name="shopping-cart" size={13} color="#fff" />
+                <Text style={styles.rescueUseText}>{t('pass_purchase_btn')}</Text>
+              </TouchableOpacity>
+            )}
           </View>
         </View>
       )}
@@ -1016,6 +1048,11 @@ export default function Page() {
             <Text style={styles.countdownText}>{countdown}</Text>
           </View>
         )}
+        {/* 🔥 ストリーク表示 (常時) */}
+        <View style={styles.camStreakBadge}>
+          <Text style={styles.camStreakText}>🔥 {appState.streak}{lang === 'en' ? ' days' : '日連続'}</Text>
+        </View>
+
         {isRecording && appState.showRecordingCountdown && (
           <View style={styles.recIndicator}>
             <View style={styles.recDot} />
@@ -1647,6 +1684,21 @@ const styles = StyleSheet.create({
     fontSize: 80,
     fontWeight: '900',
     color: '#fff',
+  },
+  camStreakBadge: {
+    position: 'absolute',
+    top: 16,
+    alignSelf: 'center',
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+  },
+  camStreakText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '800',
+    letterSpacing: 0.5,
   },
   recIndicator: {
     position: 'absolute',
