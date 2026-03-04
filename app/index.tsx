@@ -18,6 +18,8 @@ import {
   Switch,
   Dimensions,
   ActivityIndicator,
+  Image,
+  Linking,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -26,6 +28,8 @@ import * as MediaLibrary from 'expo-media-library';
 import * as Sharing from 'expo-sharing';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import { Video, ResizeMode } from 'expo-av';
+import { LinearGradient } from 'expo-linear-gradient';
+import MaskedView from '@react-native-masked-view/masked-view';
 import { differenceInCalendarDays, subHours, getDay, format } from 'date-fns';
 import Purchases, {
   PurchasesOfferings,
@@ -345,9 +349,12 @@ export default function Page() {
   const [facing, setFacing] = useState<CameraType>('front');
   const [camMode, setCamMode] = useState<'video' | 'photo'>('video');
   const [isRecording, setIsRecording] = useState(false);
-  const [countdown, setCountdown] = useState<number | null>(null);
+  const [countdown, setCountdown] = useState<number | null>(null);       // 撮影前 3-2-1
+  const [recordingCountdown, setRecordingCountdown] = useState<number | null>(null); // 録画中残り秒数
   const [capturedUri, setCapturedUri] = useState<string | null>(null);
+  const [capturedType, setCapturedType] = useState<'photo' | 'video'>('video');
   const recordingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const recordingCountdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [isPreviewPlaying, setIsPreviewPlaying] = useState(false);
   const cameraRef = useRef<CameraView>(null);
   const previewVideoRef = useRef<Video>(null);
@@ -663,71 +670,91 @@ export default function Page() {
 
   // ── Camera recording ────────────────────────────────────────────────────────
 
+  const clearCamTimers = useCallback(() => {
+    if (recordingTimerRef.current) { clearTimeout(recordingTimerRef.current); recordingTimerRef.current = null; }
+    if (recordingCountdownRef.current) { clearInterval(recordingCountdownRef.current); recordingCountdownRef.current = null; }
+  }, []);
+
   const startRecording = useCallback(async () => {
     if (isRecording || countdown !== null) return;
 
-    // 権限確認（未許可なら再リクエスト）
+    // 権限確認
     if (!camPermission?.granted) {
       const result = await requestCamPermission();
       if (!result.granted) return;
     }
     if (!cameraRef.current) return;
 
-    // 3-2-1 カウントダウン
-    for (let i = 3; i >= 1; i--) {
-      setCountdown(i);
-      await new Promise<void>(r => setTimeout(r, 1000));
+    // ── 事前カウントダウン（トグル ON 時のみ）──
+    if (appState.showRecordingCountdown) {
+      for (let i = 3; i >= 1; i--) {
+        setCountdown(i);
+        await new Promise<void>(r => setTimeout(r, 1000));
+      }
+      setCountdown(null);
     }
-    setCountdown(null);
 
-    // 写真モード
+    // ── 写真モード ──
     if (camMode === 'photo') {
       try {
         const photo = await cameraRef.current.takePictureAsync({ quality: 0.9 });
         setCapturedUri(photo?.uri ?? null);
+        setCapturedType('photo');
       } catch (e) {
         showToast(t('toast_camera_error') + String(e), true);
       }
       return;
     }
 
-    // 動画モード
+    // ── 動画モード（3秒録画 + 残り秒数カウントダウン表示）──
     setIsRecording(true);
-    try {
-      // maxDuration を少し長めにして、手動 stopRecording に委ねる
-      const promise = cameraRef.current.recordAsync({ maxDuration: 5 });
+    const RECORD_SECS = 3;
 
-      // 3秒後に自動停止
-      if (recordingTimerRef.current) clearTimeout(recordingTimerRef.current);
+    // 録画中カウントダウン表示を開始
+    setRecordingCountdown(RECORD_SECS);
+    let remaining = RECORD_SECS;
+    recordingCountdownRef.current = setInterval(() => {
+      remaining -= 1;
+      if (remaining <= 0) {
+        setRecordingCountdown(null);
+        if (recordingCountdownRef.current) { clearInterval(recordingCountdownRef.current); recordingCountdownRef.current = null; }
+      } else {
+        setRecordingCountdown(remaining);
+      }
+    }, 1000);
+
+    try {
+      const promise = cameraRef.current.recordAsync({ maxDuration: RECORD_SECS + 1 });
+
+      // 安全マージン +200ms で強制停止
       recordingTimerRef.current = setTimeout(() => {
         cameraRef.current?.stopRecording();
-      }, 3000);
+      }, RECORD_SECS * 1000 + 200);
 
       const result = await promise;
-      if (recordingTimerRef.current) {
-        clearTimeout(recordingTimerRef.current);
-        recordingTimerRef.current = null;
-      }
+      clearCamTimers();
+      setRecordingCountdown(null);
       setCapturedUri(result?.uri ?? null);
+      setCapturedType('video');
     } catch (e: any) {
-      // ユーザーキャンセル or 権限エラーは静かに無視
+      clearCamTimers();
       if (!String(e).includes('cancel') && !String(e).includes('stopped')) {
         showToast(t('toast_camera_error') + String(e), true);
       }
     } finally {
       setIsRecording(false);
       setCountdown(null);
+      setRecordingCountdown(null);
     }
-  }, [camPermission, requestCamPermission, isRecording, countdown, camMode, showToast, t]);
+  }, [camPermission, requestCamPermission, isRecording, countdown, camMode,
+      appState.showRecordingCountdown, clearCamTimers, showToast, t]);
 
   const retake = useCallback(() => {
-    if (recordingTimerRef.current) {
-      clearTimeout(recordingTimerRef.current);
-      recordingTimerRef.current = null;
-    }
+    clearCamTimers();
     setCapturedUri(null);
+    setCapturedType('video');
     setIsPreviewPlaying(false);
-  }, []);
+  }, [clearCamTimers]);
 
   const saveCapture = useCallback(async () => {
     if (!capturedUri) return;
@@ -742,17 +769,33 @@ export default function Page() {
     }
   }, [capturedUri, mediaPermission, requestMediaPermission, recordToday, showToast, t]);
 
-  const shareCapture = useCallback(async () => {
+  // Instagram Stories への直接シェア（インストール済みの場合）
+  // フォールバック: システムシェアシートで選択可能
+  const shareToInstagram = useCallback(async () => {
     if (!capturedUri) return;
     try {
-      const canShare = await Sharing.isAvailableAsync();
-      if (!canShare) { showToast(t('toast_share_unsupported')); return; }
-      await Sharing.shareAsync(capturedUri);
+      // Instagram がインストール済みか確認
+      const igScheme = 'instagram://';
+      const igInstalled = await Linking.canOpenURL(igScheme).catch(() => false);
+      if (igInstalled) {
+        // システムシェアシートを Instagram 向けに開く
+        await Sharing.shareAsync(capturedUri, {
+          UTI: capturedType === 'photo' ? 'public.image' : 'public.movie',
+          mimeType: capturedType === 'photo' ? 'image/jpeg' : 'video/mp4',
+          dialogTitle: 'Share to Instagram Stories',
+        });
+      } else {
+        const canShare = await Sharing.isAvailableAsync();
+        if (!canShare) { showToast(t('toast_share_unsupported')); return; }
+        await Sharing.shareAsync(capturedUri);
+      }
       showToast(t('toast_share_done'));
-    } catch (e) {
-      showToast(t('toast_share_fail') + String(e), true);
+    } catch (e: any) {
+      if (!e?.message?.includes('cancel')) {
+        showToast(t('toast_share_fail') + String(e), true);
+      }
     }
-  }, [capturedUri, showToast, t]);
+  }, [capturedUri, capturedType, showToast, t]);
 
   // ── Language switch ─────────────────────────────────────────────────────────
 
@@ -880,9 +923,20 @@ export default function Page() {
         </TouchableOpacity>
       </View>
 
-      {/* ── 大きいストリーク数字 (flex:1 で残りを占有) ── */}
+      {/* ── ストリーク数字（Web版と同じ縦グラデーション: 白→グレー） ── */}
       <View style={styles.streakSection}>
-        <Text style={styles.streakNum}>{appState.streak}</Text>
+        {/* MaskedView: テキスト形状をマスクとして LinearGradient を型抜き */}
+        <MaskedView maskElement={<Text style={styles.streakNum}>{appState.streak}</Text>}>
+          <LinearGradient
+            colors={['#ffffff', '#ffffff', '#555555']}
+            locations={[0, 0.3, 1.0]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 0, y: 1 }}
+          >
+            {/* opacity:0 でグラデーションのサイズをテキストに合わせる */}
+            <Text style={[styles.streakNum, { opacity: 0 }]}>{appState.streak}</Text>
+          </LinearGradient>
+        </MaskedView>
         <Text style={styles.streakLabel}>{t('streak_label')}</Text>
       </View>
 
@@ -945,10 +999,12 @@ export default function Page() {
   // ─── Camera Screen ────────────────────────────────────────────────────────────
 
   const CameraScreen = () => {
-    if (!camPermission) return <ActivityIndicator style={styles.screenCenter} />;
+    // ── 権限なし ──
+    if (!camPermission) return <ActivityIndicator color="#fff" style={styles.screenCenter} />;
     if (!camPermission.granted) {
       return (
         <View style={styles.screenCenter}>
+          <Feather name="camera-off" size={44} color="#555" style={{ marginBottom: 24 }} />
           <Text style={styles.permTitle}>{t('cam_permission_title')}</Text>
           <Text style={styles.permBody}>{t('cam_permission_body')}</Text>
           <TouchableOpacity style={styles.btnPrimary} onPress={requestCamPermission}>
@@ -961,10 +1017,43 @@ export default function Page() {
       );
     }
 
-    if (capturedUri) {
+    // ── 写真プレビュー（フィルターオーバーレイ付き）──
+    if (capturedUri && capturedType === 'photo') {
+      const filterDate = format(new Date(), lang === 'en' ? 'MM/dd/yyyy HH:mm' : 'yyyy年M月d日 H時m分');
       return (
         <View style={styles.cameraContainer}>
-          {/* 動画: 初期は静止（shouldPlay=false）、長押し中のみ再生 */}
+          <Image source={{ uri: capturedUri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+
+          {/* フィルター: 日時 / Day / 目標 */}
+          <View style={styles.photoFilterOverlay}>
+            <Text style={styles.photoFilterDate}>{filterDate}</Text>
+            <Text style={styles.photoFilterDay}>DAY {appState.streak + 1}</Text>
+            <Text style={styles.photoFilterGoal}>{appState.goal}</Text>
+          </View>
+
+          {/* アクションボタン */}
+          <View style={styles.previewActions}>
+            <TouchableOpacity style={styles.previewBtn} onPress={retake}>
+              <Feather name="rotate-ccw" size={16} color="#fff" />
+              <Text style={styles.previewBtnText}>{t('retry_btn')}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.previewBtnPrimary} onPress={saveCapture}>
+              <Feather name="check" size={16} color="#fff" />
+              <Text style={styles.previewBtnText}>{t('save_btn')}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.previewBtn} onPress={shareToInstagram}>
+              <Feather name="instagram" size={16} color="#fff" />
+              <Text style={styles.previewBtnText}>Instagram</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      );
+    }
+
+    // ── 動画プレビュー（長押し再生）──
+    if (capturedUri && capturedType === 'video') {
+      return (
+        <View style={styles.cameraContainer}>
           <Video
             ref={previewVideoRef}
             source={{ uri: capturedUri }}
@@ -976,13 +1065,12 @@ export default function Page() {
             positionMillis={0}
           />
 
-          {/* 長押し検知エリア（ボタン領域を除いた全画面） */}
+          {/* 長押し検知（ボタン行を除く全画面）*/}
           <Pressable
             style={styles.previewPressArea}
             onLongPress={() => setIsPreviewPlaying(true)}
             onPressOut={async () => {
               setIsPreviewPlaying(false);
-              // 指を離したら先頭フレームに戻す
               await previewVideoRef.current?.setPositionAsync(0);
             }}
             delayLongPress={150}
@@ -993,7 +1081,7 @@ export default function Page() {
             <Text style={styles.previewDayText}>DAY {appState.streak + 1}</Text>
           </View>
 
-          {/* 長押しガイド（再生中は非表示） */}
+          {/* 長押しガイド（再生中は非表示）*/}
           {!isPreviewPlaying && (
             <View style={styles.previewHint}>
               <Feather name="play-circle" size={18} color="rgba(255,255,255,0.7)" />
@@ -1013,15 +1101,16 @@ export default function Page() {
               <Feather name="check" size={16} color="#fff" />
               <Text style={styles.previewBtnText}>{t('save_btn')}</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.previewBtn} onPress={shareCapture}>
-              <Feather name="share-2" size={16} color="#fff" />
-              <Text style={styles.previewBtnText}>{t('share_btn')}</Text>
+            <TouchableOpacity style={styles.previewBtn} onPress={shareToInstagram}>
+              <Feather name="instagram" size={16} color="#fff" />
+              <Text style={styles.previewBtnText}>Instagram</Text>
             </TouchableOpacity>
           </View>
         </View>
       );
     }
 
+    // ── メインカメラビュー ──
     return (
       <View style={styles.cameraContainer}>
         <CameraView
@@ -1030,45 +1119,97 @@ export default function Page() {
           facing={facing}
           mode={camMode === 'video' ? 'video' : 'picture'}
         />
+
+        {/* ストリークバッジ（常時表示）*/}
+        <View style={styles.camStreakBadge}>
+          <Text style={styles.camStreakText}>
+            🔥 {appState.streak}{lang === 'en' ? ' days' : '日連続'}
+          </Text>
+        </View>
+
+        {/* 事前カウントダウン（全画面オーバーレイ）*/}
         {countdown !== null && (
           <View style={styles.countdownOverlay}>
             <Text style={styles.countdownText}>{countdown}</Text>
           </View>
         )}
-        {/* 🔥 ストリーク表示 (常時) */}
-        <View style={styles.camStreakBadge}>
-          <Text style={styles.camStreakText}>🔥 {appState.streak}{lang === 'en' ? ' days' : '日連続'}</Text>
-        </View>
 
-        {isRecording && appState.showRecordingCountdown && (
+        {/* 録画中カウントダウン（上部バッジ）*/}
+        {isRecording && recordingCountdown !== null && (
+          <View style={styles.recCountdownBadge}>
+            <Text style={styles.recCountdownText}>
+              {lang === 'en' ? `${recordingCountdown}s` : `残り ${recordingCountdown}秒`}
+            </Text>
+          </View>
+        )}
+
+        {/* REC インジケーター */}
+        {isRecording && (
           <View style={styles.recIndicator}>
             <View style={styles.recDot} />
             <Text style={styles.recText}>REC</Text>
           </View>
         )}
-        <View style={styles.camControls}>
-          <TouchableOpacity onPress={() => setScreen('home')}>
-            <Feather name="x" size={28} color="#fff" />
+
+        {/* トップバー: 閉じる（左）+ フリップ（右）*/}
+        <View style={styles.camTopBar}>
+          <TouchableOpacity style={styles.camTopBtn} onPress={() => setScreen('home')}>
+            <Feather name="x" size={20} color="#fff" />
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.shutterBtn, isRecording && styles.shutterBtnActive]}
-            onPress={startRecording}
-            disabled={isRecording || countdown !== null}
+            style={styles.camTopBtn}
+            onPress={() => setFacing(f => f === 'front' ? 'back' : 'front')}
           >
-            <View style={styles.shutterInner} />
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => setFacing(f => f === 'front' ? 'back' : 'front')}>
-            <Feather name="refresh-cw" size={24} color="#fff" />
+            <Feather name="refresh-cw" size={20} color="#fff" />
           </TouchableOpacity>
         </View>
-        <View style={styles.camModeRow}>
-          {(['video', 'photo'] as const).map(m => (
-            <TouchableOpacity key={m} onPress={() => setCamMode(m)}>
-              <Text style={[styles.camModeBtn, camMode === m && styles.camModeBtnActive]}>
-                {t(m === 'video' ? 'mode_video' : 'mode_photo')}
-              </Text>
+
+        {/* ボトム: モード切替 + シャッター + 事前カウントダウン ON/OFF */}
+        <View style={styles.camBottomArea}>
+          {/* モードタブ */}
+          <View style={styles.camModeRow}>
+            {(['video', 'photo'] as const).map(m => (
+              <TouchableOpacity
+                key={m}
+                onPress={() => !isRecording && setCamMode(m)}
+                style={[styles.camModeTab, camMode === m && styles.camModeTabActive]}
+              >
+                <Text style={[styles.camModeBtn, camMode === m && styles.camModeBtnActive]}>
+                  {t(m === 'video' ? 'mode_video' : 'mode_photo')}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          {/* シャッターエリア */}
+          <View style={styles.camControls}>
+            {/* 事前カウントダウン トグル */}
+            <View style={styles.camPreCountToggle}>
+              <Feather
+                name="clock"
+                size={13}
+                color={appState.showRecordingCountdown ? '#fff' : '#555'}
+              />
+              <Switch
+                value={appState.showRecordingCountdown}
+                onValueChange={v => updateState({ showRecordingCountdown: v })}
+                thumbColor="#fff"
+                trackColor={{ false: '#333', true: '#8B0000' }}
+                style={{ transform: [{ scaleX: 0.8 }, { scaleY: 0.8 }] }}
+              />
+            </View>
+
+            {/* シャッターボタン */}
+            <TouchableOpacity
+              style={[styles.shutterBtn, isRecording && styles.shutterBtnActive]}
+              onPress={startRecording}
+              disabled={isRecording || countdown !== null}
+            >
+              <View style={[styles.shutterInner, isRecording && styles.shutterInnerRec]} />
             </TouchableOpacity>
-          ))}
+
+            <View style={styles.camTopSpacer} />
+          </View>
         </View>
       </View>
     );
@@ -1318,21 +1459,21 @@ const CELL_SIZE = Math.floor((width - 32) / 7);
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: 'transparent',
+    backgroundColor: '#000',
   },
   loadingContainer: {
     flex: 1,
-    backgroundColor: 'transparent',
+    backgroundColor: '#000',
     justifyContent: 'center',
     alignItems: 'center',
   },
   screen: {
     flex: 1,
-    backgroundColor: 'transparent',
+    backgroundColor: '#000',
   },
   screenCenter: {
     flex: 1,
-    backgroundColor: 'transparent',
+    backgroundColor: '#000',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 24,
@@ -1671,39 +1812,67 @@ const styles = StyleSheet.create({
   camera: {
     flex: 1,
   },
+
+  // 事前カウントダウン（全画面オーバーレイ）
   countdownOverlay: {
     ...StyleSheet.absoluteFillObject,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.4)',
+    backgroundColor: 'rgba(0,0,0,0.5)',
   },
   countdownText: {
-    fontSize: 80,
+    fontSize: 96,
     fontWeight: '900',
     color: '#fff',
+    letterSpacing: -2,
   },
+
+  // ストリークバッジ（カメラ上部・中央）
   camStreakBadge: {
     position: 'absolute',
-    top: 16,
+    top: 60,
     alignSelf: 'center',
-    backgroundColor: 'rgba(0,0,0,0.55)',
+    backgroundColor: 'rgba(0,0,0,0.6)',
     borderRadius: 20,
     paddingHorizontal: 16,
     paddingVertical: 6,
   },
   camStreakText: {
     color: '#fff',
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '800',
     letterSpacing: 0.5,
   },
+
+  // 録画中残り秒数バッジ（中央上部）
+  recCountdownBadge: {
+    position: 'absolute',
+    top: 110,
+    alignSelf: 'center',
+    backgroundColor: 'rgba(139,0,0,0.75)',
+    borderRadius: 16,
+    paddingHorizontal: 18,
+    paddingVertical: 5,
+  },
+  recCountdownText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '900',
+    letterSpacing: 1,
+  },
+
+  // REC ドット + テキスト
   recIndicator: {
     position: 'absolute',
-    top: 16,
-    left: 16,
+    top: 18,
+    left: 18,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
   },
   recDot: {
     width: 8,
@@ -1716,20 +1885,85 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
   },
-  camControls: {
+
+  // トップバー（閉じる・フリップ）
+  camTopBar: {
     position: 'absolute',
-    bottom: 40,
+    top: 16,
+    left: 16,
+    right: 16,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  camTopBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  camTopSpacer: {
+    width: 64,
+  },
+
+  // ボトムエリア（モードタブ + シャッター）
+  camBottomArea: {
+    position: 'absolute',
+    bottom: 0,
     left: 0,
     right: 0,
+    paddingBottom: 32,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+  },
+
+  // モードタブ
+  camModeRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+  },
+  camModeTab: {
+    paddingHorizontal: 20,
+    paddingVertical: 6,
+    borderRadius: 16,
+  },
+  camModeTabActive: {
+    backgroundColor: 'rgba(255,255,255,0.12)',
+  },
+  camModeBtn: {
+    color: '#888',
+    fontSize: 13,
+    fontWeight: '600',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+  },
+  camModeBtnActive: {
+    color: '#fff',
+  },
+
+  // シャッターエリア（トグル + ボタン + スペーサー）
+  camControls: {
     flexDirection: 'row',
     justifyContent: 'space-around',
     alignItems: 'center',
-    paddingHorizontal: 40,
+    paddingHorizontal: 32,
   },
+
+  // 事前カウントダウン トグル
+  camPreCountToggle: {
+    width: 64,
+    alignItems: 'center',
+    gap: 4,
+  },
+
+  // シャッターボタン
   shutterBtn: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
+    width: 76,
+    height: 76,
+    borderRadius: 38,
     borderWidth: 3,
     borderColor: '#fff',
     justifyContent: 'center',
@@ -1739,28 +1973,47 @@ const styles = StyleSheet.create({
     borderColor: '#f00',
   },
   shutterInner: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
     backgroundColor: '#fff',
   },
-  camModeRow: {
+  // 録画中: 赤い角丸四角形に変化
+  shutterInnerRec: {
+    width: 28,
+    height: 28,
+    borderRadius: 6,
+    backgroundColor: '#f00',
+  },
+
+  // 写真フィルターオーバーレイ
+  photoFilterOverlay: {
     position: 'absolute',
-    bottom: 120,
-    left: 0,
-    right: 0,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 24,
+    bottom: 90,
+    left: 16,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    gap: 2,
   },
-  camModeBtn: {
-    color: '#888',
-    fontSize: 13,
+  photoFilterDate: {
+    color: 'rgba(255,255,255,0.75)',
+    fontSize: 11,
     fontWeight: '600',
-    letterSpacing: 1,
+    letterSpacing: 0.5,
   },
-  camModeBtnActive: {
+  photoFilterDay: {
     color: '#fff',
+    fontSize: 18,
+    fontWeight: '900',
+    letterSpacing: 2,
+  },
+  photoFilterGoal: {
+    color: '#8B0000',
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 0.5,
   },
   previewPressArea: {
     ...StyleSheet.absoluteFillObject,
@@ -1996,9 +2249,9 @@ const styles = StyleSheet.create({
   // ── Bottom Nav ──
   bottomNav: {
     flexDirection: 'row',
-    backgroundColor: 'rgba(5,2,2,0.92)',
+    backgroundColor: '#000',
     borderTopWidth: 1,
-    borderTopColor: '#1f0a0a',
+    borderTopColor: '#1a1a1a',
     paddingBottom: 4,
   },
   navItem: {
