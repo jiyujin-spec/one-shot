@@ -38,6 +38,8 @@ import Purchases, {
 } from 'react-native-purchases';
 import { FFmpegKit, ReturnCode } from 'ffmpeg-kit-react-native';
 import { captureRef } from 'react-native-view-shot';
+import * as Notifications from 'expo-notifications';
+import * as StoreReview from 'expo-store-review';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -64,6 +66,7 @@ interface AppState {
   subscribed: boolean;
   showRecordingCountdown: boolean;
   rcUserID: string;
+  reviewRequested: boolean;
 }
 
 interface RecordEntry {
@@ -330,7 +333,35 @@ const defaultState: AppState = {
   subscribed: false,
   showRecordingCountdown: true,
   rcUserID: '',
+  reviewRequested: false,
 };
+
+// ─── Notifications ────────────────────────────────────────────────────────────
+
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+  }),
+});
+
+async function scheduleDailyNotification(timeStr: string, title: string, body: string) {
+  await Notifications.cancelAllScheduledNotificationsAsync();
+  const parts = timeStr.split(':');
+  const h = parseInt(parts[0], 10);
+  const m = parseInt(parts[1] ?? '0', 10);
+  if (isNaN(h) || isNaN(m)) return;
+  await Notifications.scheduleNotificationAsync({
+    content: { title, body, sound: true },
+    trigger: {
+      hour: h,
+      minute: m,
+      repeats: true,
+      type: Notifications.SchedulableTriggerInputTypes.DAILY,
+    },
+  });
+}
 
 // ─── StableCameraView ─────────────────────────────────────────────────────────
 // CameraView を React.memo でラップし、親の state 変化による再レンダリングを防ぐ
@@ -404,6 +435,9 @@ export default function Page() {
 
   // RevenueCat state
   const [rcOfferings, setRcOfferings] = useState<PurchasesOfferings | null>(null);
+
+  // Review trigger
+  const [reviewReady, setReviewReady] = useState(false);
 
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -618,12 +652,30 @@ export default function Page() {
       const newStreak = diff <= 1 ? prev.streak + 1 : 1;
       const newEntry: RecordEntry = { date: today, day: newStreak, ts: Date.now(), uri };
       setRecords(r => [newEntry, ...r]);
-      const next = { ...prev, streak: newStreak, lastRecordDate: today };
+      // Trigger store review when streak first reaches 5
+      const shouldReview = newStreak === 5 && !prev.reviewRequested;
+      if (shouldReview) setReviewReady(true);
+      const next = { ...prev, streak: newStreak, lastRecordDate: today,
+        reviewRequested: shouldReview ? true : prev.reviewRequested };
       saveAppState(next);
       showToast(t('toast_save_complete', { day: newStreak }));
       return next;
     });
   }, [saveAppState, showToast, t]);
+
+  // ── Store review trigger ─────────────────────────────────────────────────────
+
+  useEffect(() => {
+    if (!reviewReady) return;
+    setReviewReady(false);
+    (async () => {
+      try {
+        if (await StoreReview.isAvailableAsync()) {
+          await StoreReview.requestReview();
+        }
+      } catch {}
+    })();
+  }, [reviewReady]);
 
   // ── Init ────────────────────────────────────────────────────────────────────
 
@@ -668,6 +720,21 @@ export default function Page() {
           }
         } catch (e) {
           console.warn('[RC] init error:', e);
+        }
+
+        // Init notifications
+        try {
+          const { status } = await Notifications.requestPermissionsAsync();
+          if (status === 'granted') {
+            const notifyLang = savedLang ?? 'ja';
+            const notifyTitle = notifyLang === 'ja' ? '今日の記録をしましょう！' : "Time to record today's habit!";
+            const notifyBody = notifyLang === 'ja'
+              ? `目標: ${loaded.goal || 'One Shot'}`
+              : `Goal: ${loaded.goal || 'One Shot'}`;
+            await scheduleDailyNotification(loaded.notifyTime, notifyTitle, notifyBody);
+          }
+        } catch (e) {
+          console.warn('[Notify] init error:', e);
         }
 
         // Navigate
@@ -1539,6 +1606,7 @@ export default function Page() {
 
   const SettingsScreen = () => {
     const [goalEdit, setGoalEdit] = useState(appState.goal);
+    const [notifyEdit, setNotifyEdit] = useState(appState.notifyTime);
     return (
       <ScrollView style={styles.screen} contentContainerStyle={styles.settingsContent}>
         <Text style={styles.settingsTitle}>{t('settings_title')}</Text>
@@ -1575,6 +1643,20 @@ export default function Page() {
         </View>
 
         <View style={styles.settingGroup}>
+          <Text style={styles.settingLabel}>{t('settings_notify_label')}</Text>
+          <Text style={styles.settingHint}>{t('settings_notify_hint')}</Text>
+          <TextInput
+            style={styles.textInput}
+            value={notifyEdit}
+            onChangeText={setNotifyEdit}
+            placeholder="HH:MM"
+            placeholderTextColor="rgba(255,255,255,0.3)"
+            keyboardType="numbers-and-punctuation"
+            maxLength={5}
+          />
+        </View>
+
+        <View style={styles.settingGroup}>
           <Text style={styles.settingLabel}>{t('settings_language_label')}</Text>
           <View style={styles.langRow}>
             <TouchableOpacity onPress={() => switchLang('ja')}>
@@ -1589,8 +1671,23 @@ export default function Page() {
 
         <TouchableOpacity
           style={styles.btnPrimary}
-          onPress={() => {
-            updateState({ goal: goalEdit.trim() });
+          onPress={async () => {
+            const updates: Partial<AppState> = { goal: goalEdit.trim() };
+            const timeValid = /^\d{1,2}:\d{2}$/.test(notifyEdit.trim());
+            if (timeValid) {
+              updates.notifyTime = notifyEdit.trim();
+              try {
+                const { status } = await Notifications.getPermissionsAsync();
+                if (status === 'granted') {
+                  const title = lang === 'ja' ? '今日の記録をしましょう！' : "Time to record today's habit!";
+                  const body = lang === 'ja'
+                    ? `目標: ${goalEdit.trim() || 'One Shot'}`
+                    : `Goal: ${goalEdit.trim() || 'One Shot'}`;
+                  await scheduleDailyNotification(notifyEdit.trim(), title, body);
+                }
+              } catch {}
+            }
+            updateState(updates);
             showToast(t('toast_settings_saved'));
             setScreen('home');
           }}
