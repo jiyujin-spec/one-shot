@@ -4,7 +4,7 @@
     "slug": "one-shot",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icons/AppIcon.appiconset/icon-1024.png",
+    "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
     "splash": {
       "backgroundColor": "#000000"
@@ -12,23 +12,51 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.jin.oneshot",
-      "icon": "./assets/icons/AppIcon.appiconset/icon-1024.png"
+      "icon": "./assets/icon.png",
+      "infoPlist": {
+        "NSCameraUsageDescription": "One Shot はカメラを使って習慣を動画・写真で記録します。",
+        "NSMicrophoneUsageDescription": "One Shot は動画録画のためにマイクを使用します。",
+        "NSPhotoLibraryUsageDescription": "撮影した動画・写真をフォトライブラリから読み込みます。",
+        "NSPhotoLibraryAddUsageDescription": "撮影した動画・写真をフォトライブラリに保存します。"
+      }
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/icons/AppIcon.appiconset/icon-1024.png",
+        "foregroundImage": "./assets/icon.png",
         "backgroundColor": "#000000"
       },
-      "package": "com.jin.oneshot"
+      "package": "com.jin.oneshot",
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_MEDIA_VIDEO"
+      ]
     },
     "plugins": [
       "expo-router",
-      "expo-camera",
-      "expo-media-library",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "One Shot はカメラを使って習慣を動画・写真で記録します。",
+          "microphonePermission": "One Shot は動画録画のためにマイクを使用します。",
+          "recordAudioAndroid": true
+        }
+      ],
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "撮影した動画・写真をフォトライブラリから読み込みます。",
+          "savePhotosPermission": "撮影した動画・写真をフォトライブラリに保存します。",
+          "isAccessMediaLocationEnabled": true
+        }
+      ],
       [
         "expo-av",
         {
-          "microphonePermission": "Allow $(PRODUCT_NAME) to access your microphone."
+          "microphonePermission": "One Shot は動画録画のためにマイクを使用します。"
         }
       ]
     ],
