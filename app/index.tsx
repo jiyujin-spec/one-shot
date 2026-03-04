@@ -339,7 +339,7 @@ const defaultState: AppState = {
 // ─── Notifications ────────────────────────────────────────────────────────────
 
 Notifications.setNotificationHandler({
-  handleNotification: async () => ({
+  handleNotification: async (): Promise<Notifications.NotificationBehavior> => ({
     shouldShowAlert: true,
     shouldPlaySound: true,
     shouldSetBadge: false,
@@ -357,7 +357,6 @@ async function scheduleDailyNotification(timeStr: string, title: string, body: s
     trigger: {
       hour: h,
       minute: m,
-      repeats: true,
       type: Notifications.SchedulableTriggerInputTypes.DAILY,
     },
   });
