@@ -4,15 +4,17 @@
     "slug": "one-shot",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/images/icon.png",
     "userInterfaceStyle": "dark",
     "splash": {
+      "image": "./assets/images/splash.png",
+      "resizeMode": "contain",
       "backgroundColor": "#000000"
     },
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.jin.oneshot",
-      "icon": "./assets/icon.png",
+      "icon": "./assets/images/icon.png",
       "infoPlist": {
         "NSCameraUsageDescription": "One Shot はカメラを使って習慣を動画・写真で記録します。",
         "NSMicrophoneUsageDescription": "One Shot は動画録画のためにマイクを使用します。",
@@ -22,7 +24,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/icon.png",
+        "foregroundImage": "./assets/images/icon.png",
         "backgroundColor": "#000000"
       },
       "package": "com.jin.oneshot",
