@@ -4,7 +4,7 @@
  * React Native port of the web PWA
  */
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, type RefObject } from 'react';
 import {
   View,
   Text,
@@ -316,6 +316,23 @@ const defaultState: AppState = {
   rcUserID: '',
 };
 
+// ─── StableCameraView ─────────────────────────────────────────────────────────
+// CameraView を React.memo でラップし、親の state 変化による再レンダリングを防ぐ
+// countdown/isRecording が変わっても CameraView 自体は再マウントされない → フリッカー解消
+
+const StableCameraView = React.memo(({ cameraRef, facing, mode }: {
+  cameraRef: RefObject<CameraView>;
+  facing: CameraType;
+  mode: 'video' | 'picture';
+}) => (
+  <CameraView
+    ref={cameraRef}
+    style={styles.camera}
+    facing={facing}
+    mode={mode}
+  />
+));
+
 // ─── Toast Component ──────────────────────────────────────────────────────────
 
 interface ToastProps {
@@ -353,6 +370,7 @@ export default function Page() {
   const [recordingCountdown, setRecordingCountdown] = useState<number | null>(null); // 録画中残り秒数
   const [capturedUri, setCapturedUri] = useState<string | null>(null);
   const [capturedType, setCapturedType] = useState<'photo' | 'video'>('video');
+  const [capturedTime, setCapturedTime] = useState<Date | null>(null);
   const recordingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const recordingCountdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [isPreviewPlaying, setIsPreviewPlaying] = useState(false);
@@ -687,60 +705,79 @@ export default function Page() {
     if (!cameraRef.current) return;
 
     // ── 事前カウントダウン（トグル ON 時のみ）──
+    // CameraView は StableCameraView でラップ済みなので再マウントなし → フリッカーなし
     if (appState.showRecordingCountdown) {
       for (let i = 3; i >= 1; i--) {
         setCountdown(i);
         await new Promise<void>(r => setTimeout(r, 1000));
       }
       setCountdown(null);
+      // camera が準備完了するまで少し待つ（iOS実機の安定性向上）
+      await new Promise<void>(r => setTimeout(r, 80));
     }
 
     // ── 写真モード ──
     if (camMode === 'photo') {
       try {
-        const photo = await cameraRef.current.takePictureAsync({ quality: 0.9 });
-        setCapturedUri(photo?.uri ?? null);
-        setCapturedType('photo');
+        const photo = await cameraRef.current.takePictureAsync({
+          quality: 0.92,
+          skipProcessing: false,
+        });
+        if (photo?.uri) {
+          setCapturedUri(photo.uri);
+          setCapturedType('photo');
+          setCapturedTime(new Date());
+        }
       } catch (e) {
         showToast(t('toast_camera_error') + String(e), true);
       }
       return;
     }
 
-    // ── 動画モード（3秒録画 + 残り秒数カウントダウン表示）──
+    // ── 動画モード（3秒録画）──
     setIsRecording(true);
     const RECORD_SECS = 3;
 
-    // 録画中カウントダウン表示を開始
+    // 録画中カウントダウン
     setRecordingCountdown(RECORD_SECS);
     let remaining = RECORD_SECS;
     recordingCountdownRef.current = setInterval(() => {
       remaining -= 1;
       if (remaining <= 0) {
         setRecordingCountdown(null);
-        if (recordingCountdownRef.current) { clearInterval(recordingCountdownRef.current); recordingCountdownRef.current = null; }
+        if (recordingCountdownRef.current) {
+          clearInterval(recordingCountdownRef.current);
+          recordingCountdownRef.current = null;
+        }
       } else {
         setRecordingCountdown(remaining);
       }
     }, 1000);
 
+    let recordPromise: Promise<{ uri: string } | undefined> | null = null;
     try {
-      const promise = cameraRef.current.recordAsync({ maxDuration: RECORD_SECS + 1 });
+      // recordAsync を先に呼び出してから stopRecording タイマーをセット
+      recordPromise = cameraRef.current.recordAsync({ maxDuration: RECORD_SECS + 0.5 });
 
-      // 安全マージン +200ms で強制停止
       recordingTimerRef.current = setTimeout(() => {
-        cameraRef.current?.stopRecording();
-      }, RECORD_SECS * 1000 + 200);
+        try { cameraRef.current?.stopRecording(); } catch { /* ignore */ }
+      }, RECORD_SECS * 1000 + 300);
 
-      const result = await promise;
+      const result = await recordPromise;
       clearCamTimers();
       setRecordingCountdown(null);
-      setCapturedUri(result?.uri ?? null);
-      setCapturedType('video');
+
+      if (result?.uri) {
+        setCapturedUri(result.uri);
+        setCapturedType('video');
+        setCapturedTime(new Date());
+      }
     } catch (e: any) {
       clearCamTimers();
-      if (!String(e).includes('cancel') && !String(e).includes('stopped')) {
-        showToast(t('toast_camera_error') + String(e), true);
+      const msg = String(e?.message ?? e);
+      // cancel/stopped/abort は正常終了フローなので無視
+      if (!msg.includes('cancel') && !msg.includes('stopped') && !msg.includes('abort') && !msg.includes('RecordingExceptionError')) {
+        showToast(t('toast_camera_error') + msg, true);
       }
     } finally {
       setIsRecording(false);
@@ -754,6 +791,7 @@ export default function Page() {
     clearCamTimers();
     setCapturedUri(null);
     setCapturedType('video');
+    setCapturedTime(null);
     setIsPreviewPlaying(false);
   }, [clearCamTimers]);
 
@@ -764,6 +802,7 @@ export default function Page() {
       await MediaLibrary.saveToLibraryAsync(capturedUri);
       recordToday(capturedUri);
       setCapturedUri(null);
+      setCapturedTime(null);
       setScreen('home');
     } catch (e) {
       showToast(t('toast_save_error'), true);
@@ -1018,133 +1057,119 @@ export default function Page() {
       );
     }
 
-    // ── 写真プレビュー（フィルターオーバーレイ付き）──
-    if (capturedUri && capturedType === 'photo') {
-      const filterDate = format(new Date(), lang === 'en' ? 'MM/dd/yyyy HH:mm' : 'yyyy年M月d日 H時m分');
+    // ── プレビュー画面（動画・写真共通 — image_4 デザイン）──
+    if (capturedUri) {
+      const dayNum = appState.streak + 1;
+      const ts = capturedTime ?? new Date();
+      const dateStr = format(ts, 'yyyy.MM.dd');
+      const timeStr = format(ts, 'HH:mm');
+      const isPhoto = capturedType === 'photo';
+
       return (
-        <View style={styles.cameraContainer}>
-          <Image source={{ uri: capturedUri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+        <View style={styles.previewScreen}>
 
-          {/* フィルター: 日時 / Day / 目標 */}
-          <View style={styles.photoFilterOverlay}>
-            <Text style={styles.photoFilterDate}>{filterDate}</Text>
-            <Text style={styles.photoFilterDay}>DAY {appState.streak + 1}</Text>
-            <Text style={styles.photoFilterGoal}>{appState.goal}</Text>
-          </View>
+          {/* ── メディアカード（角ブラケット付き）── */}
+          <View style={styles.previewCard}>
+            {isPhoto ? (
+              <Image source={{ uri: capturedUri }} style={styles.previewMedia} resizeMode="cover" />
+            ) : (
+              <>
+                <Video
+                  ref={previewVideoRef}
+                  source={{ uri: capturedUri }}
+                  style={styles.previewMedia}
+                  resizeMode={ResizeMode.COVER}
+                  isLooping
+                  shouldPlay={isPreviewPlaying}
+                  isMuted={false}
+                  positionMillis={0}
+                />
+                {/* 長押し再生エリア */}
+                <Pressable
+                  style={[StyleSheet.absoluteFill, { bottom: 0 }]}
+                  onLongPress={() => setIsPreviewPlaying(true)}
+                  onPressOut={async () => {
+                    setIsPreviewPlaying(false);
+                    await previewVideoRef.current?.setPositionAsync(0);
+                  }}
+                  delayLongPress={150}
+                />
+                {/* 長押しヒント */}
+                {!isPreviewPlaying && (
+                  <View style={styles.previewHint}>
+                    <Feather name="play" size={14} color="rgba(255,255,255,0.8)" />
+                    <Text style={styles.previewHintText}>
+                      {lang === 'en' ? 'Hold to play' : '長押しで再生'}
+                    </Text>
+                  </View>
+                )}
+              </>
+            )}
 
-          {/* アクションボタン */}
-          <View style={styles.previewActions}>
-            <TouchableOpacity style={styles.previewBtn} onPress={retake}>
-              <Feather name="rotate-ccw" size={16} color="#fff" />
-              <Text style={styles.previewBtnText}>{t('retry_btn')}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.previewBtnPrimary} onPress={saveCapture}>
-              <Feather name="check" size={16} color="#fff" />
-              <Text style={styles.previewBtnText}>{t('save_btn')}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.previewBtn} onPress={shareToInstagram}>
-              <Feather name="instagram" size={16} color="#fff" />
-              <Text style={styles.previewBtnText}>Instagram</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      );
-    }
+            {/* 角ブラケット装飾（viewfinder 風）*/}
+            <View style={[styles.bracket, styles.bracketTL]} />
+            <View style={[styles.bracket, styles.bracketTR]} />
+            <View style={[styles.bracket, styles.bracketBL]} />
+            <View style={[styles.bracket, styles.bracketBR]} />
 
-    // ── 動画プレビュー（長押し再生）──
-    if (capturedUri && capturedType === 'video') {
-      return (
-        <View style={styles.cameraContainer}>
-          <Video
-            ref={previewVideoRef}
-            source={{ uri: capturedUri }}
-            style={StyleSheet.absoluteFill}
-            resizeMode={ResizeMode.COVER}
-            isLooping
-            shouldPlay={isPreviewPlaying}
-            isMuted={false}
-            positionMillis={0}
-          />
-
-          {/* 長押し検知（ボタン行を除く全画面）*/}
-          <Pressable
-            style={styles.previewPressArea}
-            onLongPress={() => setIsPreviewPlaying(true)}
-            onPressOut={async () => {
-              setIsPreviewPlaying(false);
-              await previewVideoRef.current?.setPositionAsync(0);
-            }}
-            delayLongPress={150}
-          />
-
-          {/* DAY バッジ */}
-          <View style={styles.previewDayBadge}>
-            <Text style={styles.previewDayText}>DAY {appState.streak + 1}</Text>
-          </View>
-
-          {/* 長押しガイド（再生中は非表示）*/}
-          {!isPreviewPlaying && (
-            <View style={styles.previewHint}>
-              <Feather name="play-circle" size={18} color="rgba(255,255,255,0.7)" />
-              <Text style={styles.previewHintText}>
-                {lang === 'en' ? 'Hold to preview' : '長押しで再生'}
-              </Text>
+            {/* 左上: DAY X + 日時 */}
+            <View style={styles.previewTopLeft}>
+              <Text style={styles.previewDayNum}>DAY {dayNum}</Text>
+              <Text style={styles.previewDateTime}>{dateStr}{'  '}{timeStr}</Text>
             </View>
-          )}
 
-          {/* アクションボタン */}
+            {/* 中央下部: #ゴール名 */}
+            <View style={styles.previewGoalOverlay}>
+              <Text style={styles.previewGoalText}>#{appState.goal}</Text>
+            </View>
+          </View>
+
+          {/* ── アクションボタン行（削除 | 保存 | 共有）── */}
           <View style={styles.previewActions}>
-            <TouchableOpacity style={styles.previewBtn} onPress={retake}>
-              <Feather name="rotate-ccw" size={16} color="#fff" />
-              <Text style={styles.previewBtnText}>{t('retry_btn')}</Text>
+            <TouchableOpacity style={styles.previewBtnDelete} onPress={retake}>
+              <Feather name="trash-2" size={18} color="#fff" />
+              <Text style={styles.previewBtnLabel}>{t('retry_btn')}</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.previewBtnPrimary} onPress={saveCapture}>
-              <Feather name="check" size={16} color="#fff" />
-              <Text style={styles.previewBtnText}>{t('save_btn')}</Text>
+            <TouchableOpacity style={styles.previewBtnSave} onPress={saveCapture}>
+              <Feather name="download" size={18} color="#fff" />
+              <Text style={styles.previewBtnLabel}>{t('save_btn')}</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.previewBtn} onPress={shareToInstagram}>
-              <Feather name="instagram" size={16} color="#fff" />
-              <Text style={styles.previewBtnText}>Instagram</Text>
+            <TouchableOpacity style={styles.previewBtnShare} onPress={shareToInstagram}>
+              <Feather name="share" size={18} color="#fff" />
+              <Text style={styles.previewBtnLabel}>{t('share_btn')}</Text>
             </TouchableOpacity>
           </View>
+
         </View>
       );
     }
 
-    // ── メインカメラビュー ──
+    // ── メインカメラビュー（image_3 デザイン）──
     return (
       <View style={styles.cameraContainer}>
-        <CameraView
-          ref={cameraRef}
-          style={styles.camera}
+
+        {/* StableCameraView: React.memo でラップ → フリッカーなし */}
+        <StableCameraView
+          cameraRef={cameraRef}
           facing={facing}
           mode={camMode === 'video' ? 'video' : 'picture'}
         />
 
-        {/* ストリークバッジ（常時表示）*/}
-        <View style={styles.camStreakBadge}>
-          <Text style={styles.camStreakText}>
-            🔥 {appState.streak}{lang === 'en' ? ' days' : '日連続'}
-          </Text>
-        </View>
-
-        {/* 事前カウントダウン（全画面オーバーレイ）*/}
+        {/* 事前カウントダウン: 大きな白い数字（image_3 通り）*/}
         {countdown !== null && (
           <View style={styles.countdownOverlay}>
             <Text style={styles.countdownText}>{countdown}</Text>
           </View>
         )}
 
-        {/* 録画中カウントダウン（上部バッジ）*/}
+        {/* 録画中カウントダウン: 画面上部中央、大きめ白文字 */}
         {isRecording && recordingCountdown !== null && (
-          <View style={styles.recCountdownBadge}>
-            <Text style={styles.recCountdownText}>
-              {lang === 'en' ? `${recordingCountdown}s` : `残り ${recordingCountdown}秒`}
-            </Text>
+          <View style={styles.recCountdownOverlay}>
+            <Text style={styles.recCountdownNum}>{recordingCountdown}</Text>
           </View>
         )}
 
-        {/* REC インジケーター */}
+        {/* REC ドット（録画中）*/}
         {isRecording && (
           <View style={styles.recIndicator}>
             <View style={styles.recDot} />
@@ -1152,10 +1177,10 @@ export default function Page() {
           </View>
         )}
 
-        {/* トップバー: 閉じる（左）+ フリップ（右）*/}
+        {/* トップバー: 左=×（閉じる）、右=フリップ */}
         <View style={styles.camTopBar}>
           <TouchableOpacity style={styles.camTopBtn} onPress={() => setScreen('home')}>
-            <Feather name="x" size={20} color="#fff" />
+            <Feather name="x" size={22} color="#fff" />
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.camTopBtn}
@@ -1165,9 +1190,10 @@ export default function Page() {
           </TouchableOpacity>
         </View>
 
-        {/* ボトム: モード切替 + シャッター + 事前カウントダウン ON/OFF */}
+        {/* ボトムエリア: モードタブ + シャッター行 */}
         <View style={styles.camBottomArea}>
-          {/* モードタブ */}
+
+          {/* モードタブ（image_3 通りのピルデザイン）*/}
           <View style={styles.camModeRow}>
             {(['video', 'photo'] as const).map(m => (
               <TouchableOpacity
@@ -1182,35 +1208,30 @@ export default function Page() {
             ))}
           </View>
 
-          {/* シャッターエリア */}
+          {/* シャッター行: タイマーアイコン（左）| シャッター（中央）| スペーサー（右）*/}
           <View style={styles.camControls}>
-            {/* 事前カウントダウン トグル */}
-            <View style={styles.camPreCountToggle}>
-              <Feather
-                name="clock"
-                size={13}
-                color={appState.showRecordingCountdown ? '#fff' : '#555'}
-              />
-              <Switch
-                value={appState.showRecordingCountdown}
-                onValueChange={v => updateState({ showRecordingCountdown: v })}
-                thumbColor="#fff"
-                trackColor={{ false: '#333', true: '#8B0000' }}
-                style={{ transform: [{ scaleX: 0.8 }, { scaleY: 0.8 }] }}
-              />
-            </View>
-
-            {/* シャッターボタン */}
+            {/* 左: タイマートグル */}
             <TouchableOpacity
-              style={[styles.shutterBtn, isRecording && styles.shutterBtnActive]}
+              style={[styles.camTimerBtn, appState.showRecordingCountdown && styles.camTimerBtnActive]}
+              onPress={() => updateState({ showRecordingCountdown: !appState.showRecordingCountdown })}
+            >
+              <Feather name="clock" size={20} color={appState.showRecordingCountdown ? '#fff' : 'rgba(255,255,255,0.4)'} />
+            </TouchableOpacity>
+
+            {/* 中央: シャッターボタン（赤い内側）*/}
+            <TouchableOpacity
+              style={styles.shutterBtn}
               onPress={startRecording}
               disabled={isRecording || countdown !== null}
+              activeOpacity={0.8}
             >
               <View style={[styles.shutterInner, isRecording && styles.shutterInnerRec]} />
             </TouchableOpacity>
 
-            <View style={styles.camTopSpacer} />
+            {/* 右: スペーサー（対称性のため）*/}
+            <View style={styles.camTimerBtn} />
           </View>
+
         </View>
       </View>
     );
@@ -1856,7 +1877,7 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
   },
 
-  // ── Camera ──
+  // ── Camera (main view) ──
   cameraContainer: {
     flex: 1,
     backgroundColor: '#000',
@@ -1865,80 +1886,70 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 
-  // 事前カウントダウン（全画面オーバーレイ）
+  // 事前カウントダウン: 画面中央、大きな白い数字（背景なし）
   countdownOverlay: {
     ...StyleSheet.absoluteFillObject,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.5)',
-  },
+    backgroundColor: 'transparent',
+    pointerEvents: 'none',
+  } as any,
   countdownText: {
-    fontSize: 96,
+    fontSize: 160,
+    fontWeight: '900',
+    color: '#fff',
+    letterSpacing: -4,
+    textShadowColor: 'rgba(0,0,0,0.6)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 12,
+  },
+
+  // 録画中カウントダウン: 上部中央、大きめ白文字
+  recCountdownOverlay: {
+    position: 'absolute',
+    top: 100,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    pointerEvents: 'none',
+  } as any,
+  recCountdownNum: {
+    fontSize: 72,
     fontWeight: '900',
     color: '#fff',
     letterSpacing: -2,
-  },
-
-  // ストリークバッジ（カメラ上部・中央）
-  camStreakBadge: {
-    position: 'absolute',
-    top: 60,
-    alignSelf: 'center',
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 6,
-  },
-  camStreakText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '800',
-    letterSpacing: 0.5,
-  },
-
-  // 録画中残り秒数バッジ（中央上部）
-  recCountdownBadge: {
-    position: 'absolute',
-    top: 110,
-    alignSelf: 'center',
-    backgroundColor: 'rgba(139,0,0,0.75)',
-    borderRadius: 16,
-    paddingHorizontal: 18,
-    paddingVertical: 5,
-  },
-  recCountdownText: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: '900',
-    letterSpacing: 1,
+    textShadowColor: 'rgba(0,0,0,0.5)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 8,
   },
 
   // REC ドット + テキスト
   recIndicator: {
     position: 'absolute',
-    top: 18,
-    left: 18,
+    top: 20,
+    left: 68,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-    borderRadius: 12,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    gap: 5,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
   },
   recDot: {
-    width: 8,
-    height: 8,
+    width: 7,
+    height: 7,
     borderRadius: 4,
     backgroundColor: '#f00',
   },
   recText: {
     color: '#fff',
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
+    letterSpacing: 1,
   },
 
-  // トップバー（閉じる・フリップ）
+  // トップバー（左=×、右=フリップ）
   camTopBar: {
     position: 'absolute',
     top: 16,
@@ -1952,194 +1963,263 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(0,0,0,0.45)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  camTopSpacer: {
-    width: 64,
-  },
 
-  // ボトムエリア（モードタブ + シャッター）
+  // ボトムエリア
   camBottomArea: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
-    paddingBottom: 32,
-    backgroundColor: 'rgba(0,0,0,0.4)',
+    paddingBottom: 36,
+    paddingTop: 8,
+    backgroundColor: 'rgba(0,0,0,0.35)',
   },
 
-  // モードタブ
+  // モードタブ: ピルデザイン（image_3 通り）
   camModeRow: {
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 12,
+    marginBottom: 20,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    alignSelf: 'center',
+    borderRadius: 20,
+    padding: 3,
   },
   camModeTab: {
-    paddingHorizontal: 20,
-    paddingVertical: 6,
-    borderRadius: 16,
+    paddingHorizontal: 22,
+    paddingVertical: 7,
+    borderRadius: 17,
   },
   camModeTabActive: {
-    backgroundColor: 'rgba(255,255,255,0.12)',
+    backgroundColor: '#fff',
   },
   camModeBtn: {
-    color: '#888',
+    color: 'rgba(255,255,255,0.6)',
     fontSize: 13,
-    fontWeight: '600',
-    letterSpacing: 1,
-    textTransform: 'uppercase',
+    fontWeight: '700',
+    letterSpacing: 0.5,
   },
   camModeBtnActive: {
-    color: '#fff',
+    color: '#000',
   },
 
-  // シャッターエリア（トグル + ボタン + スペーサー）
+  // シャッター行（タイマー左 | シャッター中央 | スペーサー右）
   camControls: {
     flexDirection: 'row',
     justifyContent: 'space-around',
     alignItems: 'center',
-    paddingHorizontal: 32,
+    paddingHorizontal: 36,
   },
 
-  // 事前カウントダウン トグル
-  camPreCountToggle: {
-    width: 64,
+  // タイマーアイコンボタン（左下）
+  camTimerBtn: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(255,255,255,0.08)',
     alignItems: 'center',
-    gap: 4,
+    justifyContent: 'center',
+  },
+  camTimerBtnActive: {
+    backgroundColor: 'rgba(255,255,255,0.18)',
   },
 
-  // シャッターボタン
+  // シャッターボタン: 白枠 + 赤い内側（image_3）
   shutterBtn: {
-    width: 76,
-    height: 76,
-    borderRadius: 38,
+    width: 80,
+    height: 80,
+    borderRadius: 40,
     borderWidth: 3,
     borderColor: '#fff',
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  shutterBtnActive: {
-    borderColor: '#f00',
+    backgroundColor: 'transparent',
   },
   shutterInner: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: '#fff',
+    width: 62,
+    height: 62,
+    borderRadius: 31,
+    backgroundColor: '#CC0000',
   },
-  // 録画中: 赤い角丸四角形に変化
+  // 録画中: 赤い角丸四角形
   shutterInnerRec: {
-    width: 28,
-    height: 28,
+    width: 26,
+    height: 26,
     borderRadius: 6,
-    backgroundColor: '#f00',
+    backgroundColor: '#CC0000',
   },
 
-  // 写真フィルターオーバーレイ
-  photoFilterOverlay: {
-    position: 'absolute',
-    bottom: 90,
-    left: 16,
-    backgroundColor: 'rgba(0,0,0,0.55)',
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    gap: 2,
-  },
-  photoFilterDate: {
-    color: 'rgba(255,255,255,0.75)',
-    fontSize: 11,
-    fontWeight: '600',
-    letterSpacing: 0.5,
-  },
-  photoFilterDay: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: '900',
-    letterSpacing: 2,
-  },
-  photoFilterGoal: {
-    color: '#8B0000',
-    fontSize: 13,
-    fontWeight: '700',
-    letterSpacing: 0.5,
-  },
-  previewPressArea: {
-    ...StyleSheet.absoluteFillObject,
-    // ボタン行の高さ（約80px）を除いた領域を長押しエリアに
-    bottom: 80,
-  },
-  previewHint: {
-    position: 'absolute',
-    top: '45%',
-    alignSelf: 'center',
-    flexDirection: 'row',
+  // ── Preview Screen (image_4 デザイン) ──
+  previewScreen: {
+    flex: 1,
+    backgroundColor: '#000',
+    justifyContent: 'center',
     alignItems: 'center',
-    gap: 6,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
+    paddingHorizontal: 20,
+    paddingBottom: 24,
   },
-  previewHintText: {
-    color: 'rgba(255,255,255,0.85)',
-    fontSize: 13,
-    fontWeight: '600',
+  previewCard: {
+    width: '100%',
+    flex: 1,
+    maxHeight: '78%',
+    borderRadius: 16,
+    overflow: 'hidden',
+    backgroundColor: '#111',
+    marginBottom: 16,
+    position: 'relative',
   },
-  previewDayBadge: {
+  previewMedia: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    width: '100%',
+    height: '100%',
+  } as any,
+
+  // 角ブラケット（viewfinder 風コーナー装飾）
+  bracket: {
+    position: 'absolute',
+    width: 22,
+    height: 22,
+    borderColor: '#fff',
+  },
+  bracketTL: {
+    top: 12,
+    left: 12,
+    borderTopWidth: 2,
+    borderLeftWidth: 2,
+    borderTopLeftRadius: 3,
+  },
+  bracketTR: {
+    top: 12,
+    right: 12,
+    borderTopWidth: 2,
+    borderRightWidth: 2,
+    borderTopRightRadius: 3,
+  },
+  bracketBL: {
+    bottom: 12,
+    left: 12,
+    borderBottomWidth: 2,
+    borderLeftWidth: 2,
+    borderBottomLeftRadius: 3,
+  },
+  bracketBR: {
+    bottom: 12,
+    right: 12,
+    borderBottomWidth: 2,
+    borderRightWidth: 2,
+    borderBottomRightRadius: 3,
+  },
+
+  // 左上: DAY X + 日時
+  previewTopLeft: {
     position: 'absolute',
     top: 20,
     left: 20,
-    backgroundColor: 'rgba(0,0,0,0.55)',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
   },
-  previewDayText: {
-    fontSize: 14,
+  previewDayNum: {
+    fontSize: 40,
     fontWeight: '900',
     color: '#fff',
-    letterSpacing: 3,
+    letterSpacing: 2,
+    lineHeight: 44,
+    textShadowColor: 'rgba(0,0,0,0.5)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 6,
   },
-  previewActions: {
+  previewDateTime: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.65)',
+    fontWeight: '500',
+    letterSpacing: 1,
+    marginTop: 2,
+  },
+
+  // 中央下部: #ゴール
+  previewGoalOverlay: {
     position: 'absolute',
-    bottom: 0,
+    bottom: 28,
     left: 0,
     right: 0,
-    flexDirection: 'row',
-    padding: 20,
-    gap: 8,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    alignItems: 'center',
   },
-  previewBtn: {
-    flex: 1,
+  previewGoalText: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: 'rgba(255,255,255,0.9)',
+    letterSpacing: 1,
+    textShadowColor: 'rgba(0,0,0,0.6)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 8,
+  },
+
+  // 長押しヒント（動画のみ）
+  previewHint: {
+    position: 'absolute',
+    bottom: 72,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
     flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  previewHintText: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+
+  // アクションボタン行（削除 | 保存 | 共有）
+  previewActions: {
+    flexDirection: 'row',
+    width: '100%',
+    gap: 10,
+  },
+  previewBtnDelete: {
+    flex: 1,
+    flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
     paddingVertical: 14,
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.3)',
-    borderRadius: 12,
-    backgroundColor: 'rgba(0,0,0,0.4)',
+    borderColor: 'rgba(255,255,255,0.15)',
+    backgroundColor: 'rgba(255,255,255,0.05)',
   },
-  previewBtnPrimary: {
+  previewBtnSave: {
     flex: 1,
-    flexDirection: 'row',
+    flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
     paddingVertical: 14,
-    borderRadius: 12,
+    borderRadius: 14,
+    backgroundColor: '#1a1a1a',
+  },
+  previewBtnShare: {
+    flex: 1,
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 14,
+    borderRadius: 14,
     backgroundColor: '#8B0000',
   },
-  previewBtnText: {
+  previewBtnLabel: {
     color: '#fff',
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '700',
+    letterSpacing: 0.5,
   },
 
   // ── History ──
