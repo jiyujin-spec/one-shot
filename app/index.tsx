@@ -363,6 +363,7 @@ export default function Page() {
   const [records, setRecords] = useState<RecordEntry[]>([]);
   const [calYear, setCalYear] = useState(new Date().getFullYear());
   const [calMonth, setCalMonth] = useState(new Date().getMonth());
+  const [selectedRecord, setSelectedRecord] = useState<RecordEntry | null>(null);
 
   // RevenueCat state
   const [rcOfferings, setRcOfferings] = useState<PurchasesOfferings | null>(null);
@@ -1220,7 +1221,7 @@ export default function Page() {
   const HistoryScreen = () => {
     const firstDay = new Date(calYear, calMonth, 1).getDay();
     const lastDate = new Date(calYear, calMonth + 1, 0).getDate();
-    const recordedDates = new Set(records.map(r => r.date));
+    const recordMap = new Map(records.map(r => [r.date, r]));
     const todayStr = getAppDate();
     const dayLabels = lang === 'en'
       ? ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
@@ -1254,22 +1255,32 @@ export default function Page() {
           ))}
           {Array.from({ length: lastDate }, (_, i) => i + 1).map(day => {
             const ds = `${calYear}-${pad2(calMonth + 1)}-${pad2(day)}`;
-            const recorded = recordedDates.has(ds);
+            const rec = recordMap.get(ds);
+            const recorded = !!rec;
             const isToday = ds === todayStr;
-            return (
-              <View
-                key={ds}
-                style={[
-                  styles.calCell,
-                  styles.calDayCell,
-                  recorded && styles.calDayCellRecorded,
-                  isToday && styles.calDayCellToday,
-                ]}
-              >
+            const cell = (
+              <>
                 <Text style={[styles.calDayNum, recorded && styles.calDayNumRecorded]}>
                   {day}
                 </Text>
                 {recorded && <Text style={styles.calCheck}>✓</Text>}
+              </>
+            );
+            return recorded ? (
+              <TouchableOpacity
+                key={ds}
+                style={[styles.calCell, styles.calDayCell, styles.calDayCellRecorded, isToday && styles.calDayCellToday]}
+                onPress={() => setSelectedRecord(rec)}
+                activeOpacity={0.7}
+              >
+                {cell}
+              </TouchableOpacity>
+            ) : (
+              <View
+                key={ds}
+                style={[styles.calCell, styles.calDayCell, isToday && styles.calDayCellToday]}
+              >
+                {cell}
               </View>
             );
           })}
@@ -1277,6 +1288,47 @@ export default function Page() {
         {records.length === 0 && (
           <Text style={styles.noHistoryText}>{t('no_history')}</Text>
         )}
+
+        {/* Fullscreen record modal */}
+        <Modal
+          visible={!!selectedRecord}
+          animationType="fade"
+          transparent={false}
+          onRequestClose={() => setSelectedRecord(null)}
+        >
+          <View style={styles.recordModalBg}>
+            <TouchableOpacity style={styles.recordModalClose} onPress={() => setSelectedRecord(null)}>
+              <Feather name="x" size={28} color="#fff" />
+            </TouchableOpacity>
+            {selectedRecord && (
+              <>
+                {selectedRecord.uri ? (
+                  selectedRecord.uri.endsWith('.jpg') || selectedRecord.uri.endsWith('.jpeg') || selectedRecord.uri.endsWith('.png') ? (
+                    <Image source={{ uri: selectedRecord.uri }} style={styles.recordModalMedia} resizeMode="contain" />
+                  ) : (
+                    <Video
+                      source={{ uri: selectedRecord.uri }}
+                      style={styles.recordModalMedia}
+                      resizeMode={ResizeMode.CONTAIN}
+                      shouldPlay
+                      isLooping
+                      useNativeControls={false}
+                    />
+                  )
+                ) : (
+                  <View style={styles.recordModalNoMedia}>
+                    <Feather name="film" size={48} color="#444" />
+                    <Text style={styles.recordModalNoMediaText}>{t('no_history')}</Text>
+                  </View>
+                )}
+                <View style={styles.recordModalInfo}>
+                  <Text style={styles.recordModalDate}>{selectedRecord.date}</Text>
+                  <Text style={styles.recordModalDay}>DAY {selectedRecord.day}</Text>
+                </View>
+              </>
+            )}
+          </View>
+        </Modal>
       </ScrollView>
     );
   };
@@ -2155,6 +2207,51 @@ const styles = StyleSheet.create({
     fontSize: 14,
     textAlign: 'center',
     marginTop: 40,
+  },
+  recordModalBg: {
+    flex: 1,
+    backgroundColor: '#000',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  recordModalClose: {
+    position: 'absolute',
+    top: 56,
+    right: 20,
+    zIndex: 10,
+    padding: 8,
+  },
+  recordModalMedia: {
+    width: '100%',
+    height: '100%',
+    position: 'absolute',
+  },
+  recordModalNoMedia: {
+    alignItems: 'center',
+    gap: 16,
+  },
+  recordModalNoMediaText: {
+    color: '#555',
+    fontSize: 14,
+  },
+  recordModalInfo: {
+    position: 'absolute',
+    bottom: 56,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    gap: 4,
+  },
+  recordModalDate: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 13,
+    letterSpacing: 1,
+  },
+  recordModalDay: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '900',
+    letterSpacing: 2,
   },
 
   // ── Settings ──
