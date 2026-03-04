@@ -36,7 +36,7 @@ import Purchases, {
   PurchasesPackage,
   CustomerInfo,
 } from 'react-native-purchases';
-import FFmpegKit, { ReturnCode } from 'ffmpeg-kit-react-native';
+import { FFmpegKit, ReturnCode } from 'ffmpeg-kit-react-native';
 import { captureRef } from 'react-native-view-shot';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -390,7 +390,8 @@ export default function Page() {
   const recordingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const recordingCountdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [isPreviewPlaying, setIsPreviewPlaying] = useState(false);
-  const cameraRef = useRef<CameraView>(null);
+  // null! = non-null assertion: RefObject<CameraView> として扱い TS の型エラーを解消
+  const cameraRef = useRef<CameraView>(null!);
   const previewVideoRef = useRef<Video>(null);
   const previewCardRef = useRef<any>(null);     // react-native-view-shot 用
   const [isFfmpegProcessing, setIsFfmpegProcessing] = useState(false);
@@ -811,9 +812,7 @@ export default function Page() {
     setIsFfmpegProcessing(true);
     showToast(t('toast_processing_video'));
     try {
-      // 出力ファイルパス（.movを.mp4に変換しつつ _5s サフィックス付加）
-      const ext = rawUri.includes('.mov') ? '.mov' : '.mp4';
-      const outputUri = rawUri.replace(ext, '_5s.mp4').replace(/[^/]+$/, (m) => m.replace(ext, '_5s.mp4'));
+      // 出力ファイルパス（.mov/.mp4 の拡張子を _5s.mp4 に置換）
       const safeOutput = rawUri.substring(0, rawUri.lastIndexOf('.')) + '_5s.mp4';
 
       // tpad: 最後のフレームを stop_duration=2秒クローン

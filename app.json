@@ -15,6 +15,7 @@
       "supportsTablet": false,
       "bundleIdentifier": "com.jin.oneshot",
       "icon": "./assets/images/icon.png",
+      "deploymentTarget": "13.4",
       "infoPlist": {
         "NSCameraUsageDescription": "One Shot はカメラを使って習慣を動画・写真で記録します。",
         "NSMicrophoneUsageDescription": "One Shot は動画録画のためにマイクを使用します。",
@@ -59,6 +60,12 @@
         "expo-av",
         {
           "microphonePermission": "One Shot は動画録画のためにマイクを使用します。"
+        }
+      ],
+      [
+        "ffmpeg-kit-react-native",
+        {
+          "package": "min"
         }
       ]
     ],
