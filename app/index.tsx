@@ -36,6 +36,8 @@ import Purchases, {
   PurchasesPackage,
   CustomerInfo,
 } from 'react-native-purchases';
+import FFmpegKit, { ReturnCode } from 'ffmpeg-kit-react-native';
+import { captureRef } from 'react-native-view-shot';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -175,6 +177,13 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     restore_failed: '復元に失敗しました',
     pass_not_found: 'パス商品が見つかりません',
     product_not_found: '商品情報の取得に失敗しました',
+    history_delete: '削除',
+    history_resave: '再保存',
+    confirm_delete_record: 'この記録を削除しますか？\n削除後は今日の撮影が再度できるようになります。',
+    toast_deleted: '記録を削除しました',
+    toast_resave_done: 'カメラロールに再保存しました',
+    toast_processing_video: '5秒動画を生成中...',
+    toast_processing_error: '動画処理エラー（元の動画を使用）',
   },
   en: {
     meta_description: 'One video a day. Record your habits with video.',
@@ -277,6 +286,13 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     restore_failed: 'Restore failed',
     pass_not_found: 'Pass product not found',
     product_not_found: 'Product info unavailable',
+    history_delete: 'Delete',
+    history_resave: 'Re-save',
+    confirm_delete_record: 'Delete this record?\nYou\'ll be able to record again today.',
+    toast_deleted: 'Record deleted',
+    toast_resave_done: 'Re-saved to camera roll',
+    toast_processing_video: 'Processing 5-sec video...',
+    toast_processing_error: 'Video processing error (using original)',
   },
 };
 
@@ -376,6 +392,8 @@ export default function Page() {
   const [isPreviewPlaying, setIsPreviewPlaying] = useState(false);
   const cameraRef = useRef<CameraView>(null);
   const previewVideoRef = useRef<Video>(null);
+  const previewCardRef = useRef<any>(null);     // react-native-view-shot 用
+  const [isFfmpegProcessing, setIsFfmpegProcessing] = useState(false);
 
   // History state
   const [records, setRecords] = useState<RecordEntry[]>([]);
@@ -695,7 +713,7 @@ export default function Page() {
   }, []);
 
   const startRecording = useCallback(async () => {
-    if (isRecording || countdown !== null) return;
+    if (isRecording || countdown !== null || isFfmpegProcessing) return;
 
     // 権限確認
     if (!camPermission?.granted) {
@@ -705,16 +723,19 @@ export default function Page() {
     if (!cameraRef.current) return;
 
     // ── 事前カウントダウン（トグル ON 時のみ）──
-    // CameraView は StableCameraView でラップ済みなので再マウントなし → フリッカーなし
+    // CameraScreen() を直接呼び出し（<CameraScreen />ではない）ので
+    // CameraView は同一位置に留まり、state 変化で再マウントされない → フリッカーなし
     if (appState.showRecordingCountdown) {
       for (let i = 3; i >= 1; i--) {
         setCountdown(i);
         await new Promise<void>(r => setTimeout(r, 1000));
       }
       setCountdown(null);
-      // camera が準備完了するまで少し待つ（iOS実機の安定性向上）
-      await new Promise<void>(r => setTimeout(r, 80));
     }
+
+    // ── ハードウェア準備待機（iOS実機: 200ms でカメラが確実に安定）──
+    await new Promise<void>(r => setTimeout(r, 200));
+    if (!cameraRef.current) return; // 待機中に unmount された場合のガード
 
     // ── 写真モード ──
     if (camMode === 'photo') {
@@ -728,13 +749,15 @@ export default function Page() {
           setCapturedType('photo');
           setCapturedTime(new Date());
         }
-      } catch (e) {
-        showToast(t('toast_camera_error') + String(e), true);
+      } catch (e: any) {
+        const msg = String(e?.message ?? e);
+        console.error('[photo] takePictureAsync error:', msg);
+        showToast(t('toast_camera_error') + msg, true);
       }
       return;
     }
 
-    // ── 動画モード（3秒録画）──
+    // ── 動画モード（3秒録画 → FFmpegで5秒に延長）──
     setIsRecording(true);
     const RECORD_SECS = 3;
 
@@ -754,28 +777,25 @@ export default function Page() {
       }
     }, 1000);
 
-    let recordPromise: Promise<{ uri: string } | undefined> | null = null;
+    let rawUri: string | null = null;
     try {
-      // recordAsync を先に呼び出してから stopRecording タイマーをセット
-      recordPromise = cameraRef.current.recordAsync({ maxDuration: RECORD_SECS + 0.5 });
+      // recordAsync 呼び出し前にさらに 50ms の余裕を確保
+      await new Promise<void>(r => setTimeout(r, 50));
+      const recordPromise = cameraRef.current.recordAsync({ maxDuration: RECORD_SECS + 0.5 });
 
+      // 安全マージン +400ms で確実に停止
       recordingTimerRef.current = setTimeout(() => {
         try { cameraRef.current?.stopRecording(); } catch { /* ignore */ }
-      }, RECORD_SECS * 1000 + 300);
+      }, RECORD_SECS * 1000 + 400);
 
       const result = await recordPromise;
       clearCamTimers();
       setRecordingCountdown(null);
-
-      if (result?.uri) {
-        setCapturedUri(result.uri);
-        setCapturedType('video');
-        setCapturedTime(new Date());
-      }
+      rawUri = result?.uri ?? null;
     } catch (e: any) {
       clearCamTimers();
       const msg = String(e?.message ?? e);
-      // cancel/stopped/abort は正常終了フローなので無視
+      console.error('[video] recordAsync error:', msg);
       if (!msg.includes('cancel') && !msg.includes('stopped') && !msg.includes('abort') && !msg.includes('RecordingExceptionError')) {
         showToast(t('toast_camera_error') + msg, true);
       }
@@ -784,7 +804,44 @@ export default function Page() {
       setCountdown(null);
       setRecordingCountdown(null);
     }
-  }, [camPermission, requestCamPermission, isRecording, countdown, camMode,
+
+    if (!rawUri) return;
+
+    // ── FFmpegで5秒動画を錬成（最後の1フレームを2秒間静止延長）──
+    setIsFfmpegProcessing(true);
+    showToast(t('toast_processing_video'));
+    try {
+      // 出力ファイルパス（.movを.mp4に変換しつつ _5s サフィックス付加）
+      const ext = rawUri.includes('.mov') ? '.mov' : '.mp4';
+      const outputUri = rawUri.replace(ext, '_5s.mp4').replace(/[^/]+$/, (m) => m.replace(ext, '_5s.mp4'));
+      const safeOutput = rawUri.substring(0, rawUri.lastIndexOf('.')) + '_5s.mp4';
+
+      // tpad: 最後のフレームを stop_duration=2秒クローン
+      // apad: 音声も 2秒パディング
+      const cmd = `-y -i "${rawUri}" -vf "tpad=stop_mode=clone:stop_duration=2" -af "apad=pad_dur=2" -c:v mpeg4 -c:a aac -t 5 "${safeOutput}"`;
+      const session = await FFmpegKit.execute(cmd);
+      const rc = await session.getReturnCode();
+
+      if (ReturnCode.isSuccess(rc)) {
+        setCapturedUri(safeOutput);
+        console.log('[FFmpeg] 5-sec video created:', safeOutput);
+      } else {
+        // FFmpeg失敗: 元の3秒動画にフォールバック
+        const logs = await session.getAllLogsAsString();
+        console.warn('[FFmpeg] failed:', logs);
+        showToast(t('toast_processing_error'), true);
+        setCapturedUri(rawUri);
+      }
+    } catch (ffErr: any) {
+      console.warn('[FFmpeg] exception:', ffErr);
+      showToast(t('toast_processing_error'), true);
+      setCapturedUri(rawUri);
+    } finally {
+      setIsFfmpegProcessing(false);
+    }
+    setCapturedType('video');
+    setCapturedTime(new Date());
+  }, [camPermission, requestCamPermission, isRecording, countdown, isFfmpegProcessing, camMode,
       appState.showRecordingCountdown, clearCamTimers, showToast, t]);
 
   const retake = useCallback(() => {
@@ -799,15 +856,97 @@ export default function Page() {
     if (!capturedUri) return;
     try {
       if (!mediaPermission?.granted) await requestMediaPermission();
-      await MediaLibrary.saveToLibraryAsync(capturedUri);
-      recordToday(capturedUri);
+
+      let uriToSave = capturedUri;
+
+      // 写真の場合: react-native-view-shot でフィルター込みの見た目通りに保存
+      if (capturedType === 'photo' && previewCardRef.current) {
+        try {
+          uriToSave = await captureRef(previewCardRef.current, {
+            format: 'jpg',
+            quality: 0.95,
+            result: 'tmpfile',
+          });
+          console.log('[view-shot] captured with filter:', uriToSave);
+        } catch (vsErr) {
+          console.warn('[view-shot] fallback to raw photo:', vsErr);
+          uriToSave = capturedUri;
+        }
+      }
+
+      await MediaLibrary.saveToLibraryAsync(uriToSave);
+      recordToday(capturedUri); // 元のURIを記録に残す
       setCapturedUri(null);
       setCapturedTime(null);
       setScreen('home');
     } catch (e) {
+      console.error('[saveCapture] error:', e);
       showToast(t('toast_save_error'), true);
     }
-  }, [capturedUri, mediaPermission, requestMediaPermission, recordToday, showToast, t]);
+  }, [capturedUri, capturedType, mediaPermission, requestMediaPermission, recordToday, showToast, t]);
+
+  // ── 履歴レコード削除（当日分はストリーク・lastRecordDateもリセット）──
+  const deleteRecord = useCallback((record: RecordEntry) => {
+    Alert.alert('', t('confirm_delete_record'), [
+      { text: t('cancel'), style: 'cancel' },
+      {
+        text: t('history_delete'),
+        style: 'destructive',
+        onPress: () => {
+          const today = getAppDate();
+          const isToday = record.date === today;
+
+          setRecords(prev => {
+            const next = prev.filter(r => r.date !== record.date);
+            AsyncStorage.setItem('oneshot_records_v2', JSON.stringify(next)).catch(() => {});
+            return next;
+          });
+
+          // 今日の記録を削除 → 今日もう一度撮影できるようにリセット
+          if (isToday) {
+            setAppState(prev => {
+              const prevStreak = Math.max(0, prev.streak - 1);
+              const next = { ...prev, streak: prevStreak, lastRecordDate: '' };
+              saveAppState(next);
+              return next;
+            });
+          }
+
+          setSelectedRecord(null);
+          showToast(t('toast_deleted'));
+        },
+      },
+    ]);
+  }, [t, saveAppState, showToast]);
+
+  // ── 履歴レコード再保存（カメラロールへ）──
+  const resaveRecord = useCallback(async (record: RecordEntry) => {
+    if (!record.uri) { showToast(t('toast_no_data'), true); return; }
+    try {
+      if (!mediaPermission?.granted) await requestMediaPermission();
+      await MediaLibrary.saveToLibraryAsync(record.uri);
+      showToast(t('toast_resave_done'));
+    } catch (e) {
+      console.error('[resaveRecord] error:', e);
+      showToast(t('toast_save_error'), true);
+    }
+  }, [mediaPermission, requestMediaPermission, showToast, t]);
+
+  // ── 履歴レコードSNSシェア ──
+  const shareRecord = useCallback(async (record: RecordEntry) => {
+    if (!record.uri) { showToast(t('toast_no_data'), true); return; }
+    try {
+      const isPhoto = /\.(jpg|jpeg|png)$/i.test(record.uri);
+      await Sharing.shareAsync(record.uri, {
+        mimeType: isPhoto ? 'image/jpeg' : 'video/mp4',
+        UTI: isPhoto ? 'public.image' : 'public.movie',
+        dialogTitle: 'Share to Instagram Stories',
+      });
+      showToast(t('toast_share_done'));
+    } catch (e: any) {
+      if (!e?.message?.includes('cancel')) showToast(t('toast_share_fail') + String(e), true);
+    }
+  }, [showToast, t]);
 
   // Instagram Stories への直接シェア（インストール済みの場合）
   // フォールバック: システムシェアシートで選択可能
@@ -1068,8 +1207,16 @@ export default function Page() {
       return (
         <View style={styles.previewScreen}>
 
+          {/* FFmpeg処理中インジケーター */}
+          {isFfmpegProcessing && (
+            <View style={styles.ffmpegOverlay}>
+              <ActivityIndicator size="large" color="#fff" />
+              <Text style={styles.ffmpegText}>{t('toast_processing_video')}</Text>
+            </View>
+          )}
+
           {/* ── メディアカード（角ブラケット付き）── */}
-          <View style={styles.previewCard}>
+          <View ref={previewCardRef} style={styles.previewCard}>
             {isPhoto ? (
               <Image source={{ uri: capturedUri }} style={styles.previewMedia} resizeMode="cover" />
             ) : (
@@ -1210,12 +1357,12 @@ export default function Page() {
 
           {/* シャッター行: タイマーアイコン（左）| シャッター（中央）| スペーサー（右）*/}
           <View style={styles.camControls}>
-            {/* 左: タイマートグル */}
+            {/* 左: タイマートグル（ON=赤、OFF=グレー）*/}
             <TouchableOpacity
-              style={[styles.camTimerBtn, appState.showRecordingCountdown && styles.camTimerBtnActive]}
+              style={[styles.camTimerBtn, appState.showRecordingCountdown && styles.camTimerBtnOn]}
               onPress={() => updateState({ showRecordingCountdown: !appState.showRecordingCountdown })}
             >
-              <Feather name="clock" size={20} color={appState.showRecordingCountdown ? '#fff' : 'rgba(255,255,255,0.4)'} />
+              <Feather name="clock" size={20} color={appState.showRecordingCountdown ? '#fff' : 'rgba(255,255,255,0.35)'} />
             </TouchableOpacity>
 
             {/* 中央: シャッターボタン（赤い内側）*/}
@@ -1318,13 +1465,16 @@ export default function Page() {
           onRequestClose={() => setSelectedRecord(null)}
         >
           <View style={styles.recordModalBg}>
+            {/* 閉じるボタン */}
             <TouchableOpacity style={styles.recordModalClose} onPress={() => setSelectedRecord(null)}>
-              <Feather name="x" size={28} color="#fff" />
+              <Feather name="x" size={26} color="#fff" />
             </TouchableOpacity>
+
             {selectedRecord && (
               <>
+                {/* メディア表示 */}
                 {selectedRecord.uri ? (
-                  selectedRecord.uri.endsWith('.jpg') || selectedRecord.uri.endsWith('.jpeg') || selectedRecord.uri.endsWith('.png') ? (
+                  /\.(jpg|jpeg|png)$/i.test(selectedRecord.uri) ? (
                     <Image source={{ uri: selectedRecord.uri }} style={styles.recordModalMedia} resizeMode="contain" />
                   ) : (
                     <Video
@@ -1342,9 +1492,41 @@ export default function Page() {
                     <Text style={styles.recordModalNoMediaText}>{t('no_history')}</Text>
                   </View>
                 )}
+
+                {/* DAY + 日付オーバーレイ */}
                 <View style={styles.recordModalInfo}>
-                  <Text style={styles.recordModalDate}>{selectedRecord.date}</Text>
                   <Text style={styles.recordModalDay}>DAY {selectedRecord.day}</Text>
+                  <Text style={styles.recordModalDate}>{selectedRecord.date}</Text>
+                </View>
+
+                {/* ── アクションボタン（削除 | 再保存 | シェア）── */}
+                <View style={styles.recordModalActions}>
+                  <TouchableOpacity
+                    style={styles.recordModalBtnDelete}
+                    onPress={() => deleteRecord(selectedRecord)}
+                  >
+                    <Feather name="trash-2" size={16} color="#fff" />
+                    <Text style={styles.recordModalBtnText}>{t('history_delete')}</Text>
+                  </TouchableOpacity>
+
+                  {selectedRecord.uri ? (
+                    <>
+                      <TouchableOpacity
+                        style={styles.recordModalBtnSave}
+                        onPress={() => resaveRecord(selectedRecord)}
+                      >
+                        <Feather name="download" size={16} color="#fff" />
+                        <Text style={styles.recordModalBtnText}>{t('history_resave')}</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.recordModalBtnShare}
+                        onPress={() => shareRecord(selectedRecord)}
+                      >
+                        <Feather name="share" size={16} color="#fff" />
+                        <Text style={styles.recordModalBtnText}>{t('share_btn')}</Text>
+                      </TouchableOpacity>
+                    </>
+                  ) : null}
                 </View>
               </>
             )}
@@ -1482,7 +1664,10 @@ export default function Page() {
       {screen === 'onboarding' && <OnboardingScreen />}
       {screen === 'paywall' && <PaywallScreen />}
       {screen === 'home' && <HomeScreen />}
-      {screen === 'camera' && <CameraScreen />}
+      {/* CameraScreen() を関数として直接呼び出す（<CameraScreen />ではない）
+           → React が JSX ツリーの同じ位置に View/StableCameraView を見つけ続ける
+           → countdown state が変わっても CameraView を再マウントしない → フリッカー根絶 */}
+      {screen === 'camera' && CameraScreen()}
       {screen === 'history' && <HistoryScreen />}
       {screen === 'settings' && <SettingsScreen />}
 
@@ -1744,19 +1929,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  // flex:1 で残りの縦空間をすべて占有 → 画面サイズに応じて自動伸縮
+  // streakSection: flex:1 を廃止し固定サイズに → 下の要素を画面中央寄りに押し上げる
   streakSection: {
-    flex: 1,
-    justifyContent: 'center',
     alignItems: 'center',
-    minHeight: 80,
+    paddingTop: 8,
+    paddingBottom: 16,
   },
   streakNum: {
-    fontSize: 80,
+    fontSize: 120,         // 1.5倍（80→120）
     fontWeight: '900',
     color: '#fff',
-    letterSpacing: -4,
-    lineHeight: 80,
+    letterSpacing: -6,
+    lineHeight: 120,
     includeFontPadding: false,
   } as any,
   streakLabel: {
@@ -2015,17 +2199,26 @@ const styles = StyleSheet.create({
     paddingHorizontal: 36,
   },
 
-  // タイマーアイコンボタン（左下）
+  // タイマーアイコンボタン（左下）— ON=赤、OFF=半透明白
   camTimerBtn: {
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: 'rgba(255,255,255,0.06)',
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: 'transparent',
   },
-  camTimerBtnActive: {
-    backgroundColor: 'rgba(255,255,255,0.18)',
+  // ON時: 鮮やかな赤色（一目でわかる状態表示）
+  camTimerBtnOn: {
+    backgroundColor: '#CC0000',
+    borderColor: '#FF3333',
+    shadowColor: '#CC0000',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.7,
+    shadowRadius: 8,
+    elevation: 4,
   },
 
   // シャッターボタン: 白枠 + 赤い内側（image_3）
@@ -2118,46 +2311,49 @@ const styles = StyleSheet.create({
     borderBottomRightRadius: 3,
   },
 
-  // 左上: DAY X + 日時
+  // 左上: DAY X + 日時（Web版と同等の極太・大きさ）
   previewTopLeft: {
     position: 'absolute',
     top: 20,
     left: 20,
   },
   previewDayNum: {
-    fontSize: 40,
+    fontSize: 52,           // Web版と同等の大きさ
     fontWeight: '900',
     color: '#fff',
-    letterSpacing: 2,
-    lineHeight: 44,
-    textShadowColor: 'rgba(0,0,0,0.5)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 6,
+    letterSpacing: 1,
+    lineHeight: 56,
+    textShadowColor: 'rgba(0,0,0,0.75)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 12,
   },
   previewDateTime: {
     fontSize: 12,
-    color: 'rgba(255,255,255,0.65)',
-    fontWeight: '500',
-    letterSpacing: 1,
+    color: 'rgba(255,255,255,0.6)',
+    fontWeight: '600',
+    letterSpacing: 1.5,
     marginTop: 2,
+    textShadowColor: 'rgba(0,0,0,0.5)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
   },
 
-  // 中央下部: #ゴール
+  // 中央下部: #ゴール（Web版準拠の透過度 + テキストシャドウ）
   previewGoalOverlay: {
     position: 'absolute',
-    bottom: 28,
+    bottom: 32,
     left: 0,
     right: 0,
     alignItems: 'center',
   },
   previewGoalText: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '800',
-    color: 'rgba(255,255,255,0.9)',
-    letterSpacing: 1,
-    textShadowColor: 'rgba(0,0,0,0.6)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 8,
+    color: 'rgba(255,255,255,0.85)',  // Web版と完全一致
+    letterSpacing: 1.5,
+    textShadowColor: 'rgba(0,0,0,0.7)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 10,
   },
 
   // 長押しヒント（動画のみ）
@@ -2316,11 +2512,10 @@ const styles = StyleSheet.create({
   },
   recordModalInfo: {
     position: 'absolute',
-    bottom: 56,
-    left: 0,
-    right: 0,
-    alignItems: 'center',
-    gap: 4,
+    bottom: 120,    // アクションボタン行（約100px）の上に配置
+    left: 20,
+    alignItems: 'flex-start',
+    gap: 2,
   },
   recordModalDate: {
     color: 'rgba(255,255,255,0.7)',
@@ -2329,9 +2524,76 @@ const styles = StyleSheet.create({
   },
   recordModalDay: {
     color: '#fff',
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '900',
     letterSpacing: 2,
+  },
+
+  // 履歴モーダル: アクションボタン行
+  recordModalActions: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    padding: 20,
+    gap: 8,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+  },
+  recordModalBtnDelete: {
+    flex: 1,
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.15)',
+    backgroundColor: 'rgba(255,255,255,0.05)',
+  },
+  recordModalBtnSave: {
+    flex: 1,
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: '#1a1a1a',
+  },
+  recordModalBtnShare: {
+    flex: 1,
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: '#8B0000',
+  },
+  recordModalBtnText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+
+  // FFmpeg処理中オーバーレイ
+  ffmpegOverlay: {
+    position: 'absolute',
+    top: 0, left: 0, right: 0, bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.75)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 10,
+    gap: 16,
+  },
+  ffmpegText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+    letterSpacing: 0.5,
   },
 
   // ── Settings ──
