@@ -39,6 +39,7 @@ import Purchases, {
 import { captureRef } from 'react-native-view-shot';
 import * as Notifications from 'expo-notifications';
 import * as StoreReview from 'expo-store-review';
+import { burnTextOverlay } from '../modules/video-overlay/src';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -896,6 +897,23 @@ export default function Page() {
 
       let uriToSave = capturedUri;
 
+      // 動画の場合: ネイティブモジュールでテキストを焼き込む
+      if (capturedType === 'video') {
+        try {
+          const dayNum = appState.streak + 1;
+          const ts = capturedTime ?? new Date();
+          const dateStr = format(ts, 'yyyy.MM.dd');
+          const burned = await burnTextOverlay(capturedUri, [
+            { text: `DAY ${dayNum}`, x: 0.05, y: 0.12, fontSize: 48, color: '#FFFFFF', bold: true },
+            { text: dateStr,         x: 0.05, y: 0.19, fontSize: 14, color: 'rgba(255,255,255,0.7)', bold: false },
+            { text: `#${appState.goal}`, x: 0.5, y: 0.82, fontSize: 18, color: '#FFFFFF', bold: true },
+          ]);
+          uriToSave = burned;
+        } catch (vErr) {
+          console.warn('[video-overlay] fallback to raw video:', vErr);
+        }
+      }
+
       // 写真の場合: react-native-view-shot でフィルター込みの見た目通りに保存
       if (capturedType === 'photo' && previewCardRef.current) {
         try {
@@ -1685,6 +1703,10 @@ export default function Page() {
 
         <TouchableOpacity style={styles.btnOutline} onPress={restorePurchase}>
           <Text style={styles.btnOutlineText}>{t('settings_restore_btn')}</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.btnOutline} onPress={() => setGuideVisible(true)}>
+          <Text style={styles.btnOutlineText}>{t('settings_guide')}</Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.btnDanger} onPress={resetAll}>
