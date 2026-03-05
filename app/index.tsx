@@ -36,7 +36,6 @@ import Purchases, {
   PurchasesPackage,
   CustomerInfo,
 } from 'react-native-purchases';
-import { FFmpegKit, ReturnCode } from 'ffmpeg-kit-react-native';
 import { captureRef } from 'react-native-view-shot';
 import * as Notifications from 'expo-notifications';
 import * as StoreReview from 'expo-store-review';
@@ -424,7 +423,6 @@ export default function Page() {
   const cameraRef = useRef<CameraView>(null!);
   const previewVideoRef = useRef<Video>(null);
   const previewCardRef = useRef<any>(null);     // react-native-view-shot 用
-  const [isFfmpegProcessing, setIsFfmpegProcessing] = useState(false);
 
   // History state
   const [records, setRecords] = useState<RecordEntry[]>([]);
@@ -780,7 +778,7 @@ export default function Page() {
   }, []);
 
   const startRecording = useCallback(async () => {
-    if (isRecording || countdown !== null || isFfmpegProcessing) return;
+    if (isRecording || countdown !== null) return;
 
     // 権限確認
     if (!camPermission?.granted) {
@@ -874,39 +872,10 @@ export default function Page() {
 
     if (!rawUri) return;
 
-    // ── FFmpegで5秒動画を錬成（最後の1フレームを2秒間静止延長）──
-    setIsFfmpegProcessing(true);
-    showToast(t('toast_processing_video'));
-    try {
-      // 出力ファイルパス（.mov/.mp4 の拡張子を _5s.mp4 に置換）
-      const safeOutput = rawUri.substring(0, rawUri.lastIndexOf('.')) + '_5s.mp4';
-
-      // tpad: 最後のフレームを stop_duration=2秒クローン
-      // apad: 音声も 2秒パディング
-      const cmd = `-y -i "${rawUri}" -vf "tpad=stop_mode=clone:stop_duration=2" -af "apad=pad_dur=2" -c:v mpeg4 -c:a aac -t 5 "${safeOutput}"`;
-      const session = await FFmpegKit.execute(cmd);
-      const rc = await session.getReturnCode();
-
-      if (ReturnCode.isSuccess(rc)) {
-        setCapturedUri(safeOutput);
-        console.log('[FFmpeg] 5-sec video created:', safeOutput);
-      } else {
-        // FFmpeg失敗: 元の3秒動画にフォールバック
-        const logs = await session.getAllLogsAsString();
-        console.warn('[FFmpeg] failed:', logs);
-        showToast(t('toast_processing_error'), true);
-        setCapturedUri(rawUri);
-      }
-    } catch (ffErr: any) {
-      console.warn('[FFmpeg] exception:', ffErr);
-      showToast(t('toast_processing_error'), true);
-      setCapturedUri(rawUri);
-    } finally {
-      setIsFfmpegProcessing(false);
-    }
+    setCapturedUri(rawUri);
     setCapturedType('video');
     setCapturedTime(new Date());
-  }, [camPermission, requestCamPermission, isRecording, countdown, isFfmpegProcessing, camMode,
+  }, [camPermission, requestCamPermission, isRecording, countdown, camMode,
       appState.showRecordingCountdown, clearCamTimers, showToast, t]);
 
   const retake = useCallback(() => {
@@ -1271,14 +1240,6 @@ export default function Page() {
 
       return (
         <View style={styles.previewScreen}>
-
-          {/* FFmpeg処理中インジケーター */}
-          {isFfmpegProcessing && (
-            <View style={styles.ffmpegOverlay}>
-              <ActivityIndicator size="large" color="#fff" />
-              <Text style={styles.ffmpegText}>{t('toast_processing_video')}</Text>
-            </View>
-          )}
 
           {/* ── メディアカード（角ブラケット付き）── */}
           <View ref={previewCardRef} style={styles.previewCard}>
