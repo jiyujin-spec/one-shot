@@ -1705,6 +1705,10 @@ export default function Page() {
           <Text style={styles.btnOutlineText}>{t('settings_restore_btn')}</Text>
         </TouchableOpacity>
 
+        <TouchableOpacity style={styles.btnOutline} onPress={() => setGuideVisible(true)}>
+          <Text style={styles.btnOutlineText}>{t('settings_guide')}</Text>
+        </TouchableOpacity>
+
         <TouchableOpacity style={styles.btnDanger} onPress={resetAll}>
           <Text style={styles.btnDangerText}>{t('settings_reset_btn')}</Text>
         </TouchableOpacity>
