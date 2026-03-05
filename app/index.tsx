@@ -73,6 +73,7 @@ interface RecordEntry {
   day: number;
   ts: number;
   uri?: string;
+  isPass?: boolean;
 }
 
 // ─── Translations ─────────────────────────────────────────────────────────────
@@ -629,6 +630,8 @@ export default function Page() {
           setAppState(prev => {
             const diff = prev.lastRecordDate ? daysBetween(prev.lastRecordDate, today) : 999;
             const newStreak = diff <= 1 ? prev.streak + 1 : 1;
+            const passEntry: RecordEntry = { date: today, day: newStreak, ts: Date.now(), isPass: true };
+            setRecords(r => [passEntry, ...r.filter(x => x.date !== today)]);
             const consumed = consumePass({ ...prev, streak: newStreak, lastRecordDate: today });
             saveAppState(consumed);
             return consumed;
@@ -1136,6 +1139,9 @@ export default function Page() {
         </TouchableOpacity>
       </View>
 
+      {/* ── 上部スペーサー（ロゴとストリークの間隔を広げる） ── */}
+      <View style={{ flex: 1 }} />
+
       {/* ── ストリーク数字（Web版と同じ縦グラデーション: 白→グレー） ── */}
       <View style={styles.streakSection}>
         {/* MaskedView: テキスト形状をマスクとして LinearGradient を型抜き */}
@@ -1205,6 +1211,9 @@ export default function Page() {
         <Ionicons name="card-outline" size={14} color="#8B0000" />
         <Text style={styles.passBuyBtnText}>{t('pass_purchase_btn')}</Text>
       </TouchableOpacity>
+
+      {/* ── 下部スペーサー（コンテンツを中央よりやや上に押し上げる） ── */}
+      <View style={{ flex: 1.4 }} />
 
     </View>
   );
@@ -1422,7 +1431,7 @@ export default function Page() {
       : ['日', '月', '火', '水', '木', '金', '土'];
 
     return (
-      <ScrollView style={styles.screen} contentContainerStyle={styles.historyContent}>
+      <ScrollView style={styles.screen} contentContainerStyle={styles.historyContent} contentInsetAdjustmentBehavior="automatic">
         <View style={styles.calHeader}>
           <TouchableOpacity onPress={() => {
             if (calMonth === 0) { setCalMonth(11); setCalYear(y => y - 1); }
@@ -1451,19 +1460,23 @@ export default function Page() {
             const ds = `${calYear}-${pad2(calMonth + 1)}-${pad2(day)}`;
             const rec = recordMap.get(ds);
             const recorded = !!rec;
+            const isPass = rec?.isPass === true;
             const isToday = ds === todayStr;
             const cell = (
               <>
                 <Text style={[styles.calDayNum, recorded && styles.calDayNumRecorded]}>
                   {day}
                 </Text>
-                {recorded && <Text style={styles.calCheck}>✓</Text>}
+                {recorded && !isPass && <Text style={styles.calCheck}>✓</Text>}
+                {isPass && <Text style={styles.calPassMark}>○</Text>}
               </>
             );
             return recorded ? (
               <TouchableOpacity
                 key={ds}
-                style={[styles.calCell, styles.calDayCell, styles.calDayCellRecorded, isToday && styles.calDayCellToday]}
+                style={[styles.calCell, styles.calDayCell,
+                  isPass ? styles.calDayCellPass : styles.calDayCellRecorded,
+                  isToday && styles.calDayCellToday]}
                 onPress={() => setSelectedRecord(rec)}
                 activeOpacity={0.7}
               >
@@ -1519,7 +1532,22 @@ export default function Page() {
                   </View>
                 )}
 
-                {/* DAY + 日付オーバーレイ */}
+                {/* フィルターオーバーレイ（撮影プレビューと同じ見た目）*/}
+                {!selectedRecord.isPass && selectedRecord.uri && (
+                  <View style={styles.recordModalFilterOverlay} pointerEvents="none">
+                    {/* 左上: DAY X + 日付 */}
+                    <View style={styles.recordModalFilterTop}>
+                      <Text style={styles.recordModalFilterDay}>DAY {selectedRecord.day}</Text>
+                      <Text style={styles.recordModalFilterDate}>{selectedRecord.date}</Text>
+                    </View>
+                    {/* 中央下部: #ゴール名 */}
+                    <View style={styles.recordModalFilterBottom}>
+                      <Text style={styles.recordModalFilterGoal}>#{appState.goal}</Text>
+                    </View>
+                  </View>
+                )}
+
+                {/* DAY + 日付オーバーレイ（アクションボタン上のラベル）*/}
                 <View style={styles.recordModalInfo}>
                   <Text style={styles.recordModalDay}>DAY {selectedRecord.day}</Text>
                   <Text style={styles.recordModalDate}>{selectedRecord.date}</Text>
@@ -1910,8 +1938,10 @@ const styles = StyleSheet.create({
 
   // ── Paywall ──
   paywallContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
     padding: 24,
-    paddingTop: 60,
+    paddingVertical: 40,
     alignItems: 'center',
   },
   paywallSub: {
@@ -1985,11 +2015,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  // streakSection: flex:1 を廃止し固定サイズに → 下の要素を画面中央寄りに押し上げる
   streakSection: {
     alignItems: 'center',
-    paddingTop: 8,
-    paddingBottom: 16,
+    paddingBottom: 8,
   },
   streakNum: {
     fontSize: 120,         // 1.5倍（80→120）
@@ -2476,8 +2504,10 @@ const styles = StyleSheet.create({
 
   // ── History ──
   historyContent: {
+    flexGrow: 1,
     padding: 16,
-    paddingTop: 16,
+    paddingTop: 40,
+    justifyContent: 'center',
   },
   calHeader: {
     flexDirection: 'row',
@@ -2514,6 +2544,9 @@ const styles = StyleSheet.create({
   calDayCellRecorded: {
     backgroundColor: 'rgba(139,0,0,0.2)',
   },
+  calDayCellPass: {
+    backgroundColor: 'rgba(100,80,0,0.25)',
+  },
   calDayCellToday: {
     borderWidth: 1,
     borderColor: '#8B0000',
@@ -2532,6 +2565,14 @@ const styles = StyleSheet.create({
     right: 3,
     fontSize: 9,
     color: '#CC0000',
+    fontWeight: '900',
+  },
+  calPassMark: {
+    position: 'absolute',
+    top: 2,
+    right: 3,
+    fontSize: 9,
+    color: '#CC9900',
     fontWeight: '900',
   },
   noHistoryText: {
@@ -2565,6 +2606,53 @@ const styles = StyleSheet.create({
   recordModalNoMediaText: {
     color: '#555',
     fontSize: 14,
+  },
+  // フィルターオーバーレイ（撮影プレビューと同じ DAY/ゴール表示）
+  recordModalFilterOverlay: {
+    position: 'absolute',
+    top: 0, left: 0, right: 0, bottom: 0,
+    zIndex: 5,
+  },
+  recordModalFilterTop: {
+    position: 'absolute',
+    top: 60,
+    left: 20,
+  },
+  recordModalFilterDay: {
+    fontSize: 48,
+    fontWeight: '900',
+    color: '#fff',
+    letterSpacing: 1,
+    lineHeight: 52,
+    textShadowColor: 'rgba(0,0,0,0.75)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 12,
+  },
+  recordModalFilterDate: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.6)',
+    fontWeight: '600',
+    letterSpacing: 1.5,
+    marginTop: 2,
+    textShadowColor: 'rgba(0,0,0,0.5)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
+  },
+  recordModalFilterBottom: {
+    position: 'absolute',
+    bottom: 140,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+  },
+  recordModalFilterGoal: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: 'rgba(255,255,255,0.85)',
+    letterSpacing: 1.5,
+    textShadowColor: 'rgba(0,0,0,0.7)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 10,
   },
   recordModalInfo: {
     position: 'absolute',
