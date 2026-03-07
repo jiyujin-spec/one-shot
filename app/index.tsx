@@ -516,26 +516,24 @@ export default function Page() {
 
   // ── RevenueCat helpers ──────────────────────────────────────────────────────
 
-  const findRCPackage = useCallback((type: 'pass' | 'subscription'): PurchasesPackage | null => {
+  const findRCPackage = useCallback((type: 'pass' | 'annual' | 'monthly'): PurchasesPackage | null => {
     if (!rcOfferings?.current) return null;
     const pkgs = rcOfferings.current.availablePackages;
-    if (type === 'subscription') {
-      // 1st: 年額プランの製品ID で完全一致
+    if (type === 'annual') {
       return pkgs.find(p => p.product.identifier === 'com.jin.oneshot.annual.premium')
-        // 2nd: RevenueCat 標準の $rc_annual パッケージ
         ?? rcOfferings.current.annual
         ?? pkgs.find(p => p.identifier === '$rc_annual' || p.identifier.toLowerCase().includes('annual'))
-        // 3rd: 旧月額プランへのフォールバック
-        ?? pkgs.find(p => p.product.identifier === 'com.jin.oneshot.premium')
+        ?? null;
+    }
+    if (type === 'monthly') {
+      return pkgs.find(p => p.product.identifier === 'com.jin.oneshot.monthly.premium')
         ?? rcOfferings.current.monthly
         ?? pkgs.find(p => p.identifier === '$rc_monthly' || p.identifier.toLowerCase().includes('month'))
-        ?? pkgs[0]
+        ?? pkgs.find(p => p.product.identifier === 'com.jin.oneshot.premium')
         ?? null;
     }
     if (type === 'pass') {
-      // 1st: Product ID で完全一致
       return pkgs.find(p => p.product.identifier === 'com.jin.oneshot.1pass')
-        // 2nd: Package ID フォールバック
         ?? pkgs.find(p => p.identifier === 'pass')
         ?? pkgs.find(p => p.identifier.toLowerCase().includes('pass'))
         ?? null;
@@ -577,12 +575,7 @@ export default function Page() {
     }
   }, [findRCPackage, showToast, t, saveAppState]);
 
-  const subscribePremium = useCallback(async () => {
-    const pkg = findRCPackage('subscription');
-    if (!pkg) {
-      showToast(t('product_not_found'), true);
-      return;
-    }
+  const subscribePremium = useCallback(async (pkg: PurchasesPackage) => {
     showToast(t('processing'));
     try {
       const { customerInfo } = await Purchases.purchasePackage(pkg);
@@ -590,6 +583,8 @@ export default function Page() {
       if (active) {
         updateState({ subscribed: true });
         showToast(t('subscribe_success'));
+        // Small delay to let React flush the state update before navigating
+        await new Promise(r => setTimeout(r, 350));
         setScreen('home');
         setAppState(prev => {
           if (!prev.guideShown) {
@@ -603,7 +598,7 @@ export default function Page() {
         showToast(t('purchase_failed'), true);
       }
     }
-  }, [findRCPackage, showToast, t, updateState]);
+  }, [showToast, t, updateState]);
 
   const restorePurchase = useCallback(async () => {
     showToast(t('restoring'));
@@ -1141,12 +1136,10 @@ export default function Page() {
   // ─── Paywall Screen ──────────────────────────────────────────────────────────
 
   const PaywallScreen = () => {
-    const annualPkg  = findRCPackage('subscription');
-    const priceStr   = annualPkg?.product.priceString ?? null;
-    // ボタンラベル: Store から価格を取得できた場合は動的表示
-    const btnLabel   = priceStr
-      ? (lang === 'ja' ? `${priceStr} / 年で始める` : `GET ACCESS  —  ${priceStr} / YR`)
-      : t('paywall_subscribe_btn');
+    const annualPkg   = findRCPackage('annual');
+    const monthlyPkg  = findRCPackage('monthly');
+    const annualPrice = annualPkg?.product.priceString ?? null;
+    const monthlyPrice = monthlyPkg?.product.priceString ?? null;
 
     return (
       <ScrollView style={styles.screen} contentContainerStyle={styles.paywallContent}>
@@ -1161,12 +1154,6 @@ export default function Page() {
 
         <Text style={styles.paywallSub}>{t('paywall_sub')}</Text>
 
-        {/* ── 価格ブロック（Store取得価格を大きく表示）── */}
-        <View style={styles.paywallPriceBlock}>
-          <Text style={styles.paywallPrice}>{priceStr ?? '—'}</Text>
-          <Text style={styles.paywallPriceSub}>{t('paywall_price_sub')}</Text>
-        </View>
-
         {/* ── 機能リスト ── */}
         {[1, 2, 3, 4, 5].map(i => (
           <View key={i} style={styles.featureRow}>
@@ -1175,10 +1162,40 @@ export default function Page() {
           </View>
         ))}
 
-        {/* ── CTA ── */}
-        <TouchableOpacity style={styles.btnPrimary} onPress={subscribePremium}>
-          <Text style={styles.btnPrimaryText}>{btnLabel}</Text>
+        {/* ── 年額プランカード（メイン） ── */}
+        <TouchableOpacity
+          style={styles.planCardActive}
+          onPress={() => annualPkg && subscribePremium(annualPkg)}
+          disabled={!annualPkg}
+        >
+          <View style={styles.planCardBadgeRow}>
+            <View style={styles.paywallBadge}>
+              <Text style={styles.paywallBadgeText}>
+                {lang === 'ja' ? 'おすすめ' : 'BEST VALUE'}
+              </Text>
+            </View>
+          </View>
+          <Text style={styles.planCardPrice}>{annualPrice ?? '—'}</Text>
+          <Text style={styles.planCardPeriod}>
+            {lang === 'ja' ? '/ 年（1日あたり約8円）' : '/ YEAR  ·  BILLED ANNUALLY'}
+          </Text>
+          <Text style={styles.planCardCta}>
+            {lang === 'ja' ? 'このプランで始める →' : 'GET ACCESS  →'}
+          </Text>
         </TouchableOpacity>
+
+        {/* ── 月額プランカード（サブ） ── */}
+        {monthlyPkg && (
+          <TouchableOpacity
+            style={styles.planCardSecondary}
+            onPress={() => subscribePremium(monthlyPkg)}
+          >
+            <Text style={styles.planCardSecondaryPrice}>{monthlyPrice ?? '—'}</Text>
+            <Text style={styles.planCardSecondaryPeriod}>
+              {lang === 'ja' ? '/ 月' : '/ MONTH  ·  BILLED MONTHLY'}
+            </Text>
+          </TouchableOpacity>
+        )}
 
         <Text style={styles.paywallPassNote}>{t('paywall_pass_note')}</Text>
 
@@ -1697,7 +1714,7 @@ export default function Page() {
         </View>
 
         {!appState.subscribed && (() => {
-          const _pkg   = findRCPackage('subscription');
+          const _pkg   = findRCPackage('annual');
           const _price = _pkg?.product.priceString ?? null;
           const _btn   = _price
             ? (lang === 'ja' ? `${_price} / 年で始める` : `GET ACCESS  —  ${_price} / YR`)
@@ -1709,7 +1726,7 @@ export default function Page() {
               </Text>
               <Text style={[styles.settingLabel, { marginTop: 8 }]}>{t('paywall_sub')}</Text>
               <Text style={styles.settingHint}>{_price ? `${_price}  ${t('paywall_price_sub')}` : t('paywall_price_sub')}</Text>
-              <TouchableOpacity style={styles.btnPrimary} onPress={subscribePremium}>
+              <TouchableOpacity style={styles.btnPrimary} onPress={() => _pkg && subscribePremium(_pkg)}>
                 <Text style={styles.btnPrimaryText}>{_btn}</Text>
               </TouchableOpacity>
             </View>
@@ -2091,6 +2108,67 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#555',
     letterSpacing: 0.5,
+  },
+  // ── Plan cards ──
+  planCardActive: {
+    alignSelf: 'stretch',
+    borderWidth: 1.5,
+    borderColor: '#8B0000',
+    borderRadius: 12,
+    backgroundColor: '#0d0000',
+    padding: 20,
+    marginBottom: 12,
+    marginTop: 20,
+  },
+  planCardBadgeRow: {
+    flexDirection: 'row',
+    marginBottom: 10,
+  },
+  planCardPrice: {
+    fontSize: 34,
+    fontWeight: '900',
+    color: '#fff',
+    letterSpacing: -1,
+    marginBottom: 4,
+  },
+  planCardPeriod: {
+    fontSize: 11,
+    color: '#888',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+    marginBottom: 14,
+  },
+  planCardCta: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#CC3333',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+  },
+  planCardSecondary: {
+    alignSelf: 'stretch',
+    borderWidth: 1,
+    borderColor: '#333',
+    borderRadius: 12,
+    backgroundColor: '#0d0d0d',
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    marginBottom: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  planCardSecondaryPrice: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#aaa',
+    letterSpacing: -0.5,
+  },
+  planCardSecondaryPeriod: {
+    fontSize: 11,
+    color: '#555',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
   },
   featureRow: {
     flexDirection: 'row',
