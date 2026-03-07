@@ -39,7 +39,7 @@ import Purchases, {
 import { captureRef } from 'react-native-view-shot';
 import * as Notifications from 'expo-notifications';
 import * as StoreReview from 'expo-store-review';
-import { burnTextOverlay } from '../modules/video-overlay/src';
+import { processVideo } from '../modules/video-overlay/src';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -67,6 +67,8 @@ interface AppState {
   showRecordingCountdown: boolean;
   rcUserID: string;
   reviewRequested: boolean;
+  userId: string;          // "OS-YYYY-NNN" generated once
+  challengeDays?: number;  // total days for challenge (undefined = no challenge)
 }
 
 interface RecordEntry {
@@ -335,6 +337,8 @@ const defaultState: AppState = {
   showRecordingCountdown: true,
   rcUserID: '',
   reviewRequested: false,
+  userId: '',
+  challengeDays: undefined,
 };
 
 // ─── Notifications ────────────────────────────────────────────────────────────
@@ -421,6 +425,7 @@ export default function Page() {
   const recordingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const recordingCountdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [isPreviewPlaying, setIsPreviewPlaying] = useState(false);
+  const [isProcessingVideo, setIsProcessingVideo] = useState(false);
   // null! = non-null assertion: RefObject<CameraView> として扱い TS の型エラーを解消
   const cameraRef = useRef<CameraView>(null!);
   const previewVideoRef = useRef<Video>(null);
@@ -700,6 +705,13 @@ export default function Page() {
           loaded.rcUserID = 'user_' + Math.random().toString(36).substr(2, 12) + '_' + Date.now();
         }
 
+        // Ensure userId (stable "OS-YYYY-NNN" identifier for overlay)
+        if (!loaded.userId) {
+          const year = new Date().getFullYear();
+          const num = Math.floor(Math.random() * 999) + 1;
+          loaded.userId = `OS-${year}-${String(num).padStart(3, '0')}`;
+        }
+
         // Load records
         const recRaw = await AsyncStorage.getItem('oneshot_records_v2');
         if (recRaw) setRecords(JSON.parse(recRaw));
@@ -876,11 +888,30 @@ export default function Page() {
 
     if (!rawUri) return;
 
-    setCapturedUri(rawUri);
+    // Show raw video in preview immediately, then replace with overlay-burned version
+    const captureTime = new Date();
+    setCapturedTime(captureTime);
     setCapturedType('video');
-    setCapturedTime(new Date());
+    setCapturedUri(rawUri);
+    setIsProcessingVideo(true);
+    try {
+      const processed = await processVideo({
+        inputPath: rawUri,
+        userId: appState.userId || 'OS-2026-001',
+        habitName: (appState.goal || 'HABIT').toUpperCase(),
+        currentDay: appState.streak + 1,
+        totalDays: appState.challengeDays,
+      });
+      setCapturedUri(processed);
+    } catch (vErr) {
+      console.warn('[processVideo] fallback to raw video:', vErr);
+      // capturedUri already set to rawUri, just proceed without overlay
+    } finally {
+      setIsProcessingVideo(false);
+    }
   }, [camPermission, requestCamPermission, isRecording, countdown, camMode,
-      appState.showRecordingCountdown, clearCamTimers, showToast, t]);
+      appState.showRecordingCountdown, appState.userId, appState.goal,
+      appState.streak, appState.challengeDays, clearCamTimers, showToast, t]);
 
   const retake = useCallback(() => {
     clearCamTimers();
@@ -897,22 +928,8 @@ export default function Page() {
 
       let uriToSave = capturedUri;
 
-      // 動画の場合: ネイティブモジュールでテキストを焼き込む
-      if (capturedType === 'video') {
-        try {
-          const dayNum = appState.streak + 1;
-          const ts = capturedTime ?? new Date();
-          const dateStr = format(ts, 'yyyy.MM.dd');
-          const burned = await burnTextOverlay(capturedUri, [
-            { text: `DAY ${dayNum}`, x: 0.05, y: 0.12, fontSize: 48, color: '#FFFFFF', bold: true },
-            { text: dateStr,         x: 0.05, y: 0.19, fontSize: 14, color: 'rgba(255,255,255,0.7)', bold: false },
-            { text: `#${appState.goal}`, x: 0.5, y: 0.82, fontSize: 18, color: '#FFFFFF', bold: true },
-          ]);
-          uriToSave = burned;
-        } catch (vErr) {
-          console.warn('[video-overlay] fallback to raw video:', vErr);
-        }
-      }
+      // 動画の場合: オーバーレイは撮影直後にSwift側で焼き込み済み → そのまま保存
+      // (capturedUri は processVideo() 済みのファイルを指している)
 
       // 写真の場合: react-native-view-shot でフィルター込みの見た目通りに保存
       if (capturedType === 'photo' && previewCardRef.current) {
@@ -1314,16 +1331,29 @@ export default function Page() {
             <View style={[styles.bracket, styles.bracketBL]} />
             <View style={[styles.bracket, styles.bracketBR]} />
 
-            {/* 左上: DAY X + 日時 */}
-            <View style={styles.previewTopLeft}>
-              <Text style={styles.previewDayNum}>DAY {dayNum}</Text>
-              <Text style={styles.previewDateTime}>{dateStr}{'  '}{timeStr}</Text>
-            </View>
+            {/* 写真のみ JS 側オーバーレイを表示（動画はSwift焼き込み済み）*/}
+            {isPhoto && (
+              <>
+                {/* 左上: DAY X + 日時 */}
+                <View style={styles.previewTopLeft}>
+                  <Text style={styles.previewDayNum}>DAY {dayNum}</Text>
+                  <Text style={styles.previewDateTime}>{dateStr}{'  '}{timeStr}</Text>
+                </View>
 
-            {/* 中央下部: #ゴール名 */}
-            <View style={styles.previewGoalOverlay}>
-              <Text style={styles.previewGoalText}>#{appState.goal}</Text>
-            </View>
+                {/* 中央下部: #ゴール名 */}
+                <View style={styles.previewGoalOverlay}>
+                  <Text style={styles.previewGoalText}>#{appState.goal}</Text>
+                </View>
+              </>
+            )}
+
+            {/* 動画処理中インジケーター */}
+            {!isPhoto && isProcessingVideo && (
+              <View style={styles.ffmpegOverlay}>
+                <ActivityIndicator size="large" color="#C8C8C8" />
+                <Text style={styles.ffmpegText}>Processing...</Text>
+              </View>
+            )}
           </View>
 
           {/* ── アクションボタン行（削除 | 保存 | 共有）── */}
@@ -1332,7 +1362,11 @@ export default function Page() {
               <Feather name="trash-2" size={18} color="#fff" />
               <Text style={styles.previewBtnLabel}>{t('retry_btn')}</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.previewBtnSave} onPress={saveCapture}>
+            <TouchableOpacity
+              style={[styles.previewBtnSave, isProcessingVideo && { opacity: 0.4 }]}
+              onPress={saveCapture}
+              disabled={isProcessingVideo}
+            >
               <Feather name="download" size={18} color="#fff" />
               <Text style={styles.previewBtnLabel}>{t('save_btn')}</Text>
             </TouchableOpacity>
