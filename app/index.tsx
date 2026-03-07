@@ -526,10 +526,9 @@ export default function Page() {
         ?? null;
     }
     if (type === 'monthly') {
-      return pkgs.find(p => p.product.identifier === 'com.jin.oneshot.monthly.premium')
+      return pkgs.find(p => p.product.identifier === 'com.jin.oneshot.premium')
         ?? rcOfferings.current.monthly
         ?? pkgs.find(p => p.identifier === '$rc_monthly' || p.identifier.toLowerCase().includes('month'))
-        ?? pkgs.find(p => p.product.identifier === 'com.jin.oneshot.premium')
         ?? null;
     }
     if (type === 'pass') {
