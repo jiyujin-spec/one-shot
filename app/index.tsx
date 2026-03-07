@@ -39,7 +39,7 @@ import Purchases, {
 import { captureRef } from 'react-native-view-shot';
 import * as Notifications from 'expo-notifications';
 import * as StoreReview from 'expo-store-review';
-import { burnTextOverlay } from '../modules/video-overlay/src';
+import { processVideo } from '../modules/video-overlay/src';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -67,6 +67,8 @@ interface AppState {
   showRecordingCountdown: boolean;
   rcUserID: string;
   reviewRequested: boolean;
+  userId: string;          // "OS-YYYY-NNN" generated once
+  challengeDays?: number;  // total days for challenge (undefined = no challenge)
 }
 
 interface RecordEntry {
@@ -103,13 +105,13 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     settings_reset_btn: 'すべてのデータをリセット',
     settings_language_label: '言語 / Language',
     paywall_sub: 'メンバーシップ',
-    paywall_price_sub: '/ 月（税込）・自動更新',
+    paywall_price_sub: '/ 年（税込）・自動更新',
     paywall_feature1: '動画・写真の毎日撮影（無制限）',
     paywall_feature2: 'ストリーク管理・継続記録',
     paywall_feature3: 'Instagram / TikTok への SNS シェア',
     paywall_feature4: '毎週1枚の無料パス自動付与',
     paywall_feature5: '撮影履歴・カレンダー表示',
-    paywall_subscribe_btn: '月額 ¥300 で始める',
+    paywall_subscribe_btn: '年額プランで始める',
     paywall_pass_note: 'お休みパスは ¥100/枚 で別途購入できます',
     paywall_restore_btn: '購入を復元する',
     paywall_terms: '利用規約',
@@ -212,13 +214,13 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     settings_reset_btn: 'Reset All Data',
     settings_language_label: '言語 / Language',
     paywall_sub: 'Membership',
-    paywall_price_sub: '/ month (tax incl.) · Auto-renews',
+    paywall_price_sub: '/ year (tax incl.) · Auto-renews',
     paywall_feature1: 'Unlimited daily video & photo recording',
     paywall_feature2: 'Streak tracking & continuous records',
     paywall_feature3: 'Share to Instagram / TikTok',
     paywall_feature4: '1 free pass auto-granted every week',
     paywall_feature5: 'Recording history & calendar view',
-    paywall_subscribe_btn: 'Start for ¥300/month',
+    paywall_subscribe_btn: 'Start Annual Plan',
     paywall_pass_note: 'Rest passes available separately at ¥100/pass',
     paywall_restore_btn: 'Restore Purchases',
     paywall_terms: 'Terms of Service',
@@ -335,6 +337,8 @@ const defaultState: AppState = {
   showRecordingCountdown: true,
   rcUserID: '',
   reviewRequested: false,
+  userId: '',
+  challengeDays: undefined,
 };
 
 // ─── Notifications ────────────────────────────────────────────────────────────
@@ -400,7 +404,7 @@ const Toast: React.FC<ToastProps> = ({ message, isError }) => {
 
 export default function Page() {
   const [appState, setAppState] = useState<AppState>(defaultState);
-  const [lang, setLang] = useState<Lang>('ja');
+  const [lang, setLang] = useState<Lang>('en');
   const [screen, setScreen] = useState<Screen>('onboarding');
   const [toastMsg, setToastMsg] = useState('');
   const [toastError, setToastError] = useState(false);
@@ -421,6 +425,7 @@ export default function Page() {
   const recordingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const recordingCountdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [isPreviewPlaying, setIsPreviewPlaying] = useState(false);
+  const [isProcessingVideo, setIsProcessingVideo] = useState(false);
   // null! = non-null assertion: RefObject<CameraView> として扱い TS の型エラーを解消
   const cameraRef = useRef<CameraView>(null!);
   const previewVideoRef = useRef<Video>(null);
@@ -443,7 +448,7 @@ export default function Page() {
   // ── Translation helper ──────────────────────────────────────────────────────
 
   const t = useCallback((key: string, vars?: Record<string, string | number>): string => {
-    let str = TRANSLATIONS[lang][key] ?? TRANSLATIONS['ja'][key] ?? key;
+    let str = TRANSLATIONS[lang][key] ?? TRANSLATIONS['en'][key] ?? key;
     if (vars) {
       Object.entries(vars).forEach(([k, v]) => {
         str = str.replace(`{${k}}`, String(v));
@@ -515,7 +520,13 @@ export default function Page() {
     if (!rcOfferings?.current) return null;
     const pkgs = rcOfferings.current.availablePackages;
     if (type === 'subscription') {
-      return pkgs.find(p => p.product.identifier === 'com.jin.oneshot.premium')
+      // 1st: 年額プランの製品ID で完全一致
+      return pkgs.find(p => p.product.identifier === 'com.jin.oneshot.annual.premium')
+        // 2nd: RevenueCat 標準の $rc_annual パッケージ
+        ?? rcOfferings.current.annual
+        ?? pkgs.find(p => p.identifier === '$rc_annual' || p.identifier.toLowerCase().includes('annual'))
+        // 3rd: 旧月額プランへのフォールバック
+        ?? pkgs.find(p => p.product.identifier === 'com.jin.oneshot.premium')
         ?? rcOfferings.current.monthly
         ?? pkgs.find(p => p.identifier === '$rc_monthly' || p.identifier.toLowerCase().includes('month'))
         ?? pkgs[0]
@@ -700,6 +711,13 @@ export default function Page() {
           loaded.rcUserID = 'user_' + Math.random().toString(36).substr(2, 12) + '_' + Date.now();
         }
 
+        // Ensure userId (stable "OS-YYYY-NNN" identifier for overlay)
+        if (!loaded.userId) {
+          const year = new Date().getFullYear();
+          const num = Math.floor(Math.random() * 999) + 1;
+          loaded.userId = `OS-${year}-${String(num).padStart(3, '0')}`;
+        }
+
         // Load records
         const recRaw = await AsyncStorage.getItem('oneshot_records_v2');
         if (recRaw) setRecords(JSON.parse(recRaw));
@@ -876,11 +894,30 @@ export default function Page() {
 
     if (!rawUri) return;
 
-    setCapturedUri(rawUri);
+    // Show raw video in preview immediately, then replace with overlay-burned version
+    const captureTime = new Date();
+    setCapturedTime(captureTime);
     setCapturedType('video');
-    setCapturedTime(new Date());
+    setCapturedUri(rawUri);
+    setIsProcessingVideo(true);
+    try {
+      const processed = await processVideo({
+        inputPath: rawUri,
+        userId: appState.userId || 'OS-2026-001',
+        habitName: (appState.goal || 'HABIT').toUpperCase(),
+        currentDay: appState.streak + 1,
+        totalDays: appState.challengeDays,
+      });
+      setCapturedUri(processed);
+    } catch (vErr) {
+      console.warn('[processVideo] fallback to raw video:', vErr);
+      // capturedUri already set to rawUri, just proceed without overlay
+    } finally {
+      setIsProcessingVideo(false);
+    }
   }, [camPermission, requestCamPermission, isRecording, countdown, camMode,
-      appState.showRecordingCountdown, clearCamTimers, showToast, t]);
+      appState.showRecordingCountdown, appState.userId, appState.goal,
+      appState.streak, appState.challengeDays, clearCamTimers, showToast, t]);
 
   const retake = useCallback(() => {
     clearCamTimers();
@@ -897,22 +934,8 @@ export default function Page() {
 
       let uriToSave = capturedUri;
 
-      // 動画の場合: ネイティブモジュールでテキストを焼き込む
-      if (capturedType === 'video') {
-        try {
-          const dayNum = appState.streak + 1;
-          const ts = capturedTime ?? new Date();
-          const dateStr = format(ts, 'yyyy.MM.dd');
-          const burned = await burnTextOverlay(capturedUri, [
-            { text: `DAY ${dayNum}`, x: 0.05, y: 0.12, fontSize: 48, color: '#FFFFFF', bold: true },
-            { text: dateStr,         x: 0.05, y: 0.19, fontSize: 14, color: 'rgba(255,255,255,0.7)', bold: false },
-            { text: `#${appState.goal}`, x: 0.5, y: 0.82, fontSize: 18, color: '#FFFFFF', bold: true },
-          ]);
-          uriToSave = burned;
-        } catch (vErr) {
-          console.warn('[video-overlay] fallback to raw video:', vErr);
-        }
-      }
+      // 動画の場合: オーバーレイは撮影直後にSwift側で焼き込み済み → そのまま保存
+      // (capturedUri は processVideo() 済みのファイルを指している)
 
       // 写真の場合: react-native-view-shot でフィルター込みの見た目通りに保存
       if (capturedType === 'photo' && previewCardRef.current) {
@@ -1117,32 +1140,42 @@ export default function Page() {
 
   // ─── Paywall Screen ──────────────────────────────────────────────────────────
 
-  const PaywallScreen = () => (
-    <ScrollView style={styles.screen} contentContainerStyle={styles.paywallContent}>
-      <Text style={styles.appTitle}>ONE SHOT</Text>
-      <Text style={styles.paywallSub}>{t('paywall_sub')}</Text>
-      <Text style={styles.paywallPrice}>{t('paywall_subscribe_btn')}</Text>
-      <Text style={styles.paywallPriceSub}>{t('paywall_price_sub')}</Text>
-      {[1, 2, 3, 4, 5].map(i => (
-        <View key={i} style={styles.featureRow}>
-          <Feather name="check-circle" size={16} color="#8B0000" />
-          <Text style={styles.featureText}>{t(`paywall_feature${i}`)}</Text>
+  const PaywallScreen = () => {
+    const annualPkg = findRCPackage('subscription');
+    const priceStr  = annualPkg?.product.priceString ?? null;
+    // ボタンラベル: Store から価格を取得できた場合は動的表示
+    const btnLabel  = priceStr
+      ? (lang === 'ja' ? `${priceStr} / 年で始める` : `Start for ${priceStr}/year`)
+      : t('paywall_subscribe_btn');
+
+    return (
+      <ScrollView style={styles.screen} contentContainerStyle={styles.paywallContent}>
+        <Text style={styles.appTitle}>ONE SHOT</Text>
+        <Text style={styles.paywallSub}>{t('paywall_sub')}</Text>
+        {/* 価格表示: Store 取得価格を優先、未取得時は空行 */}
+        <Text style={styles.paywallPrice}>{priceStr ?? ''}</Text>
+        <Text style={styles.paywallPriceSub}>{t('paywall_price_sub')}</Text>
+        {[1, 2, 3, 4, 5].map(i => (
+          <View key={i} style={styles.featureRow}>
+            <Feather name="check-circle" size={16} color="#8B0000" />
+            <Text style={styles.featureText}>{t(`paywall_feature${i}`)}</Text>
+          </View>
+        ))}
+        <TouchableOpacity style={styles.btnPrimary} onPress={subscribePremium}>
+          <Text style={styles.btnPrimaryText}>{btnLabel}</Text>
+        </TouchableOpacity>
+        <Text style={styles.paywallPassNote}>{t('paywall_pass_note')}</Text>
+        <TouchableOpacity onPress={restorePurchase}>
+          <Text style={styles.linkText}>{t('paywall_restore_btn')}</Text>
+        </TouchableOpacity>
+        <View style={styles.paywallLinks}>
+          <Text style={styles.linkSmall}>{t('paywall_terms')}</Text>
+          <Text style={styles.linkSmall}>  ·  </Text>
+          <Text style={styles.linkSmall}>{t('paywall_privacy')}</Text>
         </View>
-      ))}
-      <TouchableOpacity style={styles.btnPrimary} onPress={subscribePremium}>
-        <Text style={styles.btnPrimaryText}>{t('paywall_subscribe_btn')}</Text>
-      </TouchableOpacity>
-      <Text style={styles.paywallPassNote}>{t('paywall_pass_note')}</Text>
-      <TouchableOpacity onPress={restorePurchase}>
-        <Text style={styles.linkText}>{t('paywall_restore_btn')}</Text>
-      </TouchableOpacity>
-      <View style={styles.paywallLinks}>
-        <Text style={styles.linkSmall}>{t('paywall_terms')}</Text>
-        <Text style={styles.linkSmall}>  ·  </Text>
-        <Text style={styles.linkSmall}>{t('paywall_privacy')}</Text>
-      </View>
-    </ScrollView>
-  );
+      </ScrollView>
+    );
+  };
 
   // ─── Home Screen ─────────────────────────────────────────────────────────────
 
@@ -1224,11 +1257,13 @@ export default function Page() {
         </Text>
       </TouchableOpacity>
 
-      {/* ── パス購入ボタン（赤アウトライン） ── */}
-      <TouchableOpacity style={styles.passBuyBtn} onPress={purchasePass}>
-        <Ionicons name="card-outline" size={14} color="#8B0000" />
-        <Text style={styles.passBuyBtnText}>{t('pass_purchase_btn')}</Text>
-      </TouchableOpacity>
+      {/* ── パス購入ボタン（パスが0枚の時のみ表示） ── */}
+      {totalPassCount() === 0 && (
+        <TouchableOpacity style={styles.passBuyBtn} onPress={purchasePass}>
+          <Ionicons name="card-outline" size={14} color="#8B0000" />
+          <Text style={styles.passBuyBtnText}>{t('pass_purchase_btn')}</Text>
+        </TouchableOpacity>
+      )}
 
       {/* ── 下部スペーサー（コンテンツを中央よりやや上に押し上げる） ── */}
       <View style={{ flex: 1.4 }} />
@@ -1312,16 +1347,29 @@ export default function Page() {
             <View style={[styles.bracket, styles.bracketBL]} />
             <View style={[styles.bracket, styles.bracketBR]} />
 
-            {/* 左上: DAY X + 日時 */}
-            <View style={styles.previewTopLeft}>
-              <Text style={styles.previewDayNum}>DAY {dayNum}</Text>
-              <Text style={styles.previewDateTime}>{dateStr}{'  '}{timeStr}</Text>
-            </View>
+            {/* 写真のみ JS 側オーバーレイを表示（動画はSwift焼き込み済み）*/}
+            {isPhoto && (
+              <>
+                {/* 左上: DAY X + 日時 */}
+                <View style={styles.previewTopLeft}>
+                  <Text style={styles.previewDayNum}>DAY {dayNum}</Text>
+                  <Text style={styles.previewDateTime}>{dateStr}{'  '}{timeStr}</Text>
+                </View>
 
-            {/* 中央下部: #ゴール名 */}
-            <View style={styles.previewGoalOverlay}>
-              <Text style={styles.previewGoalText}>#{appState.goal}</Text>
-            </View>
+                {/* 中央下部: #ゴール名 */}
+                <View style={styles.previewGoalOverlay}>
+                  <Text style={styles.previewGoalText}>#{appState.goal}</Text>
+                </View>
+              </>
+            )}
+
+            {/* 動画処理中インジケーター */}
+            {!isPhoto && isProcessingVideo && (
+              <View style={styles.ffmpegOverlay}>
+                <ActivityIndicator size="large" color="#C8C8C8" />
+                <Text style={styles.ffmpegText}>Processing...</Text>
+              </View>
+            )}
           </View>
 
           {/* ── アクションボタン行（削除 | 保存 | 共有）── */}
@@ -1330,7 +1378,11 @@ export default function Page() {
               <Feather name="trash-2" size={18} color="#fff" />
               <Text style={styles.previewBtnLabel}>{t('retry_btn')}</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.previewBtnSave} onPress={saveCapture}>
+            <TouchableOpacity
+              style={[styles.previewBtnSave, isProcessingVideo && { opacity: 0.4 }]}
+              onPress={saveCapture}
+              disabled={isProcessingVideo}
+            >
               <Feather name="download" size={18} color="#fff" />
               <Text style={styles.previewBtnLabel}>{t('save_btn')}</Text>
             </TouchableOpacity>
@@ -1627,15 +1679,22 @@ export default function Page() {
           />
         </View>
 
-        {!appState.subscribed && (
-          <View style={[styles.settingGroup, styles.premiumCard]}>
-            <Text style={styles.settingLabel}>{t('paywall_sub')}</Text>
-            <Text style={styles.settingHint}>{t('paywall_price_sub')}</Text>
-            <TouchableOpacity style={styles.btnPrimary} onPress={subscribePremium}>
-              <Text style={styles.btnPrimaryText}>{t('paywall_subscribe_btn')}</Text>
-            </TouchableOpacity>
-          </View>
-        )}
+        {!appState.subscribed && (() => {
+          const _pkg = findRCPackage('subscription');
+          const _price = _pkg?.product.priceString ?? null;
+          const _btn = _price
+            ? (lang === 'ja' ? `${_price} / 年で始める` : `Start for ${_price}/year`)
+            : t('paywall_subscribe_btn');
+          return (
+            <View style={[styles.settingGroup, styles.premiumCard]}>
+              <Text style={styles.settingLabel}>{t('paywall_sub')}</Text>
+              <Text style={styles.settingHint}>{t('paywall_price_sub')}</Text>
+              <TouchableOpacity style={styles.btnPrimary} onPress={subscribePremium}>
+                <Text style={styles.btnPrimaryText}>{_btn}</Text>
+              </TouchableOpacity>
+            </View>
+          );
+        })()}
 
         <View style={styles.settingGroup}>
           <Text style={styles.settingLabel}>{t('settings_countdown_label')}</Text>

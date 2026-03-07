@@ -17,10 +17,10 @@
       "icon": "./assets/images/icon.png",
       "deploymentTarget": "13.4",
       "infoPlist": {
-        "NSCameraUsageDescription": "One Shot はカメラを使って習慣を動画・写真で記録します。",
-        "NSMicrophoneUsageDescription": "One Shot は動画録画のためにマイクを使用します。",
-        "NSPhotoLibraryUsageDescription": "撮影した動画・写真をフォトライブラリから読み込みます。",
-        "NSPhotoLibraryAddUsageDescription": "撮影した動画・写真をフォトライブラリに保存します。"
+        "NSCameraUsageDescription": "One Shot uses the camera to record your habits as videos and photos.",
+        "NSMicrophoneUsageDescription": "One Shot uses the microphone for video recording.",
+        "NSPhotoLibraryUsageDescription": "Reads recorded videos and photos from your photo library.",
+        "NSPhotoLibraryAddUsageDescription": "Saves recorded videos and photos to your photo library."
       }
     },
     "android": {
@@ -44,23 +44,23 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "One Shot はカメラを使って習慣を動画・写真で記録します。",
-          "microphonePermission": "One Shot は動画録画のためにマイクを使用します。",
+          "cameraPermission": "One Shot uses the camera to record your habits as videos and photos.",
+          "microphonePermission": "One Shot uses the microphone for video recording.",
           "recordAudioAndroid": true
         }
       ],
       [
         "expo-media-library",
         {
-          "photosPermission": "撮影した動画・写真をフォトライブラリから読み込みます。",
-          "savePhotosPermission": "撮影した動画・写真をフォトライブラリに保存します。",
+          "photosPermission": "Reads recorded videos and photos from your photo library.",
+          "savePhotosPermission": "Saves recorded videos and photos to your photo library.",
           "isAccessMediaLocationEnabled": true
         }
       ],
       [
         "expo-av",
         {
-          "microphonePermission": "One Shot は動画録画のためにマイクを使用します。"
+          "microphonePermission": "One Shot uses the microphone for video recording."
         }
       ],
       [

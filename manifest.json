@@ -1,7 +1,7 @@
 {
   "name": "One Shot",
   "short_name": "One Shot",
-  "description": "1日1本。習慣を動画で記録するアプリ。",
+  "description": "One a day. Record your habits with video.",
   "start_url": "/",
   "display": "standalone",
   "orientation": "portrait",
