@@ -400,7 +400,7 @@ const Toast: React.FC<ToastProps> = ({ message, isError }) => {
 
 export default function Page() {
   const [appState, setAppState] = useState<AppState>(defaultState);
-  const [lang, setLang] = useState<Lang>('ja');
+  const [lang, setLang] = useState<Lang>('en');
   const [screen, setScreen] = useState<Screen>('onboarding');
   const [toastMsg, setToastMsg] = useState('');
   const [toastError, setToastError] = useState(false);
@@ -443,7 +443,7 @@ export default function Page() {
   // ── Translation helper ──────────────────────────────────────────────────────
 
   const t = useCallback((key: string, vars?: Record<string, string | number>): string => {
-    let str = TRANSLATIONS[lang][key] ?? TRANSLATIONS['ja'][key] ?? key;
+    let str = TRANSLATIONS[lang][key] ?? TRANSLATIONS['en'][key] ?? key;
     if (vars) {
       Object.entries(vars).forEach(([k, v]) => {
         str = str.replace(`{${k}}`, String(v));
