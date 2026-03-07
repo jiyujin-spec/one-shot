@@ -39,7 +39,7 @@ import Purchases, {
 import { captureRef } from 'react-native-view-shot';
 import * as Notifications from 'expo-notifications';
 import * as StoreReview from 'expo-store-review';
-import { processVideo } from '../modules/video-overlay/src';
+import { processVideo } from '../modules/video-overlay';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -192,100 +192,100 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     toast_processing_error: '動画処理エラー（元の動画を使用）',
   },
   en: {
-    meta_description: 'One video a day. Record your habits with video.',
-    onboarding_subtitle: 'Stoic habit tracking in 5 seconds',
-    onboarding_label: 'Enter your goal',
-    onboarding_placeholder: 'e.g. Daily workout',
-    streak_label: 'Day Streak',
-    today_label: 'Today',
-    pass_remain_label: 'Passes',
-    mode_video: 'Video',
-    mode_photo: 'Photo',
-    retry_btn: 'Retake',
-    save_btn: 'Save',
-    share_btn: 'Share to SNS',
-    close_btn: 'Close',
+    meta_description: 'One video a day. Build the habit. Leave the record.',
+    onboarding_subtitle: 'One video. Every day. No excuses.',
+    onboarding_label: 'Name your habit',
+    onboarding_placeholder: 'e.g. MORNING RUN',
+    streak_label: 'DAY STREAK',
+    today_label: 'TODAY',
+    pass_remain_label: 'PASSES',
+    mode_video: 'VIDEO',
+    mode_photo: 'PHOTO',
+    retry_btn: 'RETAKE',
+    save_btn: 'SAVE',
+    share_btn: 'SHARE',
+    close_btn: 'CLOSE',
     settings_title: 'SETTINGS',
     settings_guide: 'How to use',
-    settings_goal_label: 'Goal',
-    settings_notify_label: 'Reminder Notification',
+    settings_goal_label: 'Habit',
+    settings_notify_label: 'Daily Reminder',
     settings_notify_hint: "You'll be notified at this time every day",
-    settings_save_btn: 'Save',
+    settings_save_btn: 'SAVE',
     settings_reset_btn: 'Reset All Data',
     settings_language_label: '言語 / Language',
-    paywall_sub: 'Membership',
-    paywall_price_sub: '/ year (tax incl.) · Auto-renews',
+    paywall_sub: 'ANNUAL MEMBERSHIP',
+    paywall_price_sub: '/ year · billed annually · cancel anytime',
     paywall_feature1: 'Unlimited daily video & photo recording',
-    paywall_feature2: 'Streak tracking & continuous records',
-    paywall_feature3: 'Share to Instagram / TikTok',
-    paywall_feature4: '1 free pass auto-granted every week',
-    paywall_feature5: 'Recording history & calendar view',
-    paywall_subscribe_btn: 'Start Annual Plan',
+    paywall_feature2: 'Streak tracking & accountability log',
+    paywall_feature3: 'Direct share to Instagram / TikTok',
+    paywall_feature4: 'Weekly free rest pass — auto-granted',
+    paywall_feature5: 'Full history with calendar view',
+    paywall_subscribe_btn: 'Get Access',
     paywall_pass_note: 'Rest passes available separately at ¥100/pass',
     paywall_restore_btn: 'Restore Purchases',
     paywall_terms: 'Terms of Service',
     paywall_privacy: 'Privacy Policy',
     nav_today: 'TODAY',
     nav_history: 'HISTORY',
-    guide_sub: 'How to Use',
-    guide_card1_title: 'How habit building works',
-    guide_card1_body: 'Record a short video of your habit once a day and share it on social media. Knowing your followers are watching keeps you accountable.',
-    guide_card2_title: 'How to record',
-    guide_step1: 'Tap the camera button',
+    guide_sub: 'How It Works',
+    guide_card1_title: 'The system',
+    guide_card1_body: 'Record one short video of your habit every day. Share it. The accountability of an audience makes quitting harder than continuing.',
+    guide_card2_title: 'Recording flow',
+    guide_step1: 'Tap the camera',
     guide_step2: '3 · 2 · 1 countdown',
-    guide_step3: 'Auto-records & stops at 3 sec',
+    guide_step3: 'Auto-records 3 sec, stops',
     guide_step4: 'Save → Share',
-    guide_card3_title: 'Make it stick with Instagram',
-    guide_card3_body: 'Post your video to Instagram Stories and save it to a Highlight.',
-    guide_tip1: "Followers watching = can't skip",
-    guide_tip2: 'Highlights become your streak archive',
-    guide_tip3: 'Visible progress builds confidence',
-    guide_card4_title: 'Pass (Rest day) feature',
-    guide_card4_body: "You get one free pass per week to take a day off. Use it when you really can't continue. Your streak is maintained.",
-    guide_card5_title: 'Buying passes',
-    guide_card5_body: 'Extra passes can be purchased for ¥100 each. No expiry — stock as many as you like.',
-    guide_start_btn: 'Get Started',
-    pass_purchase_btn: 'Buy a Pass (¥100)',
-    use_pass_btn_prefix: 'Use Pass (',
-    use_pass_btn_suffix: ' remaining)',
+    guide_card3_title: 'Lock it in with Instagram',
+    guide_card3_body: 'Post to Instagram Stories. Save to a Highlight. Your streak becomes a permanent archive.',
+    guide_tip1: 'Public commitment = no exit ramp',
+    guide_tip2: 'Your highlight reel is your proof of work',
+    guide_tip3: 'Visible data builds unshakeable confidence',
+    guide_card4_title: 'Rest pass',
+    guide_card4_body: "One free pass per week. Use it when life intervenes. Your streak stays intact — one pass, one miss.",
+    guide_card5_title: 'Extra passes',
+    guide_card5_body: 'Additional passes at ¥100 each. No expiry. Stock them before you need them.',
+    guide_start_btn: 'START',
+    pass_purchase_btn: 'BUY A PASS (¥100)',
+    use_pass_btn_prefix: 'USE PASS  (',
+    use_pass_btn_suffix: ' left)',
     toast_save_error: 'Save error',
     toast_db_error: 'Storage error',
-    toast_free_pass_granted: 'Your weekly free pass has been granted',
-    toast_pass_used_auto: 'Pass used to maintain streak',
-    toast_settings_saved: 'Settings saved',
+    toast_free_pass_granted: 'Weekly free pass granted',
+    toast_pass_used_auto: 'Pass used — streak maintained',
+    toast_settings_saved: 'Saved',
     toast_camera_error: 'Camera error: ',
     toast_retry: 'Retaking...',
     toast_no_data: 'No data',
-    toast_save_complete: 'DAY {day} saved!',
-    toast_share_done: 'Shared!',
+    toast_save_complete: 'DAY {day} — LOGGED',
+    toast_share_done: 'Shared',
     toast_share_fail: 'Share failed: ',
     toast_share_unsupported: 'Sharing not supported',
-    toast_download_done: 'Video saved to device',
-    toast_already_recorded: 'Already recorded today',
-    toast_no_pass: 'No passes available',
-    toast_pass_used: 'Pass used. Good work!',
-    toast_paid_pass_added: 'Paid pass +1 added (stocked)',
-    confirm_purchase_pass: 'Purchase 1 pass? (¥100)',
-    confirm_subscribe: 'Start ¥300/month membership?',
+    toast_download_done: 'Saved to camera roll',
+    toast_already_recorded: 'Already logged today',
+    toast_no_pass: 'No passes remaining',
+    toast_pass_used: 'Pass used. Stay on track.',
+    toast_paid_pass_added: 'Pass +1 stocked',
+    confirm_purchase_pass: 'Purchase 1 rest pass? (¥100)',
+    confirm_subscribe: 'Start your annual membership?',
     confirm_restore: 'Restore purchases?',
-    confirm_use_pass: 'Use a pass (rest day) for today?\nYour streak will be maintained.',
+    confirm_use_pass: 'Use a rest pass for today?\nYour streak will be maintained.',
     confirm_reset: 'Delete all data?',
     no_history: 'No records yet',
-    recorded_today: 'RECORDED TODAY',
+    recorded_today: 'LOGGED TODAY',
     share_hashtag: '#oneshot #habitbuilding',
     cam_permission_title: 'Camera Access Required',
-    cam_permission_body: 'One Shot needs camera and microphone access to record videos. Please allow access in settings.',
-    cam_permission_btn: 'Open Camera Settings',
+    cam_permission_body: 'ONE SHOT needs camera and microphone access to record. Please enable in Settings.',
+    cam_permission_btn: 'Open Settings',
     cam_permission_back: 'Go Back',
     settings_countdown_label: 'Recording Countdown',
-    settings_countdown_hint: 'Show remaining time during recording',
+    settings_countdown_hint: 'Display timer during recording',
     settings_restore_btn: 'Restore Purchases',
-    settings_contact_btn: 'Contact Us',
-    confirm_use_pass_ok: 'Yes',
+    settings_contact_btn: 'Contact',
+    confirm_use_pass_ok: 'Confirm',
     cancel: 'Cancel',
     processing: 'Processing...',
     restoring: 'Restoring...',
-    subscribe_success: 'Membership activated',
+    subscribe_success: 'Access granted',
     restore_success: 'Purchases restored',
     restore_none: 'No restorable purchases found',
     purchase_failed: 'Purchase failed',
@@ -294,11 +294,11 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     product_not_found: 'Product info unavailable',
     history_delete: 'Delete',
     history_resave: 'Re-save',
-    confirm_delete_record: 'Delete this record?\nYou\'ll be able to record again today.',
+    confirm_delete_record: "Delete this record?\nYou'll be able to log again today.",
     toast_deleted: 'Record deleted',
     toast_resave_done: 'Re-saved to camera roll',
-    toast_processing_video: 'Processing 5-sec video...',
-    toast_processing_error: 'Video processing error (using original)',
+    toast_processing_video: 'Rendering overlay...',
+    toast_processing_error: 'Overlay error (using original)',
   },
 };
 
@@ -1141,30 +1141,47 @@ export default function Page() {
   // ─── Paywall Screen ──────────────────────────────────────────────────────────
 
   const PaywallScreen = () => {
-    const annualPkg = findRCPackage('subscription');
-    const priceStr  = annualPkg?.product.priceString ?? null;
+    const annualPkg  = findRCPackage('subscription');
+    const priceStr   = annualPkg?.product.priceString ?? null;
     // ボタンラベル: Store から価格を取得できた場合は動的表示
-    const btnLabel  = priceStr
-      ? (lang === 'ja' ? `${priceStr} / 年で始める` : `Start for ${priceStr}/year`)
+    const btnLabel   = priceStr
+      ? (lang === 'ja' ? `${priceStr} / 年で始める` : `GET ACCESS  —  ${priceStr} / YR`)
       : t('paywall_subscribe_btn');
 
     return (
       <ScrollView style={styles.screen} contentContainerStyle={styles.paywallContent}>
         <Text style={styles.appTitle}>ONE SHOT</Text>
+
+        {/* ── Early Supporter バッジ ── */}
+        <View style={styles.paywallBadge}>
+          <Text style={styles.paywallBadgeText}>
+            {lang === 'ja' ? '早期サポーター特典' : 'EARLY SUPPORTER PRICING'}
+          </Text>
+        </View>
+
         <Text style={styles.paywallSub}>{t('paywall_sub')}</Text>
-        {/* 価格表示: Store 取得価格を優先、未取得時は空行 */}
-        <Text style={styles.paywallPrice}>{priceStr ?? ''}</Text>
-        <Text style={styles.paywallPriceSub}>{t('paywall_price_sub')}</Text>
+
+        {/* ── 価格ブロック（Store取得価格を大きく表示）── */}
+        <View style={styles.paywallPriceBlock}>
+          <Text style={styles.paywallPrice}>{priceStr ?? '—'}</Text>
+          <Text style={styles.paywallPriceSub}>{t('paywall_price_sub')}</Text>
+        </View>
+
+        {/* ── 機能リスト ── */}
         {[1, 2, 3, 4, 5].map(i => (
           <View key={i} style={styles.featureRow}>
             <Feather name="check-circle" size={16} color="#8B0000" />
             <Text style={styles.featureText}>{t(`paywall_feature${i}`)}</Text>
           </View>
         ))}
+
+        {/* ── CTA ── */}
         <TouchableOpacity style={styles.btnPrimary} onPress={subscribePremium}>
           <Text style={styles.btnPrimaryText}>{btnLabel}</Text>
         </TouchableOpacity>
+
         <Text style={styles.paywallPassNote}>{t('paywall_pass_note')}</Text>
+
         <TouchableOpacity onPress={restorePurchase}>
           <Text style={styles.linkText}>{t('paywall_restore_btn')}</Text>
         </TouchableOpacity>
@@ -1680,15 +1697,18 @@ export default function Page() {
         </View>
 
         {!appState.subscribed && (() => {
-          const _pkg = findRCPackage('subscription');
+          const _pkg   = findRCPackage('subscription');
           const _price = _pkg?.product.priceString ?? null;
-          const _btn = _price
-            ? (lang === 'ja' ? `${_price} / 年で始める` : `Start for ${_price}/year`)
+          const _btn   = _price
+            ? (lang === 'ja' ? `${_price} / 年で始める` : `GET ACCESS  —  ${_price} / YR`)
             : t('paywall_subscribe_btn');
           return (
             <View style={[styles.settingGroup, styles.premiumCard]}>
-              <Text style={styles.settingLabel}>{t('paywall_sub')}</Text>
-              <Text style={styles.settingHint}>{t('paywall_price_sub')}</Text>
+              <Text style={styles.paywallBadgeText}>
+                {lang === 'ja' ? '早期サポーター特典' : 'EARLY SUPPORTER PRICING'}
+              </Text>
+              <Text style={[styles.settingLabel, { marginTop: 8 }]}>{t('paywall_sub')}</Text>
+              <Text style={styles.settingHint}>{_price ? `${_price}  ${t('paywall_price_sub')}` : t('paywall_price_sub')}</Text>
               <TouchableOpacity style={styles.btnPrimary} onPress={subscribePremium}>
                 <Text style={styles.btnPrimaryText}>{_btn}</Text>
               </TouchableOpacity>
@@ -2025,23 +2045,52 @@ const styles = StyleSheet.create({
     paddingVertical: 40,
     alignItems: 'center',
   },
+  paywallBadge: {
+    backgroundColor: '#1a0000',
+    borderWidth: 1,
+    borderColor: '#8B0000',
+    borderRadius: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    marginBottom: 16,
+  },
+  paywallBadgeText: {
+    color: '#CC3333',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 2,
+    textTransform: 'uppercase',
+  },
   paywallSub: {
-    fontSize: 16,
+    fontSize: 13,
     fontWeight: '700',
-    color: '#8B0000',
-    marginBottom: 4,
-    letterSpacing: 1,
+    color: '#888',
+    marginBottom: 12,
+    letterSpacing: 3,
+    textTransform: 'uppercase',
+  },
+  paywallPriceBlock: {
+    alignItems: 'center',
+    marginBottom: 24,
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    backgroundColor: '#0d0d0d',
+    borderWidth: 1,
+    borderColor: '#1a1a1a',
+    alignSelf: 'stretch',
   },
   paywallPrice: {
-    fontSize: 22,
+    fontSize: 36,
     fontWeight: '900',
     color: '#fff',
+    letterSpacing: -1,
     marginBottom: 4,
   },
   paywallPriceSub: {
-    fontSize: 13,
-    color: '#888',
-    marginBottom: 24,
+    fontSize: 12,
+    color: '#555',
+    letterSpacing: 0.5,
   },
   featureRow: {
     flexDirection: 'row',
