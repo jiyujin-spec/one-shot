@@ -1224,11 +1224,13 @@ export default function Page() {
         </Text>
       </TouchableOpacity>
 
-      {/* ── パス購入ボタン（赤アウトライン） ── */}
-      <TouchableOpacity style={styles.passBuyBtn} onPress={purchasePass}>
-        <Ionicons name="card-outline" size={14} color="#8B0000" />
-        <Text style={styles.passBuyBtnText}>{t('pass_purchase_btn')}</Text>
-      </TouchableOpacity>
+      {/* ── パス購入ボタン（パスが0枚の時のみ表示） ── */}
+      {totalPassCount() === 0 && (
+        <TouchableOpacity style={styles.passBuyBtn} onPress={purchasePass}>
+          <Ionicons name="card-outline" size={14} color="#8B0000" />
+          <Text style={styles.passBuyBtnText}>{t('pass_purchase_btn')}</Text>
+        </TouchableOpacity>
+      )}
 
       {/* ── 下部スペーサー（コンテンツを中央よりやや上に押し上げる） ── */}
       <View style={{ flex: 1.4 }} />
