@@ -105,13 +105,13 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     settings_reset_btn: 'すべてのデータをリセット',
     settings_language_label: '言語 / Language',
     paywall_sub: 'メンバーシップ',
-    paywall_price_sub: '/ 月（税込）・自動更新',
+    paywall_price_sub: '/ 年（税込）・自動更新',
     paywall_feature1: '動画・写真の毎日撮影（無制限）',
     paywall_feature2: 'ストリーク管理・継続記録',
     paywall_feature3: 'Instagram / TikTok への SNS シェア',
     paywall_feature4: '毎週1枚の無料パス自動付与',
     paywall_feature5: '撮影履歴・カレンダー表示',
-    paywall_subscribe_btn: '月額 ¥300 で始める',
+    paywall_subscribe_btn: '年額プランで始める',
     paywall_pass_note: 'お休みパスは ¥100/枚 で別途購入できます',
     paywall_restore_btn: '購入を復元する',
     paywall_terms: '利用規約',
@@ -214,13 +214,13 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     settings_reset_btn: 'Reset All Data',
     settings_language_label: '言語 / Language',
     paywall_sub: 'Membership',
-    paywall_price_sub: '/ month (tax incl.) · Auto-renews',
+    paywall_price_sub: '/ year (tax incl.) · Auto-renews',
     paywall_feature1: 'Unlimited daily video & photo recording',
     paywall_feature2: 'Streak tracking & continuous records',
     paywall_feature3: 'Share to Instagram / TikTok',
     paywall_feature4: '1 free pass auto-granted every week',
     paywall_feature5: 'Recording history & calendar view',
-    paywall_subscribe_btn: 'Start for ¥300/month',
+    paywall_subscribe_btn: 'Start Annual Plan',
     paywall_pass_note: 'Rest passes available separately at ¥100/pass',
     paywall_restore_btn: 'Restore Purchases',
     paywall_terms: 'Terms of Service',
@@ -520,7 +520,13 @@ export default function Page() {
     if (!rcOfferings?.current) return null;
     const pkgs = rcOfferings.current.availablePackages;
     if (type === 'subscription') {
-      return pkgs.find(p => p.product.identifier === 'com.jin.oneshot.premium')
+      // 1st: 年額プランの製品ID で完全一致
+      return pkgs.find(p => p.product.identifier === 'com.jin.oneshot.annual.premium')
+        // 2nd: RevenueCat 標準の $rc_annual パッケージ
+        ?? rcOfferings.current.annual
+        ?? pkgs.find(p => p.identifier === '$rc_annual' || p.identifier.toLowerCase().includes('annual'))
+        // 3rd: 旧月額プランへのフォールバック
+        ?? pkgs.find(p => p.product.identifier === 'com.jin.oneshot.premium')
         ?? rcOfferings.current.monthly
         ?? pkgs.find(p => p.identifier === '$rc_monthly' || p.identifier.toLowerCase().includes('month'))
         ?? pkgs[0]
@@ -1134,32 +1140,42 @@ export default function Page() {
 
   // ─── Paywall Screen ──────────────────────────────────────────────────────────
 
-  const PaywallScreen = () => (
-    <ScrollView style={styles.screen} contentContainerStyle={styles.paywallContent}>
-      <Text style={styles.appTitle}>ONE SHOT</Text>
-      <Text style={styles.paywallSub}>{t('paywall_sub')}</Text>
-      <Text style={styles.paywallPrice}>{t('paywall_subscribe_btn')}</Text>
-      <Text style={styles.paywallPriceSub}>{t('paywall_price_sub')}</Text>
-      {[1, 2, 3, 4, 5].map(i => (
-        <View key={i} style={styles.featureRow}>
-          <Feather name="check-circle" size={16} color="#8B0000" />
-          <Text style={styles.featureText}>{t(`paywall_feature${i}`)}</Text>
+  const PaywallScreen = () => {
+    const annualPkg = findRCPackage('subscription');
+    const priceStr  = annualPkg?.product.priceString ?? null;
+    // ボタンラベル: Store から価格を取得できた場合は動的表示
+    const btnLabel  = priceStr
+      ? (lang === 'ja' ? `${priceStr} / 年で始める` : `Start for ${priceStr}/year`)
+      : t('paywall_subscribe_btn');
+
+    return (
+      <ScrollView style={styles.screen} contentContainerStyle={styles.paywallContent}>
+        <Text style={styles.appTitle}>ONE SHOT</Text>
+        <Text style={styles.paywallSub}>{t('paywall_sub')}</Text>
+        {/* 価格表示: Store 取得価格を優先、未取得時は空行 */}
+        <Text style={styles.paywallPrice}>{priceStr ?? ''}</Text>
+        <Text style={styles.paywallPriceSub}>{t('paywall_price_sub')}</Text>
+        {[1, 2, 3, 4, 5].map(i => (
+          <View key={i} style={styles.featureRow}>
+            <Feather name="check-circle" size={16} color="#8B0000" />
+            <Text style={styles.featureText}>{t(`paywall_feature${i}`)}</Text>
+          </View>
+        ))}
+        <TouchableOpacity style={styles.btnPrimary} onPress={subscribePremium}>
+          <Text style={styles.btnPrimaryText}>{btnLabel}</Text>
+        </TouchableOpacity>
+        <Text style={styles.paywallPassNote}>{t('paywall_pass_note')}</Text>
+        <TouchableOpacity onPress={restorePurchase}>
+          <Text style={styles.linkText}>{t('paywall_restore_btn')}</Text>
+        </TouchableOpacity>
+        <View style={styles.paywallLinks}>
+          <Text style={styles.linkSmall}>{t('paywall_terms')}</Text>
+          <Text style={styles.linkSmall}>  ·  </Text>
+          <Text style={styles.linkSmall}>{t('paywall_privacy')}</Text>
         </View>
-      ))}
-      <TouchableOpacity style={styles.btnPrimary} onPress={subscribePremium}>
-        <Text style={styles.btnPrimaryText}>{t('paywall_subscribe_btn')}</Text>
-      </TouchableOpacity>
-      <Text style={styles.paywallPassNote}>{t('paywall_pass_note')}</Text>
-      <TouchableOpacity onPress={restorePurchase}>
-        <Text style={styles.linkText}>{t('paywall_restore_btn')}</Text>
-      </TouchableOpacity>
-      <View style={styles.paywallLinks}>
-        <Text style={styles.linkSmall}>{t('paywall_terms')}</Text>
-        <Text style={styles.linkSmall}>  ·  </Text>
-        <Text style={styles.linkSmall}>{t('paywall_privacy')}</Text>
-      </View>
-    </ScrollView>
-  );
+      </ScrollView>
+    );
+  };
 
   // ─── Home Screen ─────────────────────────────────────────────────────────────
 
@@ -1663,15 +1679,22 @@ export default function Page() {
           />
         </View>
 
-        {!appState.subscribed && (
-          <View style={[styles.settingGroup, styles.premiumCard]}>
-            <Text style={styles.settingLabel}>{t('paywall_sub')}</Text>
-            <Text style={styles.settingHint}>{t('paywall_price_sub')}</Text>
-            <TouchableOpacity style={styles.btnPrimary} onPress={subscribePremium}>
-              <Text style={styles.btnPrimaryText}>{t('paywall_subscribe_btn')}</Text>
-            </TouchableOpacity>
-          </View>
-        )}
+        {!appState.subscribed && (() => {
+          const _pkg = findRCPackage('subscription');
+          const _price = _pkg?.product.priceString ?? null;
+          const _btn = _price
+            ? (lang === 'ja' ? `${_price} / 年で始める` : `Start for ${_price}/year`)
+            : t('paywall_subscribe_btn');
+          return (
+            <View style={[styles.settingGroup, styles.premiumCard]}>
+              <Text style={styles.settingLabel}>{t('paywall_sub')}</Text>
+              <Text style={styles.settingHint}>{t('paywall_price_sub')}</Text>
+              <TouchableOpacity style={styles.btnPrimary} onPress={subscribePremium}>
+                <Text style={styles.btnPrimaryText}>{_btn}</Text>
+              </TouchableOpacity>
+            </View>
+          );
+        })()}
 
         <View style={styles.settingGroup}>
           <Text style={styles.settingLabel}>{t('settings_countdown_label')}</Text>
