@@ -25,7 +25,14 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { CameraView, CameraType, useCameraPermissions } from 'expo-camera';
 import * as MediaLibrary from 'expo-media-library';
-import * as Sharing from 'expo-sharing';
+// expo-sharing は次回ビルドで組み込み予定。現バイナリ未収録のため一時モック。
+// TODO: 次回 EAS Build 時に `expo-sharing` を package.json に追加してこのモックを削除すること。
+const Sharing = {
+  isAvailableAsync: async (): Promise<boolean> => false,
+  shareAsync: async (_url: string, _options?: Record<string, unknown>): Promise<void> => {
+    console.warn('[Sharing] expo-sharing はこのバイナリに含まれていません。再ビルドしてください。');
+  },
+};
 import { Feather, Ionicons } from '@expo/vector-icons';
 import { Video, ResizeMode } from 'expo-av';
 import { LinearGradient } from 'expo-linear-gradient';
