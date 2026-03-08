@@ -112,6 +112,7 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     paywall_feature4: '毎週1枚の無料パス自動付与',
     paywall_feature5: '撮影履歴・カレンダー表示',
     paywall_subscribe_btn: '年額プランで始める',
+    paywall_iap_note: '年額: ¥29.99/年  ·  月額: ¥4.99/月\nApple IDに課金されます。サブスクリプションは購入後、現在の期間終了前に解約しない限り自動更新されます。',
     paywall_pass_note: 'お休みパスは ¥100/枚 で別途購入できます',
     paywall_restore_btn: '購入を復元する',
     paywall_terms: '利用規約',
@@ -221,6 +222,7 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     paywall_feature4: 'Weekly free rest pass — auto-granted',
     paywall_feature5: 'Full history with calendar view',
     paywall_subscribe_btn: 'Get Access',
+    paywall_iap_note: 'Annual: $29.99/yr  ·  Monthly: $4.99/mo\nCharged to your Apple ID. Subscription auto-renews unless cancelled before the end of the current period.',
     paywall_pass_note: 'Rest passes available separately at ¥100/pass',
     paywall_restore_btn: 'Restore Purchases',
     paywall_terms: 'Terms of Service',
@@ -426,6 +428,7 @@ export default function Page() {
   const recordingCountdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [isPreviewPlaying, setIsPreviewPlaying] = useState(false);
   const [isProcessingVideo, setIsProcessingVideo] = useState(false);
+  const [videoReady, setVideoReady] = useState(false);
   // null! = non-null assertion: RefObject<CameraView> として扱い TS の型エラーを解消
   const cameraRef = useRef<CameraView>(null!);
   const previewVideoRef = useRef<Video>(null);
@@ -888,11 +891,10 @@ export default function Page() {
 
     if (!rawUri) return;
 
-    // Show raw video in preview immediately, then replace with overlay-burned version
+    // Stay on camera screen during processing; only navigate to preview when ready
     const captureTime = new Date();
     setCapturedTime(captureTime);
     setCapturedType('video');
-    setCapturedUri(rawUri);
     setIsProcessingVideo(true);
     try {
       const processed = await processVideo({
@@ -902,10 +904,10 @@ export default function Page() {
         currentDay: appState.streak + 1,
         totalDays: appState.challengeDays,
       });
-      setCapturedUri(processed);
+      setCapturedUri(processed);  // transition to preview with processed video
     } catch (vErr) {
       console.warn('[processVideo] fallback to raw video:', vErr);
-      // capturedUri already set to rawUri, just proceed without overlay
+      setCapturedUri(rawUri);     // fallback: show raw video on error
     } finally {
       setIsProcessingVideo(false);
     }
@@ -919,6 +921,7 @@ export default function Page() {
     setCapturedType('video');
     setCapturedTime(null);
     setIsPreviewPlaying(false);
+    setVideoReady(false);
   }, [clearCamTimers]);
 
   const saveCapture = useCallback(async () => {
@@ -1196,6 +1199,8 @@ export default function Page() {
           </TouchableOpacity>
         )}
 
+        <Text style={styles.subscriptionNote}>{t('paywall_iap_note')}</Text>
+
         <Text style={styles.paywallPassNote}>{t('paywall_pass_note')}</Text>
 
         <TouchableOpacity onPress={restorePurchase}>
@@ -1351,19 +1356,28 @@ export default function Page() {
                   shouldPlay={isPreviewPlaying}
                   isMuted={false}
                   positionMillis={0}
+                  onReadyForDisplay={() => setVideoReady(true)}
                 />
+                {/* Video loading overlay — shown until first frame is ready */}
+                {!videoReady && (
+                  <View style={styles.videoLoadingOverlay}>
+                    <ActivityIndicator size="large" color="#C8C8C8" />
+                  </View>
+                )}
                 {/* 長押し再生エリア */}
-                <Pressable
-                  style={[StyleSheet.absoluteFill, { bottom: 0 }]}
-                  onLongPress={() => setIsPreviewPlaying(true)}
-                  onPressOut={async () => {
-                    setIsPreviewPlaying(false);
-                    await previewVideoRef.current?.setPositionAsync(0);
-                  }}
-                  delayLongPress={150}
-                />
+                {videoReady && (
+                  <Pressable
+                    style={[StyleSheet.absoluteFill, { bottom: 0 }]}
+                    onLongPress={() => setIsPreviewPlaying(true)}
+                    onPressOut={async () => {
+                      setIsPreviewPlaying(false);
+                      await previewVideoRef.current?.setPositionAsync(0);
+                    }}
+                    delayLongPress={150}
+                  />
+                )}
                 {/* 長押しヒント */}
-                {!isPreviewPlaying && (
+                {videoReady && !isPreviewPlaying && (
                   <View style={styles.previewHint}>
                     <Feather name="play" size={14} color="rgba(255,255,255,0.8)" />
                     <Text style={styles.previewHintText}>
@@ -1380,29 +1394,27 @@ export default function Page() {
             <View style={[styles.bracket, styles.bracketBL]} />
             <View style={[styles.bracket, styles.bracketBR]} />
 
-            {/* 写真のみ JS 側オーバーレイを表示（動画はSwift焼き込み済み）*/}
-            {isPhoto && (
-              <>
-                {/* 左上: DAY X + 日時 */}
-                <View style={styles.previewTopLeft}>
-                  <Text style={styles.previewDayNum}>DAY {dayNum}</Text>
-                  <Text style={styles.previewDateTime}>{dateStr}{'  '}{timeStr}</Text>
-                </View>
+            {/* 写真のみ JS 側オーバーレイ（Industrial Data 4角・動画はSwift焼き込み済み）*/}
+            {isPhoto && (() => {
+              const goal = (appState.goal || 'HABIT').toUpperCase();
+              const total = appState.challengeDays;
+              const habitLine = total
+                ? (dayNum >= total ? `${goal} COMPLETED` : `${goal} DAY ${dayNum}/${total}`)
+                : `${goal} DAY ${dayNum}`;
+              return (
+                <>
+                  {/* 左上: タイムスタンプ */}
+                  <Text style={styles.idTopLeft}>{format(ts, 'yyyy.MM.dd_HH:mm')}</Text>
+                  {/* 右上: ユーザーID */}
+                  <Text style={styles.idTopRight}>{appState.userId || 'OS-2026-001'}</Text>
+                  {/* 左下: ハビット / DAY X/Y */}
+                  <Text style={styles.idBottomLeft}>{habitLine}</Text>
+                  {/* 右下: ONE SHOT */}
+                  <Text style={styles.idBottomRight}>ONE SHOT</Text>
+                </>
+              );
+            })()}
 
-                {/* 中央下部: #ゴール名 */}
-                <View style={styles.previewGoalOverlay}>
-                  <Text style={styles.previewGoalText}>#{appState.goal}</Text>
-                </View>
-              </>
-            )}
-
-            {/* 動画処理中インジケーター */}
-            {!isPhoto && isProcessingVideo && (
-              <View style={styles.ffmpegOverlay}>
-                <ActivityIndicator size="large" color="#C8C8C8" />
-                <Text style={styles.ffmpegText}>Processing...</Text>
-              </View>
-            )}
           </View>
 
           {/* ── アクションボタン行（削除 | 保存 | 共有）── */}
@@ -1412,9 +1424,8 @@ export default function Page() {
               <Text style={styles.previewBtnLabel}>{t('retry_btn')}</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.previewBtnSave, isProcessingVideo && { opacity: 0.4 }]}
+              style={styles.previewBtnSave}
               onPress={saveCapture}
-              disabled={isProcessingVideo}
             >
               <Feather name="download" size={18} color="#fff" />
               <Text style={styles.previewBtnLabel}>{t('save_btn')}</Text>
@@ -1459,6 +1470,16 @@ export default function Page() {
           <View style={styles.recIndicator}>
             <View style={styles.recDot} />
             <Text style={styles.recText}>REC</Text>
+          </View>
+        )}
+
+        {/* 動画処理中オーバーレイ（録画後 Swift 処理が完了するまで表示）*/}
+        {isProcessingVideo && (
+          <View style={styles.cameraProcessingOverlay}>
+            <ActivityIndicator size="large" color="#C8C8C8" />
+            <Text style={styles.cameraProcessingText}>
+              {lang === 'en' ? 'PROCESSING...' : '処理中...'}
+            </Text>
           </View>
         )}
 
@@ -2647,6 +2668,15 @@ const styles = StyleSheet.create({
     textShadowRadius: 10,
   },
 
+  // 動画読み込み中オーバーレイ（onReadyForDisplay が来るまで黒画面をスピナーで覆う）
+  videoLoadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#000',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 5,
+  },
+
   // 長押しヒント（動画のみ）
   previewHint: {
     position: 'absolute',
@@ -2945,6 +2975,79 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     letterSpacing: 0.5,
+  },
+
+  // ── Camera processing overlay (shown while Swift processes after recording) ──
+  cameraProcessingOverlay: {
+    position: 'absolute',
+    top: 0, left: 0, right: 0, bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.88)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 20,
+    zIndex: 20,
+  },
+  cameraProcessingText: {
+    color: '#C8C8C8',
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 3,
+  },
+
+  // ── Industrial Data 4-corner overlay (photo preview, matching Swift output) ──
+  idTopLeft: {
+    position: 'absolute',
+    top: '12%',
+    left: '5%',
+    fontFamily: 'Menlo',
+    fontSize: 12,
+    color: '#C8C8C8',
+    textShadowColor: 'rgba(0,0,0,0.6)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 4,
+  },
+  idTopRight: {
+    position: 'absolute',
+    top: '12%',
+    right: '5%',
+    fontFamily: 'Menlo',
+    fontSize: 12,
+    color: '#C8C8C8',
+    textShadowColor: 'rgba(0,0,0,0.6)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 4,
+  },
+  idBottomLeft: {
+    position: 'absolute',
+    bottom: '25%',
+    left: '5%',
+    fontFamily: 'Menlo',
+    fontSize: 12,
+    color: '#C8C8C8',
+    textShadowColor: 'rgba(0,0,0,0.6)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 4,
+  },
+  idBottomRight: {
+    position: 'absolute',
+    bottom: '25%',
+    right: '5%',
+    fontFamily: 'Menlo',
+    fontSize: 12,
+    color: '#C8C8C8',
+    textShadowColor: 'rgba(0,0,0,0.6)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 4,
+  },
+
+  // ── Subscription IAP note (Apple Review compliance) ──
+  subscriptionNote: {
+    fontSize: 10,
+    color: '#444',
+    textAlign: 'center',
+    lineHeight: 15,
+    marginBottom: 12,
+    paddingHorizontal: 8,
   },
 
   // ── Settings ──
