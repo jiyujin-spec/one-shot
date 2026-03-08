@@ -1,4 +1,4 @@
-import { requireNativeModule } from 'expo-modules-core';
+import { requireOptionalNativeModule } from 'expo-modules-core';
 
 export interface OverlayItem {
   text: string;
@@ -18,7 +18,16 @@ export interface ProcessVideoOptions {
   totalDays?: number;      // e.g. 90 (omit when no challenge is set)
 }
 
-const VideoOverlay = requireNativeModule('VideoOverlay');
+function getModule() {
+  const mod = requireOptionalNativeModule('VideoOverlay');
+  if (!mod) {
+    throw new Error(
+      'VideoOverlay native module is not available. ' +
+      'Run `expo run:android` or `expo run:ios` to create a development build.'
+    );
+  }
+  return mod;
+}
 
 /**
  * Burns Industrial Data overlays into a video file.
@@ -27,7 +36,7 @@ const VideoOverlay = requireNativeModule('VideoOverlay');
  * @returns file:// URI of the processed video
  */
 export async function processVideo(options: ProcessVideoOptions): Promise<string> {
-  return VideoOverlay.processVideo(options);
+  return getModule().processVideo(options);
 }
 
 /**
@@ -38,5 +47,5 @@ export async function burnTextOverlay(
   inputUri: string,
   overlays: OverlayItem[]
 ): Promise<string> {
-  return VideoOverlay.burnTextOverlay(inputUri, overlays);
+  return getModule().burnTextOverlay(inputUri, overlays);
 }
