@@ -20,8 +20,7 @@
         "NSCameraUsageDescription": "One Shot uses the camera to record your habits as videos and photos.",
         "NSMicrophoneUsageDescription": "One Shot uses the microphone for video recording.",
         "NSPhotoLibraryUsageDescription": "Reads recorded videos and photos from your photo library.",
-        "NSPhotoLibraryAddUsageDescription": "Saves recorded videos and photos to your photo library.",
-        "ITSAppUsesNonExemptEncryption": false
+        "NSPhotoLibraryAddUsageDescription": "Saves recorded videos and photos to your photo library."
       }
     },
     "android": {
@@ -36,9 +35,7 @@
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.WRITE_EXTERNAL_STORAGE",
         "android.permission.READ_MEDIA_IMAGES",
-        "android.permission.READ_MEDIA_VIDEO",
-        "android.permission.ACCESS_MEDIA_LOCATION",
-        "android.permission.MODIFY_AUDIO_SETTINGS"
+        "android.permission.READ_MEDIA_VIDEO"
       ]
     },
     "plugins": [
@@ -78,10 +75,7 @@
     "scheme": "oneshot",
     "extra": {
       "eas": {
-        "projectId": "f4a77e54-0d27-4cb5-a76e-88756cefe907"
-      },
-      "router": {
-        "origin": false
+        "projectId": ""
       }
     }
   }

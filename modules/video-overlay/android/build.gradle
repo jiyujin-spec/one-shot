@@ -3,9 +3,6 @@ apply plugin: 'kotlin-android'
 apply plugin: 'expo-module'
 
 android {
-  // iOSビルドを成功させるためにも、このnamespace指定が必須です
-  namespace "expo.modules.videooverlay"
-
   compileSdkVersion safeExtGet("compileSdkVersion", 34)
   defaultConfig {
     minSdkVersion safeExtGet("minSdkVersion", 24)
