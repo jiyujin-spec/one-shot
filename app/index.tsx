@@ -581,9 +581,12 @@ export default function Page() {
     showToast(t('processing'));
     try {
       const { customerInfo } = await Purchases.purchasePackage(pkg);
-      // Check 'premium' entitlement OR any active entitlement (covers annual/monthly plan differences)
+      // Check entitlement OR active subscription product IDs directly
+      // (annual: com.jin.oneshot.annual.premium / monthly: com.jin.oneshot.premium)
       const active = !!customerInfo.entitlements.active['premium']
-        || Object.keys(customerInfo.entitlements.active).length > 0;
+        || Object.keys(customerInfo.entitlements.active).length > 0
+        || customerInfo.activeSubscriptions.includes('com.jin.oneshot.annual.premium')
+        || customerInfo.activeSubscriptions.includes('com.jin.oneshot.premium');
       if (active) {
         updateState({ subscribed: true });
         showToast(t('subscribe_success'));
