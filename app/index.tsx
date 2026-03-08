@@ -25,14 +25,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { CameraView, CameraType, useCameraPermissions } from 'expo-camera';
 import * as MediaLibrary from 'expo-media-library';
-// expo-sharing は次回ビルドで組み込み予定。現バイナリ未収録のため一時モック。
-// TODO: 次回 EAS Build 時に `expo-sharing` を package.json に追加してこのモックを削除すること。
-const Sharing = {
-  isAvailableAsync: async (): Promise<boolean> => false,
-  shareAsync: async (_url: string, _options?: Record<string, unknown>): Promise<void> => {
-    console.warn('[Sharing] expo-sharing はこのバイナリに含まれていません。再ビルドしてください。');
-  },
-};
+import * as Sharing from 'expo-sharing';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import { Video, ResizeMode } from 'expo-av';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -588,7 +581,12 @@ export default function Page() {
     showToast(t('processing'));
     try {
       const { customerInfo } = await Purchases.purchasePackage(pkg);
-      const active = !!customerInfo.entitlements.active['premium'];
+      // Check entitlement OR active subscription product IDs directly
+      // (annual: com.jin.oneshot.annual.premium / monthly: com.jin.oneshot.premium)
+      const active = !!customerInfo.entitlements.active['premium']
+        || Object.keys(customerInfo.entitlements.active).length > 0
+        || customerInfo.activeSubscriptions.includes('com.jin.oneshot.annual.premium')
+        || customerInfo.activeSubscriptions.includes('com.jin.oneshot.premium');
       if (active) {
         updateState({ subscribed: true });
         showToast(t('subscribe_success'));
@@ -848,9 +846,9 @@ export default function Page() {
       return;
     }
 
-    // ── 動画モード（3秒録画 → FFmpegで5秒に延長）──
+    // ── 動画モード（5秒録画 → ネイティブでオーバーレイ焼き込み）──
     setIsRecording(true);
-    const RECORD_SECS = 3;
+    const RECORD_SECS = 5;
 
     // 録画中カウントダウン
     setRecordingCountdown(RECORD_SECS);
