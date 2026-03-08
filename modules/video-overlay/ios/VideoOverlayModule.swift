@@ -155,16 +155,11 @@ public class VideoOverlayModule: Module {
       }
 
       let totalDuration = asset.duration
-      let freezeSeconds: Double = 3.0
-      let stillSeconds:  Double = 2.0
 
-      let freezeTime = CMTime(seconds: freezeSeconds, preferredTimescale: 600)
-
-      // Insert 0 – 3 s (or whole video if shorter than 3 s)
-      let liveEnd = CMTimeMinimum(freezeTime, totalDuration)
+      // Insert the entire video (no freeze-frame logic)
       do {
         try compVideoTrack.insertTimeRange(
-          CMTimeRange(start: .zero, duration: liveEnd),
+          CMTimeRange(start: .zero, duration: totalDuration),
           of: videoTrack, at: .zero
         )
       } catch {
@@ -172,37 +167,13 @@ public class VideoOverlayModule: Module {
         return
       }
 
-      // Freeze last frame for 2 s (only when original > 3 s)
-      if totalDuration > freezeTime {
-        let fps = videoTrack.nominalFrameRate > 0 ? videoTrack.nominalFrameRate : 30.0
-        let frameDuration = CMTime(value: 1, timescale: CMTimeScale(fps))
-        let lastFrameStart = CMTimeMaximum(freezeTime - frameDuration, .zero)
-
-        do {
-          try compVideoTrack.insertTimeRange(
-            CMTimeRange(start: lastFrameStart, duration: frameDuration),
-            of: videoTrack, at: liveEnd
-          )
-        } catch {
-          promise.reject("ERR_INSERT_STILL", error.localizedDescription)
-          return
-        }
-
-        // Stretch that one frame to stillSeconds
-        let stillDuration = CMTime(seconds: stillSeconds, preferredTimescale: 600)
-        compVideoTrack.scaleTimeRange(
-          CMTimeRange(start: liveEnd, duration: frameDuration),
-          toDuration: stillDuration
-        )
-      }
-
-      // Audio: insert only the live portion (0 – 3 s), silence during still
+      // Audio: insert the full duration
       if let audioTrack = asset.tracks(withMediaType: .audio).first,
          let compAudioTrack = composition.addMutableTrack(
            withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid
          ) {
         try? compAudioTrack.insertTimeRange(
-          CMTimeRange(start: .zero, duration: liveEnd),
+          CMTimeRange(start: .zero, duration: totalDuration),
           of: audioTrack, at: .zero
         )
       }
