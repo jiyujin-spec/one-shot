@@ -115,30 +115,23 @@ class VideoOverlayModule : Module() {
   }
 
   // ---------------------------------------------------------------------------
-  // Industrial-data overlay: 3 s live + 2 s frozen last frame
+  // Industrial-data overlay: full video duration with overlay burned in
   // ---------------------------------------------------------------------------
   private fun processIndustrialVideo(
     srcPath: String, dstPath: String,
     timestampStr: String, userId: String, habitStr: String, logoStr: String
   ) {
-    val FREEZE_US = 3_000_000L   // 3 seconds in microseconds
-    val STILL_US  = 2_000_000L   // 2 seconds for frozen frame
-    val FPS       = 30
-    val FRAME_US  = 1_000_000L / FPS
-    val TIMEOUT   = 10_000L      // 10 ms dequeue timeout
+    val FPS     = 30
+    val FRAME_US = 1_000_000L / FPS
+    val TIMEOUT  = 10_000L      // 10 ms dequeue timeout
 
     // ── Metadata ──────────────────────────────────────────────────────────────
     val retriever = MediaMetadataRetriever()
     retriever.setDataSource(srcPath)
-    val srcW       = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toInt()    ?: 720
-    val srcH       = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toInt()   ?: 1280
-    val rotation   = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toInt() ?: 0
-    val durationMs = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLong()      ?: 3000L
+    val srcW     = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toInt()    ?: 720
+    val srcH     = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toInt()   ?: 1280
+    val rotation = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toInt() ?: 0
     retriever.release()
-
-    val durationUs = durationMs * 1000L
-    val liveEndUs  = minOf(FREEZE_US, durationUs)
-    val addStill   = durationUs > FREEZE_US
 
     val (encW, encH) = if (rotation == 90 || rotation == 270) srcH to srcW else srcW to srcH
     val finalW = if (encW % 2 == 0) encW else encW - 1
@@ -153,13 +146,13 @@ class VideoOverlayModule : Module() {
       setShadowLayer(4f, 1f, 1f, Color.argb(102, 0, 0, 0))
     }
 
-    val xLeft    = finalW * 0.05f
-    val xRight   = finalW * 0.85f
-    val yTop     = finalH * 0.12f + fontSize   // baseline for top labels
-    val yBottom  = finalH * 0.75f              // baseline for bottom labels
+    val xLeft   = finalW * 0.05f
+    val xRight  = finalW * 0.85f
+    val yTop    = finalH * 0.12f + fontSize   // baseline for top labels
+    val yBottom = finalH * 0.75f              // baseline for bottom labels
 
-    val xUserId  = xRight - textPaint.measureText(userId)
-    val xLogo    = xRight - textPaint.measureText(logoStr)
+    val xUserId = xRight - textPaint.measureText(userId)
+    val xLogo   = xRight - textPaint.measureText(logoStr)
 
     fun drawOverlays(bmp: Bitmap) {
       val canvas = Canvas(bmp)
@@ -218,44 +211,36 @@ class VideoOverlayModule : Module() {
     }
 
     // ── Main loop ─────────────────────────────────────────────────────────────
-    val bufInfo        = MediaCodec.BufferInfo()
-    var decInputDone   = false
-    var decOutputDone  = false
-    var encDone        = false
-    var muxVideo       = -1
-    var muxStarted     = false
-    var outputPts      = 0L
-    var lastBitmap: Bitmap? = null
-    var stillFramesLeft = if (addStill) (STILL_US / FRAME_US).toInt() else 0
-    var eosToEncoder   = false
-    val audioBuf       = ByteBuffer.allocate(512 * 1024)
-    val audioInfo      = MediaCodec.BufferInfo()
+    val bufInfo       = MediaCodec.BufferInfo()
+    var decInputDone  = false
+    var decOutputDone = false
+    var encDone       = false
+    var muxVideo      = -1
+    var muxStarted    = false
+    var outputPts     = 0L
+    var eosToEncoder  = false
+    val audioBuf      = ByteBuffer.allocate(512 * 1024)
+    val audioInfo     = MediaCodec.BufferInfo()
 
     while (!encDone) {
 
-      // 1. Feed decoder (live portion only)
+      // 1. Feed decoder (entire video)
       if (!decInputDone) {
         val inIdx = decoder.dequeueInputBuffer(0)
         if (inIdx >= 0) {
-          val sampleTime = extractor.sampleTime
-          if (sampleTime < 0 || sampleTime >= liveEndUs) {
+          val buf = decoder.getInputBuffer(inIdx)!!
+          val sz  = extractor.readSampleData(buf, 0)
+          if (sz < 0) {
             decoder.queueInputBuffer(inIdx, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
             decInputDone = true
           } else {
-            val buf = decoder.getInputBuffer(inIdx)!!
-            val sz  = extractor.readSampleData(buf, 0)
-            if (sz < 0) {
-              decoder.queueInputBuffer(inIdx, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
-              decInputDone = true
-            } else {
-              decoder.queueInputBuffer(inIdx, 0, sz, sampleTime, 0)
-              extractor.advance()
-            }
+            decoder.queueInputBuffer(inIdx, 0, sz, extractor.sampleTime, 0)
+            extractor.advance()
           }
         }
       }
 
-      // 2. Drain decoder → draw overlays → feed encoder (live frames)
+      // 2. Drain decoder → draw overlays → feed encoder
       if (!decOutputDone) {
         val outIdx = decoder.dequeueOutputBuffer(bufInfo, 0)
         if (outIdx >= 0) {
@@ -268,11 +253,6 @@ class VideoOverlayModule : Module() {
               img.close()
               drawOverlays(bmp)
 
-              // Keep a copy for the still phase
-              lastBitmap?.recycle()
-              lastBitmap = bmp.copy(Bitmap.Config.ARGB_8888, false)
-
-              // Encode live frame
               val encInIdx = encoder.dequeueInputBuffer(TIMEOUT)
               if (encInIdx >= 0) {
                 val encBuf = encoder.getInputBuffer(encInIdx)!!
@@ -289,26 +269,12 @@ class VideoOverlayModule : Module() {
         }
       }
 
-      // 3. Still phase: feed frozen last frame after live portion ends
+      // 3. Signal EOS to encoder once decoder is done
       if (decOutputDone && !eosToEncoder) {
-        if (stillFramesLeft > 0 && lastBitmap != null) {
-          val encInIdx = encoder.dequeueInputBuffer(0)
-          if (encInIdx >= 0) {
-            val encBuf = encoder.getInputBuffer(encInIdx)!!
-            bitmapToYuv420(lastBitmap!!, encBuf, finalW, finalH)
-            stillFramesLeft--
-            val flags = if (stillFramesLeft == 0) MediaCodec.BUFFER_FLAG_END_OF_STREAM else 0
-            encoder.queueInputBuffer(encInIdx, 0, finalW * finalH * 3 / 2, outputPts, flags)
-            outputPts += FRAME_US
-            if (stillFramesLeft == 0) eosToEncoder = true
-          }
-        } else if (stillFramesLeft == 0) {
-          // No still frames (video ≤ 3 s or already done) – signal EOS
-          val encInIdx = encoder.dequeueInputBuffer(TIMEOUT)
-          if (encInIdx >= 0) {
-            encoder.queueInputBuffer(encInIdx, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
-            eosToEncoder = true
-          }
+        val encInIdx = encoder.dequeueInputBuffer(TIMEOUT)
+        if (encInIdx >= 0) {
+          encoder.queueInputBuffer(encInIdx, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
+          eosToEncoder = true
         }
       }
 
@@ -319,12 +285,11 @@ class VideoOverlayModule : Module() {
           muxVideo = muxer.addTrack(encoder.outputFormat)
           muxer.start()
           muxStarted = true
-          // Passthrough audio for live portion only
+          // Passthrough full audio
           if (audioExt != null && muxAudio >= 0) {
             while (true) {
               val sz = audioExt.readSampleData(audioBuf, 0)
               if (sz < 0) break
-              if (audioExt.sampleTime > liveEndUs) break
               audioInfo.set(0, sz, audioExt.sampleTime, audioExt.sampleFlags)
               muxer.writeSampleData(muxAudio, audioBuf, audioInfo)
               audioExt.advance()
@@ -343,7 +308,6 @@ class VideoOverlayModule : Module() {
     }
 
     // ── Cleanup ───────────────────────────────────────────────────────────────
-    lastBitmap?.recycle()
     decoder.stop();  decoder.release()
     encoder.stop();  encoder.release()
     imageReader.close()

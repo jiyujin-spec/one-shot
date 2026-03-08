@@ -846,9 +846,9 @@ export default function Page() {
       return;
     }
 
-    // ── 動画モード（3秒録画 → FFmpegで5秒に延長）──
+    // ── 動画モード（5秒録画 → ネイティブでオーバーレイ焼き込み）──
     setIsRecording(true);
-    const RECORD_SECS = 3;
+    const RECORD_SECS = 5;
 
     // 録画中カウントダウン
     setRecordingCountdown(RECORD_SECS);
