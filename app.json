@@ -1,0 +1,88 @@
+{
+  "expo": {
+    "name": "One Shot",
+    "slug": "one-shot",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "image": "./assets/images/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#000000"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.jin.oneshot",
+      "icon": "./assets/images/icon.png",
+      "deploymentTarget": "13.4",
+      "infoPlist": {
+        "NSCameraUsageDescription": "One Shot uses the camera to record your habits as videos and photos.",
+        "NSMicrophoneUsageDescription": "One Shot uses the microphone for video recording.",
+        "NSPhotoLibraryUsageDescription": "Reads recorded videos and photos from your photo library.",
+        "NSPhotoLibraryAddUsageDescription": "Saves recorded videos and photos to your photo library.",
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/icon.png",
+        "backgroundColor": "#000000"
+      },
+      "package": "com.jin.oneshot",
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_MEDIA_VIDEO",
+        "android.permission.ACCESS_MEDIA_LOCATION",
+        "android.permission.MODIFY_AUDIO_SETTINGS"
+      ]
+    },
+    "plugins": [
+      "expo-router",
+      "./modules/video-overlay/plugin",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "One Shot uses the camera to record your habits as videos and photos.",
+          "microphonePermission": "One Shot uses the microphone for video recording.",
+          "recordAudioAndroid": true
+        }
+      ],
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Reads recorded videos and photos from your photo library.",
+          "savePhotosPermission": "Saves recorded videos and photos to your photo library.",
+          "isAccessMediaLocationEnabled": true
+        }
+      ],
+      [
+        "expo-av",
+        {
+          "microphonePermission": "One Shot uses the microphone for video recording."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/icon.png",
+          "color": "#000000",
+          "sounds": []
+        }
+      ]
+    ],
+    "scheme": "oneshot",
+    "extra": {
+      "eas": {
+        "projectId": "f4a77e54-0d27-4cb5-a76e-88756cefe907"
+      },
+      "router": {
+        "origin": false
+      }
+    }
+  }
+}
