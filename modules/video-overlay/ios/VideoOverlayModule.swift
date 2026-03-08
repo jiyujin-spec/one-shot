@@ -245,11 +245,18 @@ public class VideoOverlayModule: Module {
       dateFormatter.dateFormat = "yyyy.MM.dd_HH:mm"
       let timestampStr = dateFormatter.string(from: now)
 
-      let userIdStr = "ID: \(userId)"
+      let userIdStr = userId
 
       let habitStr: String = {
-        let dayPart = totalDays.map { "DAY \(currentDay)/\($0)" } ?? "DAY \(currentDay)"
-        return "HABIT: \(habitName) / \(dayPart)"
+        if let total = totalDays {
+          if currentDay >= total {
+            return "\(habitName) COMPLETED"
+          } else {
+            return "\(habitName) DAY \(currentDay)/\(total)"
+          }
+        } else {
+          return "\(habitName) DAY \(currentDay)"
+        }
       }()
 
       let logoStr = "ONE SHOT"
