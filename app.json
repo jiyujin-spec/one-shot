@@ -40,7 +40,7 @@
     },
     "plugins": [
       "expo-router",
-      "./modules/video-overlay",
+      "./modules/video-overlay/plugin",
       [
         "expo-camera",
         {
