@@ -424,8 +424,8 @@ export default function Page() {
   const [capturedUri, setCapturedUri] = useState<string | null>(null);
   const [capturedType, setCapturedType] = useState<'photo' | 'video'>('video');
   const [capturedTime, setCapturedTime] = useState<Date | null>(null);
-  const recordingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const recordingCountdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const recordingTimerRef = useRef<any>(null);
+  const recordingCountdownRef = useRef<any>(null);
   const [isPreviewPlaying, setIsPreviewPlaying] = useState(false);
   const [isProcessingVideo, setIsProcessingVideo] = useState(false);
   const [videoReady, setVideoReady] = useState(false);
@@ -446,7 +446,7 @@ export default function Page() {
   // Review trigger
   const [reviewReady, setReviewReady] = useState(false);
 
-  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const toastTimer = useRef<any>(null);
 
   // ── Translation helper ──────────────────────────────────────────────────────
 
