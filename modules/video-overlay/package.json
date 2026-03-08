@@ -4,5 +4,8 @@
   "description": "Native video text overlay module for One Shot",
   "main": "index.js",
   "types": "src/index.ts",
-  "private": true
+  "private": true,
+  "devDependencies": {
+    "expo-module-scripts": "^55.0.2"
+  }
 }
