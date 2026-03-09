@@ -183,9 +183,14 @@ public class VideoOverlayModule: Module {
 
       let totalDuration = asset.duration
 
+      // 冒頭の暗いフレームを 0.3 秒カットするオフセット
+      let trimOffset  = CMTime(seconds: 0.3, preferredTimescale: 600)
+      let trimmedStart = trimOffset < totalDuration ? trimOffset : .zero
+      let trimmedDuration = CMTimeSubtract(totalDuration, trimmedStart)
+
       do {
         try compVideoTrack.insertTimeRange(
-          CMTimeRange(start: .zero, duration: totalDuration),
+          CMTimeRange(start: trimmedStart, duration: trimmedDuration),
           of: videoTrack, at: .zero
         )
       } catch {
@@ -198,7 +203,7 @@ public class VideoOverlayModule: Module {
            withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid
          ) {
         try? compAudioTrack.insertTimeRange(
-          CMTimeRange(start: .zero, duration: totalDuration),
+          CMTimeRange(start: trimmedStart, duration: trimmedDuration),
           of: audioTrack, at: .zero
         )
       }
@@ -354,7 +359,7 @@ public class VideoOverlayModule: Module {
       )
 
       let instruction = AVMutableVideoCompositionInstruction()
-      instruction.timeRange = CMTimeRange(start: .zero, duration: totalDuration)
+      instruction.timeRange = CMTimeRange(start: .zero, duration: trimmedDuration)
 
       let layerInstruction = AVMutableVideoCompositionLayerInstruction(assetTrack: compVideoTrack)
       layerInstruction.setTransform(cropTransform, at: .zero)
