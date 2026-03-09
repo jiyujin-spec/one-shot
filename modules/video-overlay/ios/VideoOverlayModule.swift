@@ -8,7 +8,7 @@ public class VideoOverlayModule: Module {
   public func definition() -> ModuleDefinition {
     Name("VideoOverlay")
 
-    // ── Legacy API (kept for backward compatibility) ──────────────────────────
+    // ── Legacy API ─────────────────────────────────────────────────────────────
     AsyncFunction("burnTextOverlay") { (inputUri: String, overlays: [[String: Any]], promise: Promise) in
       guard let url = URL(string: inputUri) else {
         promise.reject("ERR_INVALID_URI", "Invalid input URI: \(inputUri)")
@@ -115,7 +115,7 @@ public class VideoOverlayModule: Module {
       }
     }
 
-    // ── One Shot filter overlay API ───────────────────────────────────────────
+    // ── One Shot filter overlay API ────────────────────────────────────────────
     AsyncFunction("processVideo") { (options: [String: Any], promise: Promise) in
       guard
         let inputPath = options["inputPath"] as? String,
@@ -128,7 +128,6 @@ public class VideoOverlayModule: Module {
 
       let outputPath = options["outputPath"] as? String
 
-      // Timestamp: use provided captureTime string or format current time
       let timestampStr: String
       if let ct = options["captureTime"] as? String, !ct.isEmpty {
         timestampStr = ct
@@ -150,27 +149,44 @@ public class VideoOverlayModule: Module {
         return
       }
 
-      // ── Orientation & render size ─────────────────────────────────────────
+      // ── Orientation & exact 1:1 center-crop ──────────────────────────────────
+      //
+      // naturalSize  : pixel dimensions as stored (e.g. 1920×1080 for landscape)
+      // preferredTransform: rotation + translation that maps natural → display
+      //
+      // To get the display width/height we apply the transform to the size
+      // (CGSize.applying uses only the 2×2 rotation part, ignoring translation).
+      // abs() is needed because rotations can produce negative extents.
 
-      let naturalSize = videoTrack.naturalSize
-      let transform   = videoTrack.preferredTransform
-      let rotated     = naturalSize.applying(transform)
-      let videoW      = abs(rotated.width)
-      let videoH      = abs(rotated.height)
+      let naturalSize = videoTrack.naturalSize        // stored w × h
+      let transform   = videoTrack.preferredTransform  // rotation applied by player
 
-      // Square crop: take the shorter side
-      let squareSize  = min(videoW, videoH)
-      let renderSize  = CGSize(width: squareSize, height: squareSize)
+      let dispSizeRaw = naturalSize.applying(transform)
+      let dispW = abs(dispSizeRaw.width)   // display width  (post-rotation)
+      let dispH = abs(dispSizeRaw.height)  // display height (post-rotation)
 
-      // Center-crop transform: apply rotation then translate to center
-      let xOffset = (squareSize - videoW) / 2.0
-      let yOffset = (squareSize - videoH) / 2.0
+      // Ensure even pixel dimensions for H.264 encoder
+      let dispWE = dispW - (dispW.truncatingRemainder(dividingBy: 2))
+      let dispHE = dispH - (dispH.truncatingRemainder(dividingBy: 2))
+
+      // Strict 1:1 square: shorter display side, even-aligned
+      let squareSizeRaw = min(dispWE, dispHE)
+      let squareSize    = squareSizeRaw - squareSizeRaw.truncatingRemainder(dividingBy: 2)
+      let renderSize    = CGSize(width: squareSize, height: squareSize)
+
+      // Center-crop offset in display space (can be negative = shift toward origin)
+      // We want to cut (dispW - squareSize)/2 from each horizontal side, etc.
+      let cropOffsetX = (squareSize - dispWE) / 2.0  // negative when dispWE > squareSize
+      let cropOffsetY = (squareSize - dispHE) / 2.0  // negative when dispHE > squareSize
+
+      // The layer instruction transform maps natural-coordinate frames into the
+      // render canvas.  We first apply the preferred rotation (transform), then
+      // shift so the crop window lands at the render origin.
       let cropTransform = transform.concatenating(
-        CGAffineTransform(translationX: xOffset, y: yOffset)
+        CGAffineTransform(translationX: cropOffsetX, y: cropOffsetY)
       )
 
-      // ── Composition ───────────────────────────────────────────────────────
-
+      // ── Composition ────────────────────────────────────────────────────────
       let composition = AVMutableComposition()
 
       guard let compVideoTrack = composition.addMutableTrack(
@@ -183,14 +199,14 @@ public class VideoOverlayModule: Module {
 
       let totalDuration = asset.duration
 
-      // 冒頭の暗いフレームを 0.3 秒カットするオフセット
-      let trimOffset  = CMTime(seconds: 0.3, preferredTimescale: 600)
-      let trimmedStart = trimOffset < totalDuration ? trimOffset : .zero
-      let trimmedDuration = CMTimeSubtract(totalDuration, trimmedStart)
+      // Trim first 0.3 s (dark frames immediately after shutter press)
+      let trimOffset   = CMTime(seconds: 0.3, preferredTimescale: 600)
+      let trimStart    = trimOffset < totalDuration ? trimOffset : .zero
+      let trimDuration = CMTimeSubtract(totalDuration, trimStart)
 
       do {
         try compVideoTrack.insertTimeRange(
-          CMTimeRange(start: trimmedStart, duration: trimmedDuration),
+          CMTimeRange(start: trimStart, duration: trimDuration),
           of: videoTrack, at: .zero
         )
       } catch {
@@ -203,23 +219,25 @@ public class VideoOverlayModule: Module {
            withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid
          ) {
         try? compAudioTrack.insertTimeRange(
-          CMTimeRange(start: trimmedStart, duration: trimmedDuration),
+          CMTimeRange(start: trimStart, duration: trimDuration),
           of: audioTrack, at: .zero
         )
       }
 
-      // ── Layer tree ───────────────────────────────────────────────────────
+      // ── Layer tree ──────────────────────────────────────────────────────────
+      //
+      // isGeometryFlipped = true so that y=0 is at the TOP of the render canvas,
+      // matching UIKit coordinates for our layout math below.
 
       let parentLayer = CALayer()
       parentLayer.frame = CGRect(origin: .zero, size: renderSize)
-      parentLayer.isGeometryFlipped = true   // y = 0 at top
+      parentLayer.isGeometryFlipped = true
 
       let videoLayer = CALayer()
       videoLayer.frame = CGRect(origin: .zero, size: renderSize)
       parentLayer.addSublayer(videoLayer)
 
-      // ── Dark / cold tone overlay ──────────────────────────────────────────
-
+      // ── Dark / cold-tone filter ─────────────────────────────────────────────
       let darkOverlay = CALayer()
       darkOverlay.frame = CGRect(origin: .zero, size: renderSize)
       darkOverlay.backgroundColor = UIColor(
@@ -227,27 +245,20 @@ public class VideoOverlayModule: Module {
       ).cgColor
       parentLayer.addSublayer(darkOverlay)
 
-      // ── Layout constants ──────────────────────────────────────────────────
-
+      // ── Layout constants ────────────────────────────────────────────────────
       let S        = squareSize
-      let pad      = S * 0.045            // edge padding
-      let fontSize = S * 0.038            // text size (bold, larger)
-      let lineGap  = fontSize * 1.35      // line height for 2-line BL block
+      let pad      = S * 0.045
+      let fontSize = S * 0.038
+      let lineGap  = fontSize * 1.35
+      let layerH   = fontSize + 6
 
-      let fontName: String = {
-        // Prefer bold system font for clean look
-        let bold = UIFont.boldSystemFont(ofSize: fontSize)
-        return bold.fontName
-      }()
+      let fontName: String = UIFont.boldSystemFont(ofSize: fontSize).fontName
       let uiFont   = UIFont.boldSystemFont(ofSize: fontSize)
       let attrs: [NSAttributedString.Key: Any] = [.font: uiFont]
       func tw(_ s: String) -> CGFloat { s.size(withAttributes: attrs).width }
-      let layerH = fontSize + 6
 
-      let white    = UIColor.white.cgColor
-      let whiteDim = UIColor(white: 1.0, alpha: 0.85).cgColor
+      let white = UIColor.white.cgColor
 
-      // Shadow helper
       func addShadow(_ layer: CALayer) {
         layer.shadowColor   = UIColor.black.withAlphaComponent(0.55).cgColor
         layer.shadowOpacity = 1.0
@@ -255,35 +266,28 @@ public class VideoOverlayModule: Module {
         layer.shadowOffset  = CGSize(width: 1, height: 1)
       }
 
-      // ── Bracket arm length ────────────────────────────────────────────────
-
       let armLen   = S * 0.07
       let armWidth = max(S * 0.003, 1.5)
 
-      // ── Helper: make a text layer ─────────────────────────────────────────
-
-      func makeTextLayer(_ text: String, x: CGFloat, y: CGFloat, color: CGColor = UIColor.white.cgColor) -> CATextLayer {
-        let layer = CATextLayer()
-        layer.string    = text
-        layer.fontSize  = fontSize
-        layer.foregroundColor = color
-        layer.alignmentMode   = .left
-        layer.contentsScale   = 2.0
-        layer.isWrapped = false
-        layer.font = CTFontCreateWithName(fontName as CFString, fontSize, nil)
-        addShadow(layer)
-        layer.frame = CGRect(x: x, y: y, width: tw(text) + 8, height: layerH)
-        return layer
+      func makeTextLayer(_ text: String, x: CGFloat, y: CGFloat) -> CATextLayer {
+        let l = CATextLayer()
+        l.string          = text
+        l.fontSize        = fontSize
+        l.foregroundColor = white
+        l.alignmentMode   = .left
+        l.contentsScale   = 2.0
+        l.isWrapped       = false
+        l.font            = CTFontCreateWithName(fontName as CFString, fontSize, nil)
+        addShadow(l)
+        l.frame = CGRect(x: x, y: y, width: tw(text) + 8, height: layerH)
+        return l
       }
 
-      // ── TL corner bracket ─────────────────────────────────────────────────
-      // ┌  (top edge + left edge)
-
+      // ── TL corner bracket ┌ ────────────────────────────────────────────────
       let tlPath = CGMutablePath()
       tlPath.move(to:    CGPoint(x: pad + armLen, y: pad))
       tlPath.addLine(to: CGPoint(x: pad,          y: pad))
       tlPath.addLine(to: CGPoint(x: pad,          y: pad + armLen))
-
       let tlBracket = CAShapeLayer()
       tlBracket.path        = tlPath
       tlBracket.strokeColor = white
@@ -293,52 +297,38 @@ public class VideoOverlayModule: Module {
       addShadow(tlBracket)
       parentLayer.addSublayer(tlBracket)
 
-      // ── Red dot (●) – acts as the "O" in "One shot" ───────────────────────
-
-      let dotSize   = fontSize * 0.95
-      let dotX      = pad + armLen * 0.25
-      let dotY      = pad + armLen * 0.25
-      let dotLayer  = CALayer()
+      // ── Red dot (●) — the "O" in "One shot" ───────────────────────────────
+      let dotSize  = fontSize * 0.95
+      let dotX     = pad + armLen * 0.25
+      let dotY     = pad + armLen * 0.25
+      let dotLayer = CALayer()
       dotLayer.frame           = CGRect(x: dotX, y: dotY, width: dotSize, height: dotSize)
       dotLayer.backgroundColor = UIColor(red: 1.0, green: 0.05, blue: 0.05, alpha: 1.0).cgColor
       dotLayer.cornerRadius    = dotSize / 2
       addShadow(dotLayer)
       parentLayer.addSublayer(dotLayer)
 
-      // "ne shot" text immediately to the right of the dot
+      // "ne shot" — vertically centred on the dot
       let neShotX = dotX + dotSize + fontSize * 0.22
-      let neShotY = dotY - (layerH - dotSize) / 2   // vertically align with dot center
-      let neShotLayer = makeTextLayer("ne shot", x: neShotX, y: neShotY)
-      parentLayer.addSublayer(neShotLayer)
+      let neShotY = dotY - (layerH - dotSize) / 2
+      parentLayer.addSublayer(makeTextLayer("ne shot", x: neShotX, y: neShotY))
 
-      // ── TR: "DAY{n}" ──────────────────────────────────────────────────────
+      // ── TR: "DAY{n}" ───────────────────────────────────────────────────────
+      let dayStr = "DAY\(currentDay)"
+      let dayX   = S - pad - tw(dayStr) - 4
+      let dayY   = pad + armLen * 0.25
+      parentLayer.addSublayer(makeTextLayer(dayStr, x: dayX, y: dayY))
 
-      let dayStr   = "DAY\(currentDay)"
-      let dayW     = tw(dayStr)
-      let dayX     = S - pad - dayW - 4
-      let dayY     = pad + armLen * 0.25
-      let dayLayer = makeTextLayer(dayStr, x: dayX, y: dayY)
-      parentLayer.addSublayer(dayLayer)
-
-      // ── BL: timestamp (line 1) + "HABIT:{name}" (line 2) ─────────────────
-
+      // ── BL: timestamp + "HABIT:{name}" ────────────────────────────────────
       let habitStr = "HABIT:\(habitName.uppercased())"
-      let tsY      = S - pad - lineGap - layerH
-      let habitY   = S - pad - layerH
+      parentLayer.addSublayer(makeTextLayer(timestampStr, x: pad, y: S - pad - lineGap - layerH))
+      parentLayer.addSublayer(makeTextLayer(habitStr,     x: pad, y: S - pad - layerH))
 
-      let tsLayer    = makeTextLayer(timestampStr, x: pad, y: tsY)
-      let habitLayer = makeTextLayer(habitStr,     x: pad, y: habitY)
-      parentLayer.addSublayer(tsLayer)
-      parentLayer.addSublayer(habitLayer)
-
-      // ── BR corner bracket ─────────────────────────────────────────────────
-      // ┘  (bottom edge + right edge)
-
+      // ── BR corner bracket ┘ ────────────────────────────────────────────────
       let brPath = CGMutablePath()
       brPath.move(to:    CGPoint(x: S - pad - armLen, y: S - pad))
       brPath.addLine(to: CGPoint(x: S - pad,          y: S - pad))
       brPath.addLine(to: CGPoint(x: S - pad,          y: S - pad - armLen))
-
       let brBracket = CAShapeLayer()
       brBracket.path        = brPath
       brBracket.strokeColor = white
@@ -348,8 +338,7 @@ public class VideoOverlayModule: Module {
       addShadow(brBracket)
       parentLayer.addSublayer(brBracket)
 
-      // ── Video composition ────────────────────────────────────────────────
-
+      // ── Video composition ──────────────────────────────────────────────────
       let videoComposition = AVMutableVideoComposition()
       videoComposition.renderSize    = renderSize
       videoComposition.frameDuration = CMTime(value: 1, timescale: 30)
@@ -359,15 +348,14 @@ public class VideoOverlayModule: Module {
       )
 
       let instruction = AVMutableVideoCompositionInstruction()
-      instruction.timeRange = CMTimeRange(start: .zero, duration: trimmedDuration)
+      instruction.timeRange = CMTimeRange(start: .zero, duration: trimDuration)
 
       let layerInstruction = AVMutableVideoCompositionLayerInstruction(assetTrack: compVideoTrack)
       layerInstruction.setTransform(cropTransform, at: .zero)
       instruction.layerInstructions = [layerInstruction]
       videoComposition.instructions = [instruction]
 
-      // ── Export ───────────────────────────────────────────────────────────
-
+      // ── Export ─────────────────────────────────────────────────────────────
       let outputURL: URL
       if let path = outputPath, let url = URL(string: path) {
         outputURL = url
@@ -375,7 +363,6 @@ public class VideoOverlayModule: Module {
         outputURL = FileManager.default.temporaryDirectory
           .appendingPathComponent(UUID().uuidString + ".mp4")
       }
-
       try? FileManager.default.removeItem(at: outputURL)
 
       guard let exportSession = AVAssetExportSession(
@@ -386,9 +373,9 @@ public class VideoOverlayModule: Module {
         return
       }
 
-      exportSession.outputURL       = outputURL
-      exportSession.outputFileType  = .mp4
-      exportSession.videoComposition = videoComposition
+      exportSession.outputURL                  = outputURL
+      exportSession.outputFileType             = .mp4
+      exportSession.videoComposition           = videoComposition
       exportSession.shouldOptimizeForNetworkUse = false
 
       exportSession.exportAsynchronously {
@@ -401,7 +388,8 @@ public class VideoOverlayModule: Module {
         case .cancelled:
           promise.reject("ERR_EXPORT_CANCELLED", "Export was cancelled")
         default:
-          promise.reject("ERR_EXPORT_UNKNOWN", "Unknown export status: \(exportSession.status.rawValue)")
+          promise.reject("ERR_EXPORT_UNKNOWN",
+            "Unknown export status: \(exportSession.status.rawValue)")
         }
       }
     }
