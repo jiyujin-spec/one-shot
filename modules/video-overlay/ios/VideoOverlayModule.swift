@@ -313,8 +313,8 @@ public class VideoOverlayModule: Module {
       let neShotY = dotY - (layerH - dotSize) / 2
       parentLayer.addSublayer(makeTextLayer("ne shot", x: neShotX, y: neShotY))
 
-      // ── TR: "DAY{n}" ───────────────────────────────────────────────────────
-      let dayStr = "DAY\(currentDay)"
+      // ── TR: "DAY{n}" (or custom dayLabel if provided) ──────────────────────
+      let dayStr = (options["dayLabel"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "DAY\(currentDay)"
       let dayX   = S - pad - tw(dayStr) - 4
       let dayY   = pad + armLen * 0.25
       parentLayer.addSublayer(makeTextLayer(dayStr, x: dayX, y: dayY))
