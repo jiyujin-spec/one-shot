@@ -907,8 +907,8 @@ export default function Page() {
 
     let rawUri: string | null = null;
     try {
-      // recordAsync 呼び出し前にさらに 50ms の余裕を確保
-      await new Promise<void>(r => setTimeout(r, 50));
+      // recordAsync 呼び出し前にさらに 300ms の余裕を確保（冒頭暗転対策）
+      await new Promise<void>(r => setTimeout(r, 300));
       const recordPromise = cameraRef.current.recordAsync({ maxDuration: RECORD_SECS + 0.5 });
 
       // 安全マージン +400ms で確実に停止
@@ -1365,14 +1365,14 @@ export default function Page() {
           {/* ── メディアカード（角ブラケット付き）── */}
           <View ref={previewCardRef} style={styles.previewCard}>
             {isPhoto ? (
-              <Image source={{ uri: capturedUri }} style={styles.previewMedia} resizeMode="cover" />
+              <Image source={{ uri: capturedUri }} style={styles.previewMedia} resizeMode="contain" />
             ) : (
               <>
                 <Video
                   ref={previewVideoRef}
                   source={{ uri: capturedUri }}
                   style={styles.previewMedia}
-                  resizeMode={ResizeMode.COVER}
+                  resizeMode={ResizeMode.CONTAIN}
                   isLooping
                   shouldPlay={isPreviewPlaying}
                   isMuted={false}

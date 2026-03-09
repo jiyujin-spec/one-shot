@@ -1,9 +1,38 @@
 // Expo config plugin for the video-overlay native module.
-// This file is intentionally plain JavaScript so Node.js can load it
-// without TypeScript transpilation during `expo start` / EAS build.
-// The native module is registered via expo-module.config.json auto-linking.
+// Injects `pod 'VideoOverlay', :path => '../modules/video-overlay'`
+// into the generated ios/Podfile so EAS Build can link the native module.
 
-/** @param {import('@expo/config-plugins').ConfigPlugin} config */
-const withVideoOverlay = (config) => config;
+const { withPodfile } = require('@expo/config-plugins');
+
+/** @param {import('@expo/config-plugins').ExpoConfig} config */
+const withVideoOverlay = (config) => {
+  return withPodfile(config, (cfg) => {
+    const podfile = cfg.modResults.contents;
+    const podLine = "  pod 'VideoOverlay', :path => '../modules/video-overlay'";
+
+    // Guard: skip if already injected
+    if (podfile.includes(podLine)) {
+      return cfg;
+    }
+
+    // Inject after the first `use_expo_modules!` or before the closing `end` of the target block
+    const marker = 'use_expo_modules!';
+    if (podfile.includes(marker)) {
+      cfg.modResults.contents = podfile.replace(
+        marker,
+        `${marker}\n${podLine}`
+      );
+    } else {
+      // Fallback: inject before the last `end`
+      const lastEnd = podfile.lastIndexOf('\nend');
+      if (lastEnd !== -1) {
+        cfg.modResults.contents =
+          podfile.slice(0, lastEnd) + '\n' + podLine + podfile.slice(lastEnd);
+      }
+    }
+
+    return cfg;
+  });
+};
 
 module.exports = withVideoOverlay;
