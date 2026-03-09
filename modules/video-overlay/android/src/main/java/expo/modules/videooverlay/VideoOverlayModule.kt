@@ -51,21 +51,27 @@ class VideoOverlayModule : Module() {
       }
 
       val inputPath  = options["inputPath"]  as? String
-      val userId     = options["userId"]     as? String
       val habitName  = (options["habitName"] as? String)?.uppercase(Locale.US)
       val currentDay = (options["currentDay"] as? Number)?.toInt()
 
-      if (inputPath == null || userId == null || habitName == null || currentDay == null) {
+      if (inputPath == null || habitName == null || currentDay == null) {
         promise.reject(
           "ERR_INVALID_PARAMS",
-          "Missing required parameters: inputPath, userId, habitName, currentDay",
+          "Missing required parameters: inputPath, habitName, currentDay",
           null
         )
         return@AsyncFunction
       }
 
-      val totalDays  = (options["totalDays"]  as? Number)?.toInt()
-      val outputPath = options["outputPath"] as? String
+      val outputPath   = options["outputPath"] as? String
+      val captureTime  = options["captureTime"] as? String
+
+      // Use provided captureTime or format current time
+      val timestampStr = if (!captureTime.isNullOrEmpty()) {
+        captureTime
+      } else {
+        SimpleDateFormat("yyyy.MM/dd HH:mm", Locale.US).format(Date())
+      }
 
       Thread {
         try {
@@ -78,18 +84,7 @@ class VideoOverlayModule : Module() {
             File(context.cacheDir, "${System.currentTimeMillis()}.mp4")
           }
 
-          val sdf = SimpleDateFormat("yyyy.MM.dd_HH:mm", Locale.US)
-          val timestampStr = sdf.format(Date())
-          val habitStr = when {
-            totalDays != null && currentDay >= totalDays -> "$habitName COMPLETED"
-            totalDays != null -> "$habitName DAY $currentDay/$totalDays"
-            else -> "$habitName DAY $currentDay"
-          }
-
-          processIndustrialVideo(
-            srcPath, outFile.absolutePath,
-            timestampStr, userId, habitStr, "ONE SHOT"
-          )
+          processOneShotVideo(srcPath, outFile.absolutePath, timestampStr, habitName, currentDay)
           promise.resolve("file://${outFile.absolutePath}")
         } catch (e: Exception) {
           promise.reject("ERR_PROCESS", e.message ?: "Unknown error", e)
@@ -102,8 +97,8 @@ class VideoOverlayModule : Module() {
 
   private data class OverlaySpec(
     val text: String,
-    val x: Float,   // 0..1 relative
-    val y: Float,   // 0..1 relative
+    val x: Float,
+    val y: Float,
     val fontSize: Float,
     val colorHex: String,
     val bold: Boolean
@@ -115,17 +110,17 @@ class VideoOverlayModule : Module() {
   }
 
   // ---------------------------------------------------------------------------
-  // Industrial-data overlay: full video duration with overlay burned in
+  // One Shot filter overlay: square crop + cold/dark tone + new design
   // ---------------------------------------------------------------------------
-  private fun processIndustrialVideo(
+  private fun processOneShotVideo(
     srcPath: String, dstPath: String,
-    timestampStr: String, userId: String, habitStr: String, logoStr: String
+    timestampStr: String, habitName: String, currentDay: Int
   ) {
-    val FPS     = 30
+    val FPS      = 30
     val FRAME_US = 1_000_000L / FPS
-    val TIMEOUT  = 10_000L      // 10 ms dequeue timeout
+    val TIMEOUT  = 10_000L
 
-    // ── Metadata ──────────────────────────────────────────────────────────────
+    // ── Source metadata ────────────────────────────────────────────────────
     val retriever = MediaMetadataRetriever()
     retriever.setDataSource(srcPath)
     val srcW     = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toInt()    ?: 720
@@ -133,39 +128,105 @@ class VideoOverlayModule : Module() {
     val rotation = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toInt() ?: 0
     retriever.release()
 
-    val (encW, encH) = if (rotation == 90 || rotation == 270) srcH to srcW else srcW to srcH
-    val finalW = if (encW % 2 == 0) encW else encW - 1
-    val finalH = if (encH % 2 == 0) encH else encH - 1
+    // Display dimensions (after rotation)
+    val (dispW, dispH) = if (rotation == 90 || rotation == 270) srcH to srcW else srcW to srcH
+    val dispWE = if (dispW % 2 == 0) dispW else dispW - 1
+    val dispHE = if (dispH % 2 == 0) dispH else dispH - 1
 
-    // ── Overlay paint & positions ─────────────────────────────────────────────
-    val fontSize = finalH * 0.0125f
+    // Square size (center-crop)
+    val sqRaw    = minOf(dispWE, dispHE)
+    val squareSize = if (sqRaw % 2 == 0) sqRaw else sqRaw - 1
+
+    val cropX    = (dispWE - squareSize) / 2
+    val cropY    = (dispHE - squareSize) / 2
+
+    val S = squareSize.toFloat()
+
+    // ── Overlay parameters ─────────────────────────────────────────────────
+    val pad      = S * 0.045f
+    val fontSize = S * 0.038f
+    val lineGap  = fontSize * 1.35f
+
     val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-      textSize  = fontSize
-      color     = Color.argb(255, 200, 200, 200)
-      typeface  = Typeface.MONOSPACE
-      setShadowLayer(4f, 1f, 1f, Color.argb(102, 0, 0, 0))
+      textSize = fontSize
+      color    = Color.WHITE
+      typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+      setShadowLayer(3f, 1f, 1f, Color.argb(140, 0, 0, 0))
     }
 
-    val xLeft   = finalW * 0.05f
-    val xRight  = finalW * 0.85f
-    val yTop    = finalH * 0.12f + fontSize   // baseline for top labels
-    val yBottom = finalH * 0.75f              // baseline for bottom labels
+    val bracketPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+      color       = Color.WHITE
+      strokeWidth = maxOf(S * 0.003f, 1.5f)
+      style       = Paint.Style.STROKE
+      strokeCap   = Paint.Cap.SQUARE
+      setShadowLayer(3f, 1f, 1f, Color.argb(140, 0, 0, 0))
+    }
 
-    val xUserId = xRight - textPaint.measureText(userId)
-    val xLogo   = xRight - textPaint.measureText(logoStr)
+    val darkPaint = Paint().apply {
+      color = Color.argb(97, 0, 10, 31)  // ~38% opacity dark blue
+      style = Paint.Style.FILL
+    }
+
+    val dotSize  = fontSize * 0.95f
+    val armLen   = S * 0.07f
+
+    val dayStr   = "DAY$currentDay"
+    val habitStr = "HABIT:$habitName"
 
     fun drawOverlays(bmp: Bitmap) {
       val canvas = Canvas(bmp)
-      canvas.drawText(timestampStr, xLeft,   yTop,    textPaint)
-      canvas.drawText(userId,       xUserId, yTop,    textPaint)
-      canvas.drawText(habitStr,     xLeft,   yBottom, textPaint)
-      canvas.drawText(logoStr,      xLogo,   yBottom, textPaint)
+
+      // 1. Dark/cold overlay
+      canvas.drawRect(0f, 0f, S, S, darkPaint)
+
+      // 2. TL corner bracket ┌
+      val tlPath = Path().apply {
+        moveTo(pad + armLen, pad)
+        lineTo(pad, pad)
+        lineTo(pad, pad + armLen)
+      }
+      canvas.drawPath(tlPath, bracketPaint)
+
+      // 3. Red dot (acts as the "O" in "One shot")
+      val dotX = pad + armLen * 0.25f
+      val dotY = pad + armLen * 0.25f
+      val dotPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.rgb(255, 13, 13)
+        style = Paint.Style.FILL
+        setShadowLayer(3f, 1f, 1f, Color.argb(140, 0, 0, 0))
+      }
+      canvas.drawCircle(dotX + dotSize / 2f, dotY + dotSize / 2f, dotSize / 2f, dotPaint)
+
+      // 4. "ne shot" text (to the right of the dot)
+      val neShotX = dotX + dotSize + fontSize * 0.22f
+      val neShotBaseline = dotY + dotSize * 0.5f + fontSize * 0.35f
+      canvas.drawText("ne shot", neShotX, neShotBaseline, textPaint)
+
+      // 5. TR: "DAYn"
+      val dayW = textPaint.measureText(dayStr)
+      val dayX = S - pad - dayW
+      val dayY = pad + armLen * 0.25f + dotSize * 0.5f + fontSize * 0.35f
+      canvas.drawText(dayStr, dayX, dayY, textPaint)
+
+      // 6. BL: timestamp (line 1) + "HABIT:xxx" (line 2)
+      val line2Baseline = S - pad
+      val line1Baseline = line2Baseline - lineGap
+      canvas.drawText(timestampStr, pad, line1Baseline, textPaint)
+      canvas.drawText(habitStr,     pad, line2Baseline, textPaint)
+
+      // 7. BR corner bracket ┘
+      val brPath = Path().apply {
+        moveTo(S - pad - armLen, S - pad)
+        lineTo(S - pad,          S - pad)
+        lineTo(S - pad,          S - pad - armLen)
+      }
+      canvas.drawPath(brPath, bracketPaint)
     }
 
-    // ── Encoder ───────────────────────────────────────────────────────────────
+    // ── Encoder (square output) ────────────────────────────────────────────
     val MIME   = "video/avc"
-    val encFmt = MediaFormat.createVideoFormat(MIME, finalW, finalH).apply {
-      setInteger(MediaFormat.KEY_BIT_RATE, 4_000_000)
+    val encFmt = MediaFormat.createVideoFormat(MIME, squareSize, squareSize).apply {
+      setInteger(MediaFormat.KEY_BIT_RATE, 6_000_000)
       setInteger(MediaFormat.KEY_FRAME_RATE, FPS)
       setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Flexible)
       setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1)
@@ -174,7 +235,7 @@ class VideoOverlayModule : Module() {
     encoder.configure(encFmt, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
     encoder.start()
 
-    // ── Decoder ───────────────────────────────────────────────────────────────
+    // ── Decoder (decode at display size, then crop) ───────────────────────
     val extractor = MediaExtractor()
     extractor.setDataSource(srcPath)
     var videoTrack = -1; var audioTrack = -1
@@ -191,13 +252,13 @@ class VideoOverlayModule : Module() {
     val videoFmt    = extractor.getTrackFormat(videoTrack)
     val decoderMime = videoFmt.getString(MediaFormat.KEY_MIME)!!
     val imageReader = android.media.ImageReader.newInstance(
-      finalW, finalH, android.graphics.ImageFormat.YUV_420_888, 4
+      dispWE, dispHE, android.graphics.ImageFormat.YUV_420_888, 4
     )
     val decoder = MediaCodec.createDecoderByType(decoderMime)
     decoder.configure(videoFmt, imageReader.surface, null, 0)
     decoder.start()
 
-    // ── Muxer ─────────────────────────────────────────────────────────────────
+    // ── Muxer ─────────────────────────────────────────────────────────────
     val muxer    = MediaMuxer(dstPath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
     var muxAudio = -1
     val audioExt: MediaExtractor?
@@ -210,7 +271,7 @@ class VideoOverlayModule : Module() {
       audioExt = null
     }
 
-    // ── Main loop ─────────────────────────────────────────────────────────────
+    // ── Main encode loop ───────────────────────────────────────────────────
     val bufInfo       = MediaCodec.BufferInfo()
     var decInputDone  = false
     var decOutputDone = false
@@ -224,7 +285,7 @@ class VideoOverlayModule : Module() {
 
     while (!encDone) {
 
-      // 1. Feed decoder (entire video)
+      // 1. Feed decoder
       if (!decInputDone) {
         val inIdx = decoder.dequeueInputBuffer(0)
         if (inIdx >= 0) {
@@ -240,7 +301,7 @@ class VideoOverlayModule : Module() {
         }
       }
 
-      // 2. Drain decoder → draw overlays → feed encoder
+      // 2. Drain decoder → crop → draw overlays → feed encoder
       if (!decOutputDone) {
         val outIdx = decoder.dequeueOutputBuffer(bufInfo, 0)
         if (outIdx >= 0) {
@@ -249,18 +310,26 @@ class VideoOverlayModule : Module() {
           if (render) {
             val img = imageReader.acquireLatestImage()
             if (img != null) {
-              val bmp = yuvToBitmap(img, finalW, finalH, rotation)
+              // Decode full frame (handles rotation)
+              val fullBmp = yuvToBitmap(img, dispWE, dispHE, rotation)
               img.close()
-              drawOverlays(bmp)
 
+              // Center-crop to square
+              val croppedBmp = Bitmap.createBitmap(fullBmp, cropX, cropY, squareSize, squareSize)
+              fullBmp.recycle()
+
+              // Draw overlays (dark tone + text + brackets)
+              drawOverlays(croppedBmp)
+
+              // Feed to encoder
               val encInIdx = encoder.dequeueInputBuffer(TIMEOUT)
               if (encInIdx >= 0) {
                 val encBuf = encoder.getInputBuffer(encInIdx)!!
-                bitmapToYuv420(bmp, encBuf, finalW, finalH)
-                encoder.queueInputBuffer(encInIdx, 0, finalW * finalH * 3 / 2, outputPts, 0)
+                bitmapToYuv420(croppedBmp, encBuf, squareSize, squareSize)
+                encoder.queueInputBuffer(encInIdx, 0, squareSize * squareSize * 3 / 2, outputPts, 0)
                 outputPts += FRAME_US
               }
-              bmp.recycle()
+              croppedBmp.recycle()
             }
           }
           if (bufInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) {
@@ -269,7 +338,7 @@ class VideoOverlayModule : Module() {
         }
       }
 
-      // 3. Signal EOS to encoder once decoder is done
+      // 3. Signal EOS to encoder
       if (decOutputDone && !eosToEncoder) {
         val encInIdx = encoder.dequeueInputBuffer(TIMEOUT)
         if (encInIdx >= 0) {
@@ -307,7 +376,7 @@ class VideoOverlayModule : Module() {
       }
     }
 
-    // ── Cleanup ───────────────────────────────────────────────────────────────
+    // ── Cleanup ───────────────────────────────────────────────────────────
     decoder.stop();  decoder.release()
     encoder.stop();  encoder.release()
     imageReader.close()
@@ -321,22 +390,16 @@ class VideoOverlayModule : Module() {
   // Legacy burnTextOverlay pipeline (unchanged)
   // ---------------------------------------------------------------------------
   private fun transcodeVideo(srcPath: String, dstPath: String, overlays: List<OverlaySpec>) {
-    // 1. Extract video metadata
     val retriever = MediaMetadataRetriever().also { it.setDataSource(srcPath) }
     val srcW    = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toInt()  ?: 720
     val srcH    = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toInt() ?: 1280
     val rotation= retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toInt() ?: 0
-    val durationMs = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLong() ?: 3000L
     retriever.release()
 
-    // Swap dimensions if rotated 90/270
     val (encW, encH) = if (rotation == 90 || rotation == 270) srcH to srcW else srcW to srcH
-
-    // Make dimensions even (H.264 requirement)
     val finalW = if (encW % 2 == 0) encW else encW - 1
     val finalH = if (encH % 2 == 0) encH else encH - 1
 
-    // 2. Build paints
     val paints = overlays.map { spec ->
       Paint(Paint.ANTI_ALIAS_FLAG).apply {
         textSize  = spec.fontSize
@@ -346,7 +409,6 @@ class VideoOverlayModule : Module() {
       }
     }
 
-    // 3. Setup encoder (H.264, COLOR_FormatYUV420Flexible)
     val MIME    = "video/avc"
     val FPS     = 30
     val encFmt  = MediaFormat.createVideoFormat(MIME, finalW, finalH).apply {
@@ -359,7 +421,6 @@ class VideoOverlayModule : Module() {
     encoder.configure(encFmt, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
     encoder.start()
 
-    // 4. Setup decoder
     val extractor = MediaExtractor().also { it.setDataSource(srcPath) }
     var videoTrack = -1; var audioTrack = -1
     for (i in 0 until extractor.trackCount) {
@@ -377,9 +438,7 @@ class VideoOverlayModule : Module() {
     decoder.configure(videoFmt, imageReader.surface, null, 0)
     decoder.start()
 
-    // 5. Setup muxer
     val muxer = MediaMuxer(dstPath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
-
     var muxAudio = -1
     val audioExt: MediaExtractor?
     if (audioTrack >= 0) {
@@ -392,7 +451,6 @@ class VideoOverlayModule : Module() {
       audioExt = null
     }
 
-    // 6. Decode + encode loop
     val TIMEOUT = 10_000L
     val info     = MediaCodec.BufferInfo()
     var decDone  = false
@@ -403,7 +461,6 @@ class VideoOverlayModule : Module() {
     val audioInfo= MediaCodec.BufferInfo()
 
     while (!encDone) {
-      // --- Feed decoder ---
       if (!decDone) {
         val idx = decoder.dequeueInputBuffer(TIMEOUT)
         if (idx >= 0) {
@@ -419,30 +476,19 @@ class VideoOverlayModule : Module() {
         }
       }
 
-      // --- Drain decoder → ImageReader ---
       val decOut = decoder.dequeueOutputBuffer(info, TIMEOUT)
       if (decOut >= 0) {
         val hasFrame = info.size > 0
-        decoder.releaseOutputBuffer(decOut, hasFrame /* render to surface */)
-
+        decoder.releaseOutputBuffer(decOut, hasFrame)
         if (hasFrame) {
           val image = imageReader.acquireLatestImage()
           if (image != null) {
             val bmp = yuvToBitmap(image, finalW, finalH, rotation)
             image.close()
-
-            // Draw text overlays onto the bitmap
             val canvas = Canvas(bmp)
             for ((i, spec) in overlays.withIndex()) {
-              canvas.drawText(
-                spec.text,
-                spec.x * finalW,
-                spec.y * finalH,
-                paints[i]
-              )
+              canvas.drawText(spec.text, spec.x * finalW, spec.y * finalH, paints[i])
             }
-
-            // Feed bitmap into encoder as YUV
             val encInIdx = encoder.dequeueInputBuffer(TIMEOUT)
             if (encInIdx >= 0) {
               val encBuf = encoder.getInputBuffer(encInIdx)!!
@@ -452,7 +498,6 @@ class VideoOverlayModule : Module() {
             bmp.recycle()
           }
         }
-
         if (info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) {
           val eoIdx = encoder.dequeueInputBuffer(TIMEOUT)
           if (eoIdx >= 0) {
@@ -461,14 +506,12 @@ class VideoOverlayModule : Module() {
         }
       }
 
-      // --- Drain encoder → muxer ---
       val encOut = encoder.dequeueOutputBuffer(info, TIMEOUT)
       when {
         encOut == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
           muxVideo = muxer.addTrack(encoder.outputFormat)
           muxer.start()
           muxed = true
-          // Write audio passthrough
           if (audioExt != null && muxAudio >= 0) {
             while (true) {
               val sz = audioExt.readSampleData(audioBuf, 0)
@@ -543,13 +586,11 @@ class VideoOverlayModule : Module() {
     buf.clear()
     val argb = IntArray(w * h)
     bmp.getPixels(argb, 0, w, 0, 0, w, h)
-    // Y plane
     for (row in 0 until h) for (col in 0 until w) {
       val px = argb[row * w + col]
       val r  = (px shr 16) and 0xFF; val g = (px shr 8) and 0xFF; val b = px and 0xFF
       buf.put(clamp(((66 * r + 129 * g + 25 * b + 128) shr 8) + 16).toByte())
     }
-    // U/V planes (4:2:0)
     for (row in 0 until h / 2) for (col in 0 until w / 2) {
       val px = argb[(row * 2) * w + (col * 2)]
       val r  = (px shr 16) and 0xFF; val g = (px shr 8) and 0xFF; val b = px and 0xFF

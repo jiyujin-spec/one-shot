@@ -12,10 +12,9 @@ export interface OverlayItem {
 export interface ProcessVideoOptions {
   inputPath: string;       // file:// URI of the source video
   outputPath?: string;     // optional output file:// URI
-  userId: string;          // e.g. "OS-2026-001"
-  habitName: string;       // e.g. "WORKOUT"
-  currentDay: number;      // e.g. 47
-  totalDays?: number;      // e.g. 90 (omit when no challenge is set)
+  habitName: string;       // e.g. "WORKOUT" → displayed as "HABIT:WORKOUT"
+  currentDay: number;      // e.g. 8 → displayed as "DAY8"
+  captureTime?: string;    // "YYYY.MM/DD HH:MM" formatted timestamp; defaults to current time if omitted
 }
 
 function getModule() {
@@ -30,10 +29,13 @@ function getModule() {
 }
 
 /**
- * Burns Industrial Data overlays into a video file.
- * - First 3 s: normal video with overlay
- * - Last 2 s:  frozen final frame with overlay
- * @returns file:// URI of the processed video
+ * Burns One Shot filter overlays into a video file.
+ * Output is cropped to 1:1 square with dark/cold tone and the standard overlay design:
+ *   - Top-left:    corner bracket + red dot + "ne shot"
+ *   - Top-right:   "DAY{currentDay}"
+ *   - Bottom-left: timestamp (line 1) + "HABIT:{habitName}" (line 2)
+ *   - Bottom-right: corner bracket
+ * @returns file:// URI of the processed square video
  */
 export async function processVideo(options: ProcessVideoOptions): Promise<string> {
   return getModule().processVideo(options);

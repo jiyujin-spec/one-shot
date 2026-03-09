@@ -115,20 +115,28 @@ public class VideoOverlayModule: Module {
       }
     }
 
-    // ── New Industrial Data overlay API ───────────────────────────────────────
+    // ── One Shot filter overlay API ───────────────────────────────────────────
     AsyncFunction("processVideo") { (options: [String: Any], promise: Promise) in
       guard
         let inputPath = options["inputPath"] as? String,
-        let userId    = options["userId"]    as? String,
         let habitName = options["habitName"] as? String,
         let currentDay = options["currentDay"] as? Int
       else {
-        promise.reject("ERR_INVALID_PARAMS", "Missing required parameters: inputPath, userId, habitName, currentDay")
+        promise.reject("ERR_INVALID_PARAMS", "Missing required parameters: inputPath, habitName, currentDay")
         return
       }
 
-      let totalDays  = options["totalDays"]  as? Int
       let outputPath = options["outputPath"] as? String
+
+      // Timestamp: use provided captureTime string or format current time
+      let timestampStr: String
+      if let ct = options["captureTime"] as? String, !ct.isEmpty {
+        timestampStr = ct
+      } else {
+        let df = DateFormatter()
+        df.dateFormat = "yyyy.MM/dd HH:mm"
+        timestampStr = df.string(from: Date())
+      }
 
       guard let inputURL = URL(string: inputPath) else {
         promise.reject("ERR_INVALID_URI", "Invalid inputPath URI: \(inputPath)")
@@ -141,6 +149,25 @@ public class VideoOverlayModule: Module {
         promise.reject("ERR_NO_VIDEO_TRACK", "No video track found in asset")
         return
       }
+
+      // ── Orientation & render size ─────────────────────────────────────────
+
+      let naturalSize = videoTrack.naturalSize
+      let transform   = videoTrack.preferredTransform
+      let rotated     = naturalSize.applying(transform)
+      let videoW      = abs(rotated.width)
+      let videoH      = abs(rotated.height)
+
+      // Square crop: take the shorter side
+      let squareSize  = min(videoW, videoH)
+      let renderSize  = CGSize(width: squareSize, height: squareSize)
+
+      // Center-crop transform: apply rotation then translate to center
+      let xOffset = (squareSize - videoW) / 2.0
+      let yOffset = (squareSize - videoH) / 2.0
+      let cropTransform = transform.concatenating(
+        CGAffineTransform(translationX: xOffset, y: yOffset)
+      )
 
       // ── Composition ───────────────────────────────────────────────────────
 
@@ -156,7 +183,6 @@ public class VideoOverlayModule: Module {
 
       let totalDuration = asset.duration
 
-      // Insert the entire video (no freeze-frame logic)
       do {
         try compVideoTrack.insertTimeRange(
           CMTimeRange(start: .zero, duration: totalDuration),
@@ -167,7 +193,6 @@ public class VideoOverlayModule: Module {
         return
       }
 
-      // Audio: insert the full duration
       if let audioTrack = asset.tracks(withMediaType: .audio).first,
          let compAudioTrack = composition.addMutableTrack(
            withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid
@@ -177,15 +202,6 @@ public class VideoOverlayModule: Module {
           of: audioTrack, at: .zero
         )
       }
-
-      let compositionDuration = composition.duration
-
-      // ── Render size & orientation ─────────────────────────────────────────
-
-      let naturalSize  = videoTrack.naturalSize
-      let transform    = videoTrack.preferredTransform
-      let rotated      = naturalSize.applying(transform)
-      let renderSize   = CGSize(width: abs(rotated.width), height: abs(rotated.height))
 
       // ── Layer tree ───────────────────────────────────────────────────────
 
@@ -197,181 +213,151 @@ public class VideoOverlayModule: Module {
       videoLayer.frame = CGRect(origin: .zero, size: renderSize)
       parentLayer.addSublayer(videoLayer)
 
-      // Font
-      let fontSize  = renderSize.height * 0.0125
-      let fontName  = UIFont(name: "SpaceMono-Regular", size: fontSize) != nil
-                      ? "SpaceMono-Regular" : "Menlo-Regular"
-      let uiFont    = UIFont(name: fontName, size: fontSize) ?? UIFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
-      let textColor = UIColor(red: 200/255, green: 200/255, blue: 200/255, alpha: 1.0).cgColor
+      // ── Dark / cold tone overlay ──────────────────────────────────────────
 
-      // Safe-zone positions (y with flipped coords: 0 = top)
-      let yTop    = renderSize.height * 0.12
-      let yBottom = renderSize.height * (1.0 - 0.25) - fontSize
-      let xLeft   = renderSize.width  * 0.05
-      let xRightEdge = renderSize.width * (1.0 - 0.15)   // right anchor before subtracting textWidth
+      let darkOverlay = CALayer()
+      darkOverlay.frame = CGRect(origin: .zero, size: renderSize)
+      darkOverlay.backgroundColor = UIColor(
+        red: 0, green: 0.04, blue: 0.12, alpha: 0.38
+      ).cgColor
+      parentLayer.addSublayer(darkOverlay)
 
-      // Overlay text strings
-      let now = Date()
-      let dateFormatter = DateFormatter()
-      dateFormatter.dateFormat = "yyyy.MM.dd_HH:mm"
-      let timestampStr = dateFormatter.string(from: now)
+      // ── Layout constants ──────────────────────────────────────────────────
 
-      let userIdStr = userId
+      let S        = squareSize
+      let pad      = S * 0.045            // edge padding
+      let fontSize = S * 0.038            // text size (bold, larger)
+      let lineGap  = fontSize * 1.35      // line height for 2-line BL block
 
-      let habitStr: String = {
-        if let total = totalDays {
-          if currentDay >= total {
-            return "\(habitName) COMPLETED"
-          } else {
-            return "\(habitName) DAY \(currentDay)/\(total)"
-          }
-        } else {
-          return "\(habitName) DAY \(currentDay)"
-        }
+      let fontName: String = {
+        // Prefer bold system font for clean look
+        let bold = UIFont.boldSystemFont(ofSize: fontSize)
+        return bold.fontName
       }()
-
-      let logoStr = "ONE SHOT"
-
-      // Measure text widths
+      let uiFont   = UIFont.boldSystemFont(ofSize: fontSize)
       let attrs: [NSAttributedString.Key: Any] = [.font: uiFont]
-      func textWidth(_ s: String) -> CGFloat { s.size(withAttributes: attrs).width }
+      func tw(_ s: String) -> CGFloat { s.size(withAttributes: attrs).width }
+      let layerH = fontSize + 6
 
-      let tsWidth     = textWidth(timestampStr)
-      let uidWidth    = textWidth(userIdStr)
-      let habitWidth  = textWidth(habitStr)
-      let logoWidth   = textWidth(logoStr)
-      let layerH      = fontSize + 8
+      let white    = UIColor.white.cgColor
+      let whiteDim = UIColor(white: 1.0, alpha: 0.85).cgColor
 
-      // Compute right-aligned x positions
-      let xTimestamp = xLeft
-      let xUserId    = xRightEdge - uidWidth
-      let xHabit     = xLeft
-      let xLogo      = xRightEdge - logoWidth
-
-      // ── Build 4 corner text + bracket layers ──────────────────────────────
-
-      struct CornerItem {
-        let text: String
-        let x: CGFloat
-        let y: CGFloat
-        let width: CGFloat
+      // Shadow helper
+      func addShadow(_ layer: CALayer) {
+        layer.shadowColor   = UIColor.black.withAlphaComponent(0.55).cgColor
+        layer.shadowOpacity = 1.0
+        layer.shadowRadius  = 3.0
+        layer.shadowOffset  = CGSize(width: 1, height: 1)
       }
 
-      let corners: [CornerItem] = [
-        CornerItem(text: timestampStr, x: xTimestamp, y: yTop,    width: tsWidth),
-        CornerItem(text: userIdStr,    x: xUserId,    y: yTop,    width: uidWidth),
-        CornerItem(text: habitStr,     x: xHabit,     y: yBottom, width: habitWidth),
-        CornerItem(text: logoStr,      x: xLogo,      y: yBottom, width: logoWidth),
-      ]
+      // ── Bracket arm length ────────────────────────────────────────────────
 
-      // Corner roles: TL, TR, BL, BR
-      enum CornerRole { case topLeft, topRight, bottomLeft, bottomRight }
-      let roles: [CornerRole] = [.topLeft, .topRight, .bottomLeft, .bottomRight]
+      let armLen   = S * 0.07
+      let armWidth = max(S * 0.003, 1.5)
 
-      let bracketArm   = renderSize.height * 0.010
-      let bracketWidth = max(renderSize.height * 0.0008, 1.0)
-      let bracketColor = UIColor(red: 200/255, green: 200/255, blue: 200/255, alpha: 0.6).cgColor
-      let bracketPad: CGFloat = fontSize * 0.3   // small gap between text and bracket
+      // ── Helper: make a text layer ─────────────────────────────────────────
 
-      for (idx, item) in corners.enumerated() {
-        // ── Text layer ────────────────────────────────────────────────────
-        let textLayer = CATextLayer()
-        textLayer.string = item.text
-        textLayer.fontSize = fontSize
-        textLayer.foregroundColor = textColor
-        textLayer.alignmentMode = .left
-        textLayer.contentsScale = 2.0   // @2x for sharp rendering
-        textLayer.isWrapped = false
-        textLayer.font = CTFontCreateWithName(fontName as CFString, fontSize, nil)
-
-        // Shadow
-        textLayer.shadowColor   = UIColor.black.withAlphaComponent(0.4).cgColor
-        textLayer.shadowOpacity = 1.0
-        textLayer.shadowRadius  = 4.0
-        textLayer.shadowOffset  = CGSize(width: 1, height: 1)
-
-        textLayer.frame = CGRect(x: item.x, y: item.y, width: item.width + 4, height: layerH)
-        parentLayer.addSublayer(textLayer)
-
-        // ── Bracket layer ─────────────────────────────────────────────────
-        let role = roles[idx]
-
-        // Text block bounding box (with padding)
-        let bx = item.x - bracketPad
-        let by = item.y - bracketPad
-        let bw = item.width + 4 + bracketPad * 2
-        let bh = layerH + bracketPad * 2
-
-        let path = CGMutablePath()
-
-        switch role {
-        case .topLeft:
-          // ┌  top-left corner: horizontal goes right, vertical goes down
-          path.move(to:    CGPoint(x: bx + bracketArm, y: by))
-          path.addLine(to: CGPoint(x: bx,              y: by))
-          path.addLine(to: CGPoint(x: bx,              y: by + bracketArm))
-
-        case .topRight:
-          // ┐  top-right corner: horizontal goes left, vertical goes down
-          let rx = bx + bw
-          path.move(to:    CGPoint(x: rx - bracketArm, y: by))
-          path.addLine(to: CGPoint(x: rx,              y: by))
-          path.addLine(to: CGPoint(x: rx,              y: by + bracketArm))
-
-        case .bottomLeft:
-          // └  bottom-left corner: horizontal goes right, vertical goes up
-          let ry = by + bh
-          path.move(to:    CGPoint(x: bx + bracketArm, y: ry))
-          path.addLine(to: CGPoint(x: bx,              y: ry))
-          path.addLine(to: CGPoint(x: bx,              y: ry - bracketArm))
-
-        case .bottomRight:
-          // ┘  bottom-right corner: horizontal goes left, vertical goes up
-          let rx = bx + bw
-          let ry = by + bh
-          path.move(to:    CGPoint(x: rx - bracketArm, y: ry))
-          path.addLine(to: CGPoint(x: rx,              y: ry))
-          path.addLine(to: CGPoint(x: rx,              y: ry - bracketArm))
-        }
-
-        let shapeLayer = CAShapeLayer()
-        shapeLayer.path        = path
-        shapeLayer.strokeColor = bracketColor
-        shapeLayer.fillColor   = UIColor.clear.cgColor
-        shapeLayer.lineWidth   = bracketWidth
-        shapeLayer.lineCap     = .square
-        parentLayer.addSublayer(shapeLayer)
+      func makeTextLayer(_ text: String, x: CGFloat, y: CGFloat, color: CGColor = UIColor.white.cgColor) -> CATextLayer {
+        let layer = CATextLayer()
+        layer.string    = text
+        layer.fontSize  = fontSize
+        layer.foregroundColor = color
+        layer.alignmentMode   = .left
+        layer.contentsScale   = 2.0
+        layer.isWrapped = false
+        layer.font = CTFontCreateWithName(fontName as CFString, fontSize, nil)
+        addShadow(layer)
+        layer.frame = CGRect(x: x, y: y, width: tw(text) + 8, height: layerH)
+        return layer
       }
+
+      // ── TL corner bracket ─────────────────────────────────────────────────
+      // ┌  (top edge + left edge)
+
+      let tlPath = CGMutablePath()
+      tlPath.move(to:    CGPoint(x: pad + armLen, y: pad))
+      tlPath.addLine(to: CGPoint(x: pad,          y: pad))
+      tlPath.addLine(to: CGPoint(x: pad,          y: pad + armLen))
+
+      let tlBracket = CAShapeLayer()
+      tlBracket.path        = tlPath
+      tlBracket.strokeColor = white
+      tlBracket.fillColor   = UIColor.clear.cgColor
+      tlBracket.lineWidth   = armWidth
+      tlBracket.lineCap     = .square
+      addShadow(tlBracket)
+      parentLayer.addSublayer(tlBracket)
+
+      // ── Red dot (●) – acts as the "O" in "One shot" ───────────────────────
+
+      let dotSize   = fontSize * 0.95
+      let dotX      = pad + armLen * 0.25
+      let dotY      = pad + armLen * 0.25
+      let dotLayer  = CALayer()
+      dotLayer.frame           = CGRect(x: dotX, y: dotY, width: dotSize, height: dotSize)
+      dotLayer.backgroundColor = UIColor(red: 1.0, green: 0.05, blue: 0.05, alpha: 1.0).cgColor
+      dotLayer.cornerRadius    = dotSize / 2
+      addShadow(dotLayer)
+      parentLayer.addSublayer(dotLayer)
+
+      // "ne shot" text immediately to the right of the dot
+      let neShotX = dotX + dotSize + fontSize * 0.22
+      let neShotY = dotY - (layerH - dotSize) / 2   // vertically align with dot center
+      let neShotLayer = makeTextLayer("ne shot", x: neShotX, y: neShotY)
+      parentLayer.addSublayer(neShotLayer)
+
+      // ── TR: "DAY{n}" ──────────────────────────────────────────────────────
+
+      let dayStr   = "DAY\(currentDay)"
+      let dayW     = tw(dayStr)
+      let dayX     = S - pad - dayW - 4
+      let dayY     = pad + armLen * 0.25
+      let dayLayer = makeTextLayer(dayStr, x: dayX, y: dayY)
+      parentLayer.addSublayer(dayLayer)
+
+      // ── BL: timestamp (line 1) + "HABIT:{name}" (line 2) ─────────────────
+
+      let habitStr = "HABIT:\(habitName.uppercased())"
+      let tsY      = S - pad - lineGap - layerH
+      let habitY   = S - pad - layerH
+
+      let tsLayer    = makeTextLayer(timestampStr, x: pad, y: tsY)
+      let habitLayer = makeTextLayer(habitStr,     x: pad, y: habitY)
+      parentLayer.addSublayer(tsLayer)
+      parentLayer.addSublayer(habitLayer)
+
+      // ── BR corner bracket ─────────────────────────────────────────────────
+      // ┘  (bottom edge + right edge)
+
+      let brPath = CGMutablePath()
+      brPath.move(to:    CGPoint(x: S - pad - armLen, y: S - pad))
+      brPath.addLine(to: CGPoint(x: S - pad,          y: S - pad))
+      brPath.addLine(to: CGPoint(x: S - pad,          y: S - pad - armLen))
+
+      let brBracket = CAShapeLayer()
+      brBracket.path        = brPath
+      brBracket.strokeColor = white
+      brBracket.fillColor   = UIColor.clear.cgColor
+      brBracket.lineWidth   = armWidth
+      brBracket.lineCap     = .square
+      addShadow(brBracket)
+      parentLayer.addSublayer(brBracket)
 
       // ── Video composition ────────────────────────────────────────────────
 
       let videoComposition = AVMutableVideoComposition()
-      videoComposition.renderSize   = renderSize
+      videoComposition.renderSize    = renderSize
       videoComposition.frameDuration = CMTime(value: 1, timescale: 30)
       videoComposition.animationTool = AVVideoCompositionCoreAnimationTool(
         postProcessingAsVideoLayer: videoLayer,
         in: parentLayer
       )
 
-      // Preserve source color profile
-      if let formatDesc = videoTrack.formatDescriptions.first {
-        let fd = formatDesc as! CMFormatDescription
-        if let cp = CMFormatDescriptionGetExtension(fd, extensionKey: kCMFormatDescriptionExtension_ColorPrimaries) as? String {
-          videoComposition.colorPrimaries = cp
-        }
-        if let matrix = CMFormatDescriptionGetExtension(fd, extensionKey: kCMFormatDescriptionExtension_YCbCrMatrix) as? String {
-          videoComposition.colorYCbCrMatrix = matrix
-        }
-        if let tf = CMFormatDescriptionGetExtension(fd, extensionKey: kCMFormatDescriptionExtension_TransferFunction) as? String {
-          videoComposition.colorTransferFunction = tf
-        }
-      }
-
       let instruction = AVMutableVideoCompositionInstruction()
-      instruction.timeRange = CMTimeRange(start: .zero, duration: compositionDuration)
+      instruction.timeRange = CMTimeRange(start: .zero, duration: totalDuration)
 
       let layerInstruction = AVMutableVideoCompositionLayerInstruction(assetTrack: compVideoTrack)
-      layerInstruction.setTransform(transform, at: .zero)
+      layerInstruction.setTransform(cropTransform, at: .zero)
       instruction.layerInstructions = [layerInstruction]
       videoComposition.instructions = [instruction]
 
@@ -385,7 +371,6 @@ public class VideoOverlayModule: Module {
           .appendingPathComponent(UUID().uuidString + ".mp4")
       }
 
-      // Remove existing file at output path if present
       try? FileManager.default.removeItem(at: outputURL)
 
       guard let exportSession = AVAssetExportSession(
