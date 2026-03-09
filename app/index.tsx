@@ -428,11 +428,19 @@ export default function Page() {
   const recordingCountdownRef = useRef<any>(null);
   const [isPreviewPlaying, setIsPreviewPlaying] = useState(false);
   const [isProcessingVideo, setIsProcessingVideo] = useState(false);
+  const [isProcessingPhoto, setIsProcessingPhoto] = useState(false);
   const [videoReady, setVideoReady] = useState(false);
+  const [photoProcessorData, setPhotoProcessorData] = useState<{
+    uri: string;
+    habitName: string;
+    currentDay: number;
+    captureTime: Date;
+  } | null>(null);
   // null! = non-null assertion: RefObject<CameraView> として扱い TS の型エラーを解消
   const cameraRef = useRef<CameraView>(null!);
   const previewVideoRef = useRef<Video>(null);
-  const previewCardRef = useRef<any>(null);     // react-native-view-shot 用
+  const previewCardRef = useRef<any>(null);
+  const photoProcessorRef = useRef<any>(null);  // off-screen photo processor
 
   // History state
   const [records, setRecords] = useState<RecordEntry[]>([]);
@@ -677,6 +685,27 @@ export default function Page() {
     });
   }, [saveAppState, showToast, t]);
 
+  // ── Off-screen photo processor: view-shot after image loads ─────────────────
+
+  const processPhotoFromRef = useCallback(async (rawUri: string) => {
+    await new Promise<void>(r => setTimeout(r, 80)); // allow Image to paint
+    try {
+      const processed = await captureRef(photoProcessorRef, {
+        format: 'jpg',
+        quality: 0.95,
+        result: 'tmpfile',
+      });
+      setCapturedUri(processed);
+    } catch (e) {
+      console.warn('[photo processor] fallback to raw:', e);
+      setCapturedUri(rawUri);
+    } finally {
+      setCapturedType('photo');
+      setPhotoProcessorData(null);
+      setIsProcessingPhoto(false);
+    }
+  }, []);
+
   // ── Store review trigger ─────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -834,9 +863,16 @@ export default function Page() {
           skipProcessing: false,
         });
         if (photo?.uri) {
-          setCapturedUri(photo.uri);
-          setCapturedType('photo');
-          setCapturedTime(new Date());
+          const captureTime = new Date();
+          setCapturedTime(captureTime);
+          setIsProcessingPhoto(true);
+          // Queue for off-screen filter baking
+          setPhotoProcessorData({
+            uri: photo.uri,
+            habitName: (appState.goal || 'HABIT').toUpperCase(),
+            currentDay: appState.streak + 1,
+            captureTime,
+          });
         }
       } catch (e: any) {
         const msg = String(e?.message ?? e);
@@ -904,10 +940,9 @@ export default function Page() {
     try {
       const processed = await processVideo({
         inputPath: rawUri,
-        userId: appState.userId || 'OS-2026-001',
         habitName: (appState.goal || 'HABIT').toUpperCase(),
         currentDay: appState.streak + 1,
-        totalDays: appState.challengeDays,
+        captureTime: format(captureTime, "yyyy.MM/dd HH:mm"),
       });
       setCapturedUri(processed);  // transition to preview with processed video
     } catch (vErr) {
@@ -917,8 +952,8 @@ export default function Page() {
       setIsProcessingVideo(false);
     }
   }, [camPermission, requestCamPermission, isRecording, countdown, camMode,
-      appState.showRecordingCountdown, appState.userId, appState.goal,
-      appState.streak, appState.challengeDays, clearCamTimers, showToast, t]);
+      appState.showRecordingCountdown, appState.goal,
+      appState.streak, clearCamTimers, showToast, t]);
 
   const retake = useCallback(() => {
     clearCamTimers();
@@ -927,35 +962,17 @@ export default function Page() {
     setCapturedTime(null);
     setIsPreviewPlaying(false);
     setVideoReady(false);
+    setPhotoProcessorData(null);
+    setIsProcessingPhoto(false);
   }, [clearCamTimers]);
 
   const saveCapture = useCallback(async () => {
     if (!capturedUri) return;
     try {
       if (!mediaPermission?.granted) await requestMediaPermission();
-
-      let uriToSave = capturedUri;
-
-      // 動画の場合: オーバーレイは撮影直後にSwift側で焼き込み済み → そのまま保存
-      // (capturedUri は processVideo() 済みのファイルを指している)
-
-      // 写真の場合: react-native-view-shot でフィルター込みの見た目通りに保存
-      if (capturedType === 'photo' && previewCardRef.current) {
-        try {
-          uriToSave = await captureRef(previewCardRef.current, {
-            format: 'jpg',
-            quality: 0.95,
-            result: 'tmpfile',
-          });
-          console.log('[view-shot] captured with filter:', uriToSave);
-        } catch (vsErr) {
-          console.warn('[view-shot] fallback to raw photo:', vsErr);
-          uriToSave = capturedUri;
-        }
-      }
-
-      await MediaLibrary.saveToLibraryAsync(uriToSave);
-      recordToday(capturedUri); // 元のURIを記録に残す
+      // capturedUri is always a fully baked (filter + square crop) file for both photo and video
+      await MediaLibrary.saveToLibraryAsync(capturedUri);
+      recordToday(capturedUri);
       setCapturedUri(null);
       setCapturedTime(null);
       setScreen('home');
@@ -963,7 +980,7 @@ export default function Page() {
       console.error('[saveCapture] error:', e);
       showToast(t('toast_save_error'), true);
     }
-  }, [capturedUri, capturedType, mediaPermission, requestMediaPermission, recordToday, showToast, t]);
+  }, [capturedUri, mediaPermission, requestMediaPermission, recordToday, showToast, t]);
 
   // ── 履歴レコード削除（当日分はストリーク・lastRecordDateもリセット）──
   const deleteRecord = useCallback((record: RecordEntry) => {
@@ -1335,12 +1352,8 @@ export default function Page() {
       );
     }
 
-    // ── プレビュー画面（動画・写真共通 — image_4 デザイン）──
+    // ── プレビュー画面（動画・写真共通）──
     if (capturedUri) {
-      const dayNum = appState.streak + 1;
-      const ts = capturedTime ?? new Date();
-      const dateStr = format(ts, 'yyyy.MM.dd');
-      const timeStr = format(ts, 'HH:mm');
       const isPhoto = capturedType === 'photo';
 
       return (
@@ -1393,32 +1406,7 @@ export default function Page() {
               </>
             )}
 
-            {/* 角ブラケット装飾（viewfinder 風）*/}
-            <View style={[styles.bracket, styles.bracketTL]} />
-            <View style={[styles.bracket, styles.bracketTR]} />
-            <View style={[styles.bracket, styles.bracketBL]} />
-            <View style={[styles.bracket, styles.bracketBR]} />
-
-            {/* 写真のみ JS 側オーバーレイ（Industrial Data 4角・動画はSwift焼き込み済み）*/}
-            {isPhoto && (() => {
-              const goal = (appState.goal || 'HABIT').toUpperCase();
-              const total = appState.challengeDays;
-              const habitLine = total
-                ? (dayNum >= total ? `${goal} COMPLETED` : `${goal} DAY ${dayNum}/${total}`)
-                : `${goal} DAY ${dayNum}`;
-              return (
-                <>
-                  {/* 左上: タイムスタンプ */}
-                  <Text style={styles.idTopLeft}>{format(ts, 'yyyy.MM.dd_HH:mm')}</Text>
-                  {/* 右上: ユーザーID */}
-                  <Text style={styles.idTopRight}>{appState.userId || 'OS-2026-001'}</Text>
-                  {/* 左下: ハビット / DAY X/Y */}
-                  <Text style={styles.idBottomLeft}>{habitLine}</Text>
-                  {/* 右下: ONE SHOT */}
-                  <Text style={styles.idBottomRight}>ONE SHOT</Text>
-                </>
-              );
-            })()}
+              {/* フィルターとコーナーブラケットはファイルに焼き込み済み（写真・動画ともに）*/}
 
           </View>
 
@@ -1478,8 +1466,8 @@ export default function Page() {
           </View>
         )}
 
-        {/* 動画処理中オーバーレイ（録画後 Swift 処理が完了するまで表示）*/}
-        {isProcessingVideo && (
+        {/* 処理中オーバーレイ（録画後またはフィルター焼き込み中に表示）*/}
+        {(isProcessingVideo || isProcessingPhoto) && (
           <View style={styles.cameraProcessingOverlay}>
             <ActivityIndicator size="large" color="#C8C8C8" />
             <Text style={styles.cameraProcessingText}>
@@ -1661,26 +1649,7 @@ export default function Page() {
                   </View>
                 )}
 
-                {/* フィルターオーバーレイ（撮影プレビューと同じ見た目）*/}
-                {!selectedRecord.isPass && selectedRecord.uri && (
-                  <View style={styles.recordModalFilterOverlay} pointerEvents="none">
-                    {/* 左上: DAY X + 日付 */}
-                    <View style={styles.recordModalFilterTop}>
-                      <Text style={styles.recordModalFilterDay}>DAY {selectedRecord.day}</Text>
-                      <Text style={styles.recordModalFilterDate}>{selectedRecord.date}</Text>
-                    </View>
-                    {/* 中央下部: #ゴール名 */}
-                    <View style={styles.recordModalFilterBottom}>
-                      <Text style={styles.recordModalFilterGoal}>#{appState.goal}</Text>
-                    </View>
-                  </View>
-                )}
-
-                {/* DAY + 日付オーバーレイ（アクションボタン上のラベル）*/}
-                <View style={styles.recordModalInfo}>
-                  <Text style={styles.recordModalDay}>DAY {selectedRecord.day}</Text>
-                  <Text style={styles.recordModalDate}>{selectedRecord.date}</Text>
-                </View>
+                {/* フィルターはファイルに焼き込み済みのため追加オーバーレイ不要 */}
 
                 {/* ── アクションボタン（削除 | 再保存 | シェア）── */}
                 <View style={styles.recordModalActions}>
@@ -1932,6 +1901,99 @@ export default function Page() {
 
       <GuideModal />
       {toastMsg ? <Toast message={toastMsg} isError={toastError} /> : null}
+
+      {/* ── Off-screen photo filter processor ──────────────────────────────── */}
+      {/* Renders the raw photo + all overlays off-screen; view-shot captures it
+          to produce a fully baked processedUri before showing preview.          */}
+      {photoProcessorData && (() => {
+        const { uri, habitName, currentDay, captureTime } = photoProcessorData;
+        const sq = Dimensions.get('window').width;
+        const pad = sq * 0.045;
+        const textSize = sq * 0.038;
+        const armLen = sq * 0.07;
+        const bracketW = Math.max(sq * 0.003, 1.5);
+        const dotSize = textSize * 0.95;
+        const dotX = pad + armLen * 0.25;
+        const dotY = pad + armLen * 0.25;
+        const textTop = dotY + dotSize / 2 - textSize / 2;
+        const neShotX = dotX + dotSize + textSize * 0.22;
+        const lineGap = textSize * 1.35;
+        const tsStr = format(captureTime, "yyyy.MM/dd HH:mm");
+        const habitStr = `HABIT:${habitName}`;
+        const dayStr = `DAY${currentDay}`;
+
+        const textShadow = {
+          textShadowColor: 'rgba(0,0,0,0.6)' as any,
+          textShadowOffset: { width: 1, height: 1 },
+          textShadowRadius: 3,
+        };
+        const baseText = {
+          color: '#fff' as const,
+          fontWeight: '700' as const,
+          fontSize: textSize,
+          position: 'absolute' as const,
+          ...textShadow,
+        };
+
+        return (
+          <View
+            ref={photoProcessorRef}
+            style={{
+              position: 'absolute',
+              left: -(sq * 3),
+              top: 0,
+              width: sq,
+              height: sq,
+              overflow: 'hidden',
+              backgroundColor: '#000',
+            }}
+          >
+            {/* Raw photo cropped to square */}
+            <Image
+              source={{ uri }}
+              style={{ width: sq, height: sq }}
+              resizeMode="cover"
+              onLoadEnd={() => processPhotoFromRef(uri)}
+            />
+            {/* Dark / cold tone overlay */}
+            <View style={{
+              position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+              backgroundColor: 'rgba(0,10,31,0.38)',
+            }} />
+            {/* TL corner bracket ┌ */}
+            <View style={{
+              position: 'absolute', top: pad, left: pad,
+              width: armLen, height: armLen,
+              borderTopWidth: bracketW, borderLeftWidth: bracketW,
+              borderColor: '#fff',
+            }} />
+            {/* Red dot ● */}
+            <View style={{
+              position: 'absolute',
+              top: dotY, left: dotX,
+              width: dotSize, height: dotSize,
+              borderRadius: dotSize / 2,
+              backgroundColor: '#FF0D0D',
+            }} />
+            {/* "ne shot" */}
+            <Text style={{ ...baseText, top: textTop, left: neShotX }}>ne shot</Text>
+            {/* DAYn (right side, same row) */}
+            <Text style={{ ...baseText, top: textTop, right: pad }}>{dayStr}</Text>
+            {/* Timestamp line */}
+            <Text style={{ ...baseText, bottom: pad + lineGap, left: pad }}>{tsStr}</Text>
+            {/* HABIT line */}
+            <Text style={{ ...baseText, bottom: pad, left: pad }}>{habitStr}</Text>
+            {/* BR corner bracket ┘ */}
+            <View style={{
+              position: 'absolute', bottom: pad, right: pad,
+              width: armLen, height: armLen,
+              borderBottomWidth: bracketW, borderRightWidth: bracketW,
+              borderColor: '#fff',
+            }} />
+          </View>
+        );
+      })()}
+
     </SafeAreaView>
   );
 }
