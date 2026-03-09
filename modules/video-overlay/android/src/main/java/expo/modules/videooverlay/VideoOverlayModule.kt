@@ -65,6 +65,7 @@ class VideoOverlayModule : Module() {
 
       val outputPath   = options["outputPath"] as? String
       val captureTime  = options["captureTime"] as? String
+      val dayLabel     = (options["dayLabel"] as? String)?.takeIf { it.isNotEmpty() }
 
       // Use provided captureTime or format current time
       val timestampStr = if (!captureTime.isNullOrEmpty()) {
@@ -84,7 +85,7 @@ class VideoOverlayModule : Module() {
             File(context.cacheDir, "${System.currentTimeMillis()}.mp4")
           }
 
-          processOneShotVideo(srcPath, outFile.absolutePath, timestampStr, habitName, currentDay)
+          processOneShotVideo(srcPath, outFile.absolutePath, timestampStr, habitName, currentDay, dayLabel)
           promise.resolve("file://${outFile.absolutePath}")
         } catch (e: Exception) {
           promise.reject("ERR_PROCESS", e.message ?: "Unknown error", e)
@@ -114,7 +115,8 @@ class VideoOverlayModule : Module() {
   // ---------------------------------------------------------------------------
   private fun processOneShotVideo(
     srcPath: String, dstPath: String,
-    timestampStr: String, habitName: String, currentDay: Int
+    timestampStr: String, habitName: String, currentDay: Int,
+    dayLabel: String? = null
   ) {
     val FPS      = 30
     val FRAME_US = 1_000_000L / FPS
@@ -170,7 +172,7 @@ class VideoOverlayModule : Module() {
     val dotSize  = fontSize * 0.95f
     val armLen   = S * 0.07f
 
-    val dayStr   = "DAY$currentDay"
+    val dayStr   = dayLabel ?: "DAY$currentDay"
     val habitStr = "HABIT:$habitName"
 
     fun drawOverlays(bmp: Bitmap) {

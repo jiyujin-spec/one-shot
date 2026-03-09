@@ -67,8 +67,12 @@ interface AppState {
   showRecordingCountdown: boolean;
   rcUserID: string;
   reviewRequested: boolean;
-  userId: string;          // "OS-YYYY-NNN" generated once
-  challengeDays?: number;  // total days for challenge (undefined = no challenge)
+  userId: string;              // "OS-YYYY-NNN" generated once
+  challengeDays?: number;      // total days for challenge (undefined = no challenge)
+  phase: number;               // Current phase (1 = default)
+  milestone10Shown: boolean;   // Whether 10-day milestone popup was shown
+  phaseChangeFree: boolean;    // Whether next goal save skips the 10-day warning
+  phasePromotedAt: number;     // Streak value at last phase promotion (0 = never)
 }
 
 interface RecordEntry {
@@ -191,6 +195,17 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     toast_resave_done: 'カメラロールに再保存しました',
     toast_processing_video: '5秒動画を生成中...',
     toast_processing_error: '動画処理エラー（元の動画を使用）',
+    confirm_change_goal_streak: '継続が10日を超えています。目標を変更すると、これまでの記録がリセットされDAY 0からの再スタートとなります。本当によろしいですか？',
+    confirm_change_goal_cancel: '変更しない',
+    confirm_change_goal_reset: 'リセットして変更する',
+    milestone_10_title: 'おめでとう！',
+    milestone_10_body: '10日間継続しました！\nこれ以降、目標を変更すると記録がリセットされます。',
+    phase_next_btn: 'Next Phaseに進む',
+    phase_promoted_toast: 'Phase {n} に昇格！目標を自由に変更できます。',
+    phase_label: 'Phase {n}',
+    guide_rule_10day_title: '目標の固定ルール',
+    guide_rule_10day_body: '10日を過ぎると、その目標を変えることはできなくなります（変更にはリセットが必要になります）。',
+    ok: 'OK',
   },
   en: {
     meta_description: 'One video a day. Build the habit. Leave the record.',
@@ -301,6 +316,17 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     toast_resave_done: 'Re-saved to camera roll',
     toast_processing_video: 'Rendering overlay...',
     toast_processing_error: 'Overlay error (using original)',
+    confirm_change_goal_streak: 'Your streak is over 10 days. Changing your goal will reset your progress to DAY 0. Are you sure you want to proceed?',
+    confirm_change_goal_cancel: 'Cancel',
+    confirm_change_goal_reset: 'Reset and Change',
+    milestone_10_title: 'Congratulations!',
+    milestone_10_body: 'You\'ve made it to 10 days!\nFrom now on, changing your goal will reset your progress record.',
+    phase_next_btn: 'Proceed to Next Phase',
+    phase_promoted_toast: 'Promoted to Phase {n}! You can now change your goal freely.',
+    phase_label: 'Phase {n}',
+    guide_rule_10day_title: 'Goal Lock Rule',
+    guide_rule_10day_body: 'After 10 days, you cannot change your goal without resetting your progress.',
+    ok: 'OK',
   },
 };
 
@@ -341,6 +367,10 @@ const defaultState: AppState = {
   reviewRequested: false,
   userId: '',
   challengeDays: undefined,
+  phase: 1,
+  milestone10Shown: false,
+  phaseChangeFree: false,
+  phasePromotedAt: 0,
 };
 
 // ─── Notifications ────────────────────────────────────────────────────────────
@@ -412,6 +442,7 @@ export default function Page() {
   const [toastError, setToastError] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [guideVisible, setGuideVisible] = useState(false);
+  const [milestone10Visible, setMilestone10Visible] = useState(false);
 
   // Camera state
   const [camPermission, requestCamPermission] = useCameraPermissions();
@@ -680,8 +711,17 @@ export default function Page() {
       // Trigger store review when streak first reaches 5
       const shouldReview = newStreak === 5 && !prev.reviewRequested;
       if (shouldReview) setReviewReady(true);
-      const next = { ...prev, streak: newStreak, lastRecordDate: today,
-        reviewRequested: shouldReview ? true : prev.reviewRequested };
+      // Trigger 10-day milestone popup (once only)
+      if (newStreak === 10 && !prev.milestone10Shown) {
+        setTimeout(() => setMilestone10Visible(true), 800);
+      }
+      const next = {
+        ...prev,
+        streak: newStreak,
+        lastRecordDate: today,
+        reviewRequested: shouldReview ? true : prev.reviewRequested,
+        milestone10Shown: newStreak >= 10 ? true : prev.milestone10Shown,
+      };
       saveAppState(next);
       showToast(t('toast_save_complete', { day: newStreak }));
       return next;
@@ -941,11 +981,14 @@ export default function Page() {
     setCapturedType('video');
     setIsProcessingVideo(true);
     try {
+      const currentPhase = appState.phase ?? 1;
+      const nextDay = appState.streak + 1;
       const processed = await processVideo({
         inputPath: rawUri,
         habitName: (appState.goal || 'HABIT').toUpperCase(),
-        currentDay: appState.streak + 1,
+        currentDay: nextDay,
         captureTime: format(captureTime, "yyyy.MM/dd HH:mm"),
+        dayLabel: currentPhase > 1 ? `P${currentPhase} DAY${nextDay}` : undefined,
       });
       setCapturedUri(processed);  // transition to preview with processed video
     } catch (vErr) {
@@ -1258,6 +1301,12 @@ export default function Page() {
 
       {/* ── ストリーク数字（Web版と同じ縦グラデーション: 白→グレー） ── */}
       <View style={styles.streakSection}>
+        {/* Phase ラベル（Phase 2 以上の場合のみ表示）*/}
+        {(appState.phase ?? 1) > 1 && (
+          <Text style={styles.phaseLabel}>
+            {t('phase_label', { n: appState.phase ?? 1 })}
+          </Text>
+        )}
         {/* MaskedView: テキスト形状をマスクとして LinearGradient を型抜き */}
         <MaskedView maskElement={<Text style={styles.streakNum}>{appState.streak}</Text>}>
           <LinearGradient
@@ -1270,7 +1319,11 @@ export default function Page() {
             <Text style={[styles.streakNum, { opacity: 0 }]}>{appState.streak}</Text>
           </LinearGradient>
         </MaskedView>
-        <Text style={styles.streakLabel}>{t('streak_label')}</Text>
+        <Text style={styles.streakLabel}>
+          {(appState.phase ?? 1) > 1
+            ? `${t('phase_label', { n: appState.phase ?? 1 })} ${t('streak_label')}`
+            : t('streak_label')}
+        </Text>
       </View>
 
       {/* ── ゴールカード + 2ステータスピル ── */}
@@ -1696,6 +1749,55 @@ export default function Page() {
   const SettingsScreen = () => {
     const [goalEdit, setGoalEdit] = useState(appState.goal);
     const [notifyEdit, setNotifyEdit] = useState(appState.notifyTime);
+
+    const handleSave = async () => {
+      const newGoal = goalEdit.trim();
+      const goalChanged = newGoal !== appState.goal;
+
+      const finalizeAndSave = async (extraUpdates: Partial<AppState> = {}) => {
+        const updates: Partial<AppState> = {
+          goal: newGoal,
+          phaseChangeFree: false,
+          ...extraUpdates,
+        };
+        const timeValid = /^\d{1,2}:\d{2}$/.test(notifyEdit.trim());
+        if (timeValid) {
+          updates.notifyTime = notifyEdit.trim();
+          try {
+            const { status } = await Notifications.getPermissionsAsync();
+            if (status === 'granted') {
+              const title = lang === 'ja' ? '今日の記録をしましょう！' : "Time to record today's habit!";
+              const body = lang === 'ja'
+                ? `目標: ${newGoal || 'One Shot'}`
+                : `Goal: ${newGoal || 'One Shot'}`;
+              await scheduleDailyNotification(notifyEdit.trim(), title, body);
+            }
+          } catch {}
+        }
+        updateState(updates);
+        showToast(t('toast_settings_saved'));
+        setScreen('home');
+      };
+
+      // 10-day rule: warn when changing goal with streak > 10, unless phase change is free
+      if (goalChanged && appState.streak > 10 && !appState.phaseChangeFree) {
+        Alert.alert('', t('confirm_change_goal_streak'), [
+          { text: t('confirm_change_goal_cancel'), style: 'cancel' },
+          {
+            text: t('confirm_change_goal_reset'),
+            style: 'destructive',
+            onPress: async () => {
+              setRecords([]);
+              await finalizeAndSave({ streak: 0, lastRecordDate: '', milestone10Shown: false });
+            },
+          },
+        ]);
+        return;
+      }
+
+      await finalizeAndSave();
+    };
+
     return (
       <ScrollView style={styles.screen} contentContainerStyle={styles.settingsContent}>
         <Text style={styles.settingsTitle}>{t('settings_title')}</Text>
@@ -1708,6 +1810,13 @@ export default function Page() {
             onChangeText={setGoalEdit}
             maxLength={40}
           />
+          {appState.streak > 10 && !appState.phaseChangeFree && (
+            <Text style={styles.settingHint}>
+              {lang === 'ja'
+                ? '⚠ 10日超: 目標変更にはリセットが必要です'
+                : '⚠ 10+ days: changing goal requires reset'}
+            </Text>
+          )}
         </View>
 
         {!appState.subscribed && (() => {
@@ -1768,31 +1877,27 @@ export default function Page() {
           </View>
         </View>
 
-        <TouchableOpacity
-          style={styles.btnPrimary}
-          onPress={async () => {
-            const updates: Partial<AppState> = { goal: goalEdit.trim() };
-            const timeValid = /^\d{1,2}:\d{2}$/.test(notifyEdit.trim());
-            if (timeValid) {
-              updates.notifyTime = notifyEdit.trim();
-              try {
-                const { status } = await Notifications.getPermissionsAsync();
-                if (status === 'granted') {
-                  const title = lang === 'ja' ? '今日の記録をしましょう！' : "Time to record today's habit!";
-                  const body = lang === 'ja'
-                    ? `目標: ${goalEdit.trim() || 'One Shot'}`
-                    : `Goal: ${goalEdit.trim() || 'One Shot'}`;
-                  await scheduleDailyNotification(notifyEdit.trim(), title, body);
-                }
-              } catch {}
-            }
-            updateState(updates);
-            showToast(t('toast_settings_saved'));
-            setScreen('home');
-          }}
-        >
+        <TouchableOpacity style={styles.btnPrimary} onPress={handleSave}>
           <Text style={styles.btnPrimaryText}>{t('settings_save_btn')}</Text>
         </TouchableOpacity>
+
+        {/* Phase 昇格ボタン: streak > 100 かつ前回昇格から 100 日以上経過した時のみ表示 */}
+        {appState.streak > (appState.phasePromotedAt ?? 0) + 100 && (
+          <TouchableOpacity
+            style={[styles.btnPrimary, { backgroundColor: '#4a0080' }]}
+            onPress={() => {
+              const newPhase = (appState.phase ?? 1) + 1;
+              updateState({
+                phase: newPhase,
+                phaseChangeFree: true,
+                phasePromotedAt: appState.streak,
+              });
+              showToast(t('phase_promoted_toast', { n: newPhase }));
+            }}
+          >
+            <Text style={styles.btnPrimaryText}>{t('phase_next_btn')}</Text>
+          </TouchableOpacity>
+        )}
 
         <TouchableOpacity style={styles.btnOutline} onPress={restorePurchase}>
           <Text style={styles.btnOutlineText}>{t('settings_restore_btn')}</Text>
@@ -1823,6 +1928,7 @@ export default function Page() {
             { title: t('guide_card3_title'), body: t('guide_card3_body') },
             { title: t('guide_card4_title'), body: t('guide_card4_body') },
             { title: t('guide_card5_title'), body: t('guide_card5_body') },
+            { title: t('guide_rule_10day_title'), body: t('guide_rule_10day_body') },
           ].map((card, i) => (
             <View key={i} style={styles.guideCard}>
               <Text style={styles.guideCardTitle}>{card.title}</Text>
@@ -1847,6 +1953,25 @@ export default function Page() {
             <Text style={styles.btnPrimaryText}>{t('guide_start_btn')}</Text>
           </TouchableOpacity>
         </ScrollView>
+      </View>
+    </Modal>
+  );
+
+  // ─── Milestone 10 Modal ───────────────────────────────────────────────────────
+
+  const Milestone10Modal = () => (
+    <Modal visible={milestone10Visible} animationType="fade" transparent>
+      <View style={styles.modalOverlay}>
+        <View style={styles.milestone10Card}>
+          <Text style={styles.milestone10Title}>{t('milestone_10_title')}</Text>
+          <Text style={styles.milestone10Body}>{t('milestone_10_body')}</Text>
+          <TouchableOpacity
+            style={[styles.btnPrimary, { marginBottom: 0 }]}
+            onPress={() => setMilestone10Visible(false)}
+          >
+            <Text style={styles.btnPrimaryText}>{t('ok')}</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     </Modal>
   );
@@ -1903,6 +2028,7 @@ export default function Page() {
       )}
 
       <GuideModal />
+      <Milestone10Modal />
       {toastMsg ? <Toast message={toastMsg} isError={toastError} /> : null}
 
       {/* ── Off-screen photo filter processor ──────────────────────────────── */}
@@ -1923,7 +2049,8 @@ export default function Page() {
         const lineGap = textSize * 1.35;
         const tsStr = format(captureTime, "yyyy.MM/dd HH:mm");
         const habitStr = `HABIT:${habitName}`;
-        const dayStr = `DAY${currentDay}`;
+        const currentPhaseForPhoto = appState.phase ?? 1;
+        const dayStr = currentPhaseForPhoto > 1 ? `P${currentPhaseForPhoto} DAY${currentDay}` : `DAY${currentDay}`;
 
         const textShadow = {
           textShadowColor: 'rgba(0,0,0,0.6)' as any,
@@ -2331,6 +2458,14 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 4,
     marginTop: 4,
+  },
+  phaseLabel: {
+    fontSize: 11,
+    color: '#9966cc',
+    fontWeight: '700',
+    letterSpacing: 3,
+    textTransform: 'uppercase',
+    marginBottom: 2,
   },
   goalCard: {
     backgroundColor: '#111',
@@ -3161,6 +3296,30 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.8)',
     justifyContent: 'flex-end',
+  },
+  milestone10Card: {
+    backgroundColor: '#0d0d0d',
+    borderWidth: 1,
+    borderColor: '#8B0000',
+    borderRadius: 20,
+    margin: 24,
+    padding: 28,
+    alignItems: 'center',
+  },
+  milestone10Title: {
+    fontSize: 24,
+    fontWeight: '900',
+    color: '#fff',
+    letterSpacing: 2,
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  milestone10Body: {
+    fontSize: 15,
+    color: '#ccc',
+    lineHeight: 22,
+    textAlign: 'center',
+    marginBottom: 24,
   },
   guideSheet: {
     backgroundColor: '#0a0a0a',

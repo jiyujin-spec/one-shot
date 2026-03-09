@@ -15,6 +15,7 @@ export interface ProcessVideoOptions {
   habitName: string;       // e.g. "WORKOUT" → displayed as "HABIT:WORKOUT"
   currentDay: number;      // e.g. 8 → displayed as "DAY8"
   captureTime?: string;    // "YYYY.MM/DD HH:MM" formatted timestamp; defaults to current time if omitted
+  dayLabel?: string;       // optional override for the day text (e.g. "Phase 2 DAY 101"); if omitted, uses "DAY{currentDay}"
 }
 
 function getModule() {
