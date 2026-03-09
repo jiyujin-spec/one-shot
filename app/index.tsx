@@ -554,8 +554,11 @@ export default function Page() {
   const syncRCEntitlements = useCallback(async (): Promise<boolean> => {
     try {
       const info: CustomerInfo = await Purchases.getCustomerInfo();
-      // Entitlement ID 'premium' で判定
-      return !!info.entitlements.active['premium'];
+      // Entitlement ID 'premium' で判定（月額・年額どちらも対応）
+      return !!info.entitlements.active['premium']
+        || Object.keys(info.entitlements.active).length > 0
+        || info.activeSubscriptions.includes('com.jin.oneshot.annual.premium')
+        || info.activeSubscriptions.includes('com.jin.oneshot.premium');
     } catch {
       return false;
     }
