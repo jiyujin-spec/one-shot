@@ -1,7 +1,8 @@
 {
   "platforms": ["ios", "android"],
   "ios": {
-    "modules": ["VideoOverlayModule"]
+    "modules": ["VideoOverlayModule"],
+    "podspecPath": "./VideoOverlay.podspec"
   },
   "android": {
     "modules": ["expo.modules.videooverlay.VideoOverlayModule"]
