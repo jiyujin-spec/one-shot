@@ -2012,126 +2012,332 @@ export default function Page() {
     const title = isTerms ? t('paywall_terms') : t('paywall_privacy');
 
     const jaTerms =
-`【利用規約】最終更新: 2024年
+`【日本語】利用規約（Terms of Use）
+最終更新日：2026年3月9日
 
-本規約は One Shot（以下「本アプリ」）のご利用条件を定めます。
+1. はじめに・同意
+本利用規約（以下「本規約」）は、「One Shot」（以下「本アプリ」）を提供する開発者（以下「当社」）と、本アプリを利用する方（以下「ユーザー」）との間の条件を定めるものです。
 
-■ サブスクリプション
-・年額・月額プランは自動更新されます。
-・更新停止は期間終了の24時間前までに行ってください。
-・購入確認後の払い戻しはできません。
-・料金はApple IDに請求されます。
+本アプリをダウンロード・インストール・使用することにより、ユーザーは本規約に同意したものとみなされます。同意いただけない場合は、本アプリを直ちにアンインストールしてください。
 
-■ お休みパス
-お休みパス（$0.99/枚）は消耗品です。使用後の返金はできません。
+2. サービスの内容
+本アプリは以下の機能を提供します。
 
-■ 禁止事項
-・本アプリを違法な目的に使用すること。
-・他者への迷惑行為・不正アクセス。
-・アプリのリバースエンジニアリング。
+* 1日1本の動画撮影・保存・SNSシェア機能
+* 連続記録日数（ストリーク）の管理
+* パス機能（無料パス・有料パスによるストリーク維持）
+* アプリ内課金による有料パスの購入
 
-■ 免責事項
-ストリークデータの保全は保証しません。端末障害等によるデータ損失について責任を負いません。
+3. 利用資格
+本アプリは13歳以上の方を対象としています。アプリ内課金を利用するには、Apple App Store のアカウントおよび購入に必要な支払い方法が必要です。
 
-■ 規約の変更
-本規約は予告なく変更される場合があります。継続利用をもって同意とみなします。
+未成年者が本アプリを利用する場合は、保護者の同意を得てください。
 
-■ 準拠法
-本規約は日本法に準拠します。
+4. サブスクリプションプラン
+本アプリのすべての機能はサブスクリプションプランでご利用いただけます。課金は Apple ID アカウントを通じて処理されます。
 
-■ お問い合わせ
-アプリ内の「お問い合わせ」からご連絡ください。`;
+* 年額プラン： $24.99 / 年（年払い）
+* 月額プラン： $4.99 / 月（月払い）
+* 更新周期： 各契約期間終了時に自動更新されます。
+* 課金タイミング： 購入確認後、Apple ID アカウントに課金されます。以降、各更新期間の開始24時間以内に自動的に課金されます。
+* 無料トライアル（提供する場合）： 無料トライアル期間終了の24時間前までに解約しない場合、有料サブスクリプションに移行します。
+* 解約方法： App Store の「設定」→「サブスクリプション」からいつでも解約できます。解約は次回更新日の24時間前までに行ってください。解約後も、現在の契約期間が終了するまでサービスをご利用いただけます。
+* 価格の変更： 価格が変更される場合は、事前にアプリ内または登録済みメールアドレスへ通知します。
+
+Apple サブスクリプションの管理・解約は以下から行えます：
+
+* iOS： 設定アプリ → Apple ID → サブスクリプション
+* Mac： App Store → アカウント → サブスクリプション
+
+5. アプリ内課金（パスの購入）
+本アプリのアプリ内課金はすべて Apple App Store を通じて処理されます。購入・払い戻し・キャンセルは Apple の規約に従います。
+
+* 有料パス（$0.99/枚）： ストリークを維持するための消費アイテムです。消費後の返金はいたしかねます。有効期限なしで何枚でもストックできます。
+* 無料パス： 毎週月曜日 AM3:00 に1枚付与されます。繰り越し不可です。
+* 消費順序： 有料パスが先に消費され、次に無料パスが消費されます。
+
+払い戻しを希望する場合は、Apple の払い戻し申請ページ（https://reportaproblem.apple.com/）をご利用ください。
+
+6. ユーザーの義務と禁止事項
+ユーザーは以下の行為を行ってはなりません。
+
+* 本アプリを違法な目的に使用すること
+* 他者を誹謗中傷・ハラスメントする内容の動画を撮影・共有すること
+* 本アプリのリバースエンジニアリング・改変・複製
+* 本アプリのシステムへの不正アクセス・負荷攻撃
+* 第三者の著作権・肖像権・プライバシーを侵害するコンテンツの作成・共有
+* わいせつ・暴力的・差別的なコンテンツの撮影・共有
+
+6-1. サービス仕様：目標（habit）の変更ルール（10日ルール）
+本アプリでは、習慣継続の意図的な設計として「10日ルール」を採用しています。ユーザーは本ルールの内容を十分に理解した上で本アプリを利用するものとします。
+
+* 10日未満の継続： 目標（habit）はいつでも自由に変更できます。変更後も記録はリセットされません。
+* 10日を超えた継続後の目標変更： ストリーク（連続記録日数）が10日を超えた後に目標を変更した場合、これまでのすべての記録がリセットされ、DAY 0（ゼロ）からの再スタートとなります。この仕様はサービスの重要な設計要素であり、ユーザーの同意のもとで適用されます。
+* 確認ダイアログ： 目標変更の実行前に、本ルールに関する確認画面が表示されます。ユーザーが明示的に同意した場合にのみ変更・リセットが実行されます。
+
+当社は本ルールの適用によって生じたデータのリセットについて、責任を負いません。
+
+7. コンテンツの権利
+ユーザーが本アプリを通じて撮影した動画の著作権はユーザーに帰属します。
+
+ユーザーが SNS シェア機能を通じて動画を外部プラットフォームに共有した場合、各プラットフォームの利用規約が適用されます。当社はシェア先でのコンテンツの取り扱いについて責任を負いません。
+
+8. 知的財産権
+本アプリのデザイン・ロゴ・ソフトウェアコード・テキストなど、本アプリを構成するすべての要素の知的財産権は当社に帰属します。ユーザーに対して明示的に許可されていない権利の行使を禁じます。
+
+9. 免責事項
+本アプリは「現状のまま」提供されます。当社は以下について保証しません。
+
+* 本アプリが常に利用可能であること、または中断・エラーがないこと
+* 本アプリの利用によって得られる特定の結果（習慣形成など）
+* ユーザーのデバイスとの完全な互換性
+
+本アプリの利用に起因するいかなる損害についても、法令上の責任を負う場合を除き、当社は責任を負いません。
+
+10. サービスの変更・終了
+当社は事前通知なく、本アプリの機能の追加・変更・削除、またはサービス全体の提供停止を行う場合があります。サービス終了に伴う損害について当社は責任を負いません。
+
+11. 規約の変更
+当社は本規約を随時変更することがあります。変更後に本アプリを継続してご利用いただいた場合、変更後の規約に同意いただいたものとみなします。
+
+重要な変更については、アプリ内通知またはアプリのアップデートノートにてお知らせします。
+
+12. 準拠法・裁判管轄
+本規約は日本法に準拠します。本規約に関する紛争については、東京地方裁判所を第一審の専属的合意管轄裁判所とします。
+
+13. お問い合わせ
+One Shot 開発チーム
+メール：ristu.japan@gmail.com`;
 
     const enTerms =
-`TERMS OF SERVICE — Last updated: 2024
+`【English】Terms of Service
+Last updated: March 9, 2026
 
-These terms govern your use of One Shot (the "App").
+1. Introduction & Agreement
+These Terms of Service ("Terms") govern the relationship between the developer ("we," "us," or "our") of "One Shot" ("the App") and users ("you") who use the App.
 
-SUBSCRIPTIONS
-· Annual and monthly plans auto-renew.
-· Cancel at least 24 hours before the renewal date to avoid charges.
-· No refunds after purchase confirmation.
-· Billed to your Apple ID.
+By downloading, installing, or using the App, you agree to be bound by these Terms. If you do not agree, please uninstall the App immediately.
 
-REST PASSES
-Rest passes ($0.99 each) are consumable and non-refundable after use.
+2. Service Description
+The App provides the following features:
 
-PROHIBITED USES
-· Using the App for illegal purposes.
-· Harassing other users or unauthorized access.
-· Reverse engineering the App.
+* Daily video recording, saving, and social media sharing
+* Streak (consecutive recording days) tracking
+* Pass feature (free and paid passes to maintain streaks)
+* In-app purchase of paid passes
 
-DISCLAIMER
-We do not guarantee preservation of streak data. We are not liable for data loss due to device failure or other technical issues.
+3. Eligibility
+The App is intended for users aged 13 and older. To use in-app purchases, you must have an Apple App Store account and a valid payment method.
 
-CHANGES TO TERMS
-We may update these terms without prior notice. Continued use constitutes acceptance.
+Minors must obtain parental or guardian consent before using this App.
 
-GOVERNING LAW
-These terms are governed by applicable law.
+4. Subscription Plans
+All features of the App are available through a subscription plan. Payments are processed through your Apple ID account.
 
-CONTACT
-Use the in-app contact feature to reach us.`;
+* Annual Plan: $24.99 / year (billed annually)
+* Monthly Plan: $4.99 / month (billed monthly)
+* Renewal: Automatically renews at the end of each billing period.
+* Billing: Charged to your Apple ID account upon purchase confirmation. Subsequent charges occur within 24 hours before the start of each renewal period.
+* Free Trial (if offered): If you do not cancel at least 24 hours before the end of the free trial period, you will be charged for a paid subscription.
+* Cancellation: You can cancel anytime via the App Store under Settings → Subscriptions. Cancel at least 24 hours before the next renewal date. You may continue to use the service until the end of the current billing period after cancellation.
+* Price changes: If prices change, we will notify you in-app or via your registered email address in advance.
+
+To manage or cancel your Apple subscription:
+
+* iOS: Settings app → Apple ID → Subscriptions
+* Mac: App Store → Account → Subscriptions
+
+5. In-App Purchases (Passes)
+All in-app purchases are processed through the Apple App Store. Purchases, refunds, and cancellations are subject to Apple's policies.
+
+* Paid Pass ($0.99/pass): A consumable item used to maintain your streak. No refunds after use. No expiry — stock as many as you like.
+* Free Pass: One pass is automatically granted every Monday at 3:00 AM. Cannot be carried over to the next week.
+* Consumption order: Paid passes are consumed first, then free passes.
+
+To request a refund, please use Apple's refund request page: https://reportaproblem.apple.com/
+
+6. User Obligations & Prohibited Activities
+You must not:
+
+* Use the App for any illegal purpose
+* Record or share content that defames, harasses, or harms others
+* Reverse engineer, modify, or copy the App
+* Attempt unauthorized access or load attacks on the App's systems
+* Create or share content that infringes third-party copyrights, portrait rights, or privacy
+* Record or share obscene, violent, or discriminatory content
+
+6-1. Service Specification: Habit Goal Change Rule (10-Day Rule)
+The App enforces a "10-Day Rule" as a deliberate design element to reinforce habit commitment. Users are expected to understand and accept this rule before using the App.
+
+* Within the first 10 days: You may change your habit goal at any time without affecting your recorded history.
+* After 10 consecutive days: If you change your habit goal once your streak exceeds 10 days, all existing records will be permanently reset and your streak will restart from DAY 0. This behavior is a core feature of the service and applies upon your explicit consent.
+* Confirmation dialog: Before any reset is executed, a confirmation screen will be displayed explaining the consequences. The reset only proceeds if you explicitly agree.
+
+We are not liable for any data loss resulting from a goal change that triggers a reset under this rule.
+
+7. Content Rights
+You retain copyright over videos you record using the App.
+
+If you share a video to an external platform via the social sharing feature, the terms of service of that platform apply. We are not responsible for how content is handled on third-party platforms.
+
+8. Intellectual Property
+All intellectual property rights in the App — including its design, logo, software code, and text — belong to us. You may not exercise any rights not expressly granted to you.
+
+9. Disclaimer of Warranties
+The App is provided "as is." We make no warranties regarding:
+
+* Continuous availability of the App, or that it will be free from interruptions or errors
+* Specific results from using the App (such as habit formation)
+* Full compatibility with your device
+
+To the extent permitted by law, we are not liable for any damages arising from your use of the App.
+
+10. Service Changes & Termination
+We may add, modify, or remove features, or discontinue the App entirely, without prior notice. We are not liable for any losses resulting from service termination.
+
+11. Changes to These Terms
+We may update these Terms at any time. Continued use of the App after changes constitutes your acceptance of the updated Terms.
+
+Material changes will be communicated via in-app notifications or App update release notes.
+
+12. Governing Law & Jurisdiction
+These Terms are governed by the laws of Japan. Any disputes arising from these Terms shall be subject to the exclusive jurisdiction of the Tokyo District Court as the court of first instance.
+
+13. Contact Us
+One Shot Development Team
+Email: ristu.japan@gmail.com`;
 
     const jaPrivacy =
-`【プライバシーポリシー】最終更新: 2024年
+`【日本語】プライバシーポリシー（Privacy Policy）
+最終更新日：2026年3月9日
 
-■ 収集する情報
-・目標テキスト（端末内にのみ保存）
-・撮影した動画・写真（端末内にのみ保存）
-・ストリーク・利用統計（端末内にのみ保存）
-・RevenueCat経由の購入情報
+1. はじめに
+「One Shot」（以下「本アプリ」）を提供する開発者（以下「当社」）は、利用者のプライバシーを最大限に尊重します。本ポリシーは、本アプリが収集する情報・利用目的・管理方法について説明します。
 
-■ 収集しない情報
-氏名・住所・位置情報・連絡先などの個人情報は収集しません。
+本アプリをご利用いただくことで、本ポリシーに同意いただいたものとみなします。同意いただけない場合は、本アプリのご利用をお控えください。
 
-■ データの保存
-コンテンツデータはすべてお使いの端末内にのみ保存されます。クラウドへのアップロードは行いません。
+2. 収集する情報
+本アプリが収集・処理する情報は以下のとおりです。
 
-■ 第三者サービス
-・RevenueCat: 購入管理（revenuecat.com/privacy）
-・Apple App Store: アプリ配信
+* カメラ映像・音声： 動画撮影機能のために、デバイスのカメラおよびマイクへのアクセスを使用します。録画データはデバイス内のみで処理され、外部サーバーへは送信されません。
+* ローカルストレージデータ： 連続記録日数（ストリーク）・パス残数・購入状態・アプリ設定などをデバイス内の localStorage に保存します。これらはサーバーへ送信されません。
+* 購入情報： アプリ内課金（パスの購入）は Apple の App Store を通じて処理されます。当社はクレジットカード番号等の決済情報を収集・保存しません。Apple のプライバシーポリシーが適用されます。
+* クラッシュレポート（任意）： 将来的にクラッシュ情報を収集する場合は、事前に本ポリシーを更新の上、利用者に通知します。
 
-■ データの削除
-設定画面の「すべてのデータをリセット」からいつでも削除できます。
+3. 情報の利用目的
+収集した情報は、以下の目的にのみ使用します。
 
-■ ポリシーの変更
-本ポリシーは予告なく変更される場合があります。
+* 本アプリの機能提供（動画撮影・保存・SNSシェア）
+* ストリーク・パス管理などユーザー体験の維持
+* アプリの改善・不具合修正
 
-■ お問い合わせ
-アプリ内の「お問い合わせ」からご連絡ください。`;
+当社は収集した情報を第三者に販売・貸与しません。
+
+4. カメラ・マイクへのアクセス
+本アプリは動画撮影のためにカメラおよびマイクへのアクセスを必要とします。アクセス許可はいつでも iOS の「設定」→「プライバシーとセキュリティ」から変更できます。
+
+撮影した映像は端末内にのみ保存されます。SNSシェア機能を使用した場合、動画ファイルをユーザー自身の操作によって外部アプリ（Instagram・TikTok等）に共有します。その際の取り扱いは各プラットフォームのプライバシーポリシーに従います。
+
+5. データの保存と削除
+本アプリのデータはすべてお使いのデバイスに保存されます。アプリを削除することで、ローカルに保存されたすべてのデータが削除されます。
+
+撮影した動画は端末の写真ライブラリまたはアプリ内ストレージに保存されます。削除はお使いのデバイスの写真アプリ等から行ってください。
+
+6. サードパーティサービス
+本アプリは以下のサードパーティサービスを利用します。
+
+* Apple App Store / In-App Purchase： アプリ内課金の決済処理。（Apple プライバシーポリシー：https://www.apple.com/legal/privacy/jp/）
+* Google Fonts（Inter）： フォントの配信のみに使用。（Google プライバシーポリシー：https://policies.google.com/privacy）
+
+当社はこれらサードパーティの情報取り扱いについて責任を負いません。
+
+7. お子様のプライバシー
+本アプリは13歳未満のお子様を対象としていません。13歳未満のお子様の情報を故意に収集することはありません。万が一当該情報を収集していることが判明した場合は、速やかに削除します。
+
+8. 本ポリシーの変更
+当社は本ポリシーを随時更新することがあります。変更がある場合は本ページに最新版を掲載し、重大な変更の場合はアプリ内通知等で告知します。
+
+9. お問い合わせ
+One Shot 開発チーム
+メール：ristu.japan@gmail.com`;
 
     const enPrivacy =
-`PRIVACY POLICY — Last updated: 2024
+`【English】Privacy Policy
+Last updated: March 9, 2026
 
-INFORMATION WE COLLECT
-· Your habit goal text (stored locally only)
-· Recorded videos and photos (on-device only)
-· Streak and usage statistics (local)
-· Purchase information via RevenueCat
+1. Introduction
+The developer ("we," "us," or "our") of "One Shot" ("the App") is committed to protecting your privacy. This policy explains what information the App collects, how it is used, and how it is managed.
 
-INFORMATION WE DO NOT COLLECT
-We do not collect personal identifiers such as your name, address, location, or contact information.
+By using the App, you agree to this policy. If you do not agree, please discontinue use of the App.
 
-DATA STORAGE
-All content data is stored exclusively on your device. We do not upload content to the cloud.
+2. Information We Collect
+The App collects and processes the following information:
 
-THIRD-PARTY SERVICES
-· RevenueCat: Purchase management (revenuecat.com/privacy)
-· Apple App Store: App distribution
+* Camera & Microphone: The App accesses your device's camera and microphone for video recording. Recorded data is processed entirely on your device and is never transmitted to external servers.
+* Local Storage Data: Streak count, remaining passes, purchase status, and app settings are stored in your device's localStorage. This data is never sent to a server.
+* Purchase Information: In-app purchases (pass purchases) are processed through Apple's App Store. We do not collect or store credit card numbers or other payment details. Apple's Privacy Policy applies to payment data.
+* Crash Reports (future): If we ever collect crash information in the future, we will update this policy and notify users in advance.
 
-DATA DELETION
-You can delete all data at any time via Settings → Reset All Data.
+3. How We Use Your Information
+Collected information is used solely for the following purposes:
 
-CHANGES
-This policy may be updated without prior notice.
+* Providing App features (video recording, saving, and social sharing)
+* Maintaining user experience such as streak and pass management
+* Improving the App and fixing bugs
 
-CONTACT
-Use the in-app contact feature to reach us.`;
+We do not sell or rent your information to third parties.
+
+4. Camera & Microphone Access
+The App requires access to your camera and microphone for video recording. You can change this permission at any time via iOS Settings → Privacy & Security.
+
+Recorded footage is saved only on your device. If you use the social sharing feature, video files are shared to external apps (such as Instagram or TikTok) through your own action. The handling of such data is governed by the respective platform's privacy policy.
+
+5. Data Storage & Deletion
+All App data is stored locally on your device. Deleting the App will remove all locally stored data.
+
+Recorded videos are saved in the App's internal storage. To delete them, use the App's settings or your device's file manager.
+
+6. Third-Party Services
+The App uses the following third-party services:
+
+* Apple App Store / In-App Purchase: Payment processing for in-app purchases. (Apple Privacy Policy: https://www.apple.com/legal/privacy/)
+* Google Fonts (Inter): Used solely for font delivery. (Google Privacy Policy: https://policies.google.com/privacy)
+
+We are not responsible for the data practices of these third-party services.
+
+7. Children's Privacy
+The App is not directed at children under the age of 13. We do not knowingly collect personal information from children under 13. If we discover that such information has been collected, we will promptly delete it.
+
+8. Changes to This Policy
+We may update this policy from time to time. The latest version will always be posted on this page. For material changes, we will notify users via in-app notifications or other means.
+
+9. Contact Us
+One Shot Development Team
+Email: ristu.japan@gmail.com`;
 
     const content = lang === 'ja'
       ? (isTerms ? jaTerms : jaPrivacy)
       : (isTerms ? enTerms : enPrivacy);
+
+    const renderLegalContent = (text: string) => {
+      return text.split('\n').map((line, index) => {
+        const trimmed = line.trim();
+        if (trimmed.startsWith('【') && trimmed.endsWith('】') ||
+            (trimmed.startsWith('【') && trimmed.includes('】'))) {
+          return <Text key={index} style={styles.legalSectionTitle}>{trimmed}</Text>;
+        } else if (trimmed.startsWith('最終更新') || trimmed.startsWith('Last updated')) {
+          return <Text key={index} style={styles.legalDateText}>{trimmed}</Text>;
+        } else if (/^\d+[-\d]*\. /.test(trimmed)) {
+          return <Text key={index} style={styles.legalHeading}>{trimmed}</Text>;
+        } else if (trimmed.startsWith('* ')) {
+          return <Text key={index} style={styles.legalBullet}>{'• ' + trimmed.slice(2)}</Text>;
+        } else if (trimmed === '') {
+          return <View key={index} style={{ height: 8 }} />;
+        } else {
+          return <Text key={index} style={styles.legalBody}>{trimmed}</Text>;
+        }
+      });
+    };
 
     return (
       <Modal visible={legalVisible} animationType="slide" transparent>
@@ -2150,7 +2356,7 @@ Use the in-app contact feature to reach us.`;
               style={styles.legalScroll}
               contentContainerStyle={styles.legalScrollContent}
             >
-              <Text style={styles.legalBody}>{content}</Text>
+              {renderLegalContent(content)}
             </ScrollView>
           </View>
         </View>
@@ -3634,10 +3840,37 @@ const styles = StyleSheet.create({
     padding: 20,
     paddingBottom: 40,
   },
+  legalSectionTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#fff',
+    marginTop: 4,
+    marginBottom: 4,
+  },
+  legalDateText: {
+    fontSize: 12,
+    color: '#666',
+    marginBottom: 12,
+  },
+  legalHeading: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#e0e0e0',
+    marginTop: 16,
+    marginBottom: 4,
+  },
+  legalBullet: {
+    fontSize: 13,
+    color: '#aaa',
+    lineHeight: 22,
+    paddingLeft: 12,
+    marginBottom: 2,
+  },
   legalBody: {
     fontSize: 13,
     color: '#aaa',
     lineHeight: 22,
+    marginBottom: 2,
   },
   settingsLegalRow: {
     flexDirection: 'row',
