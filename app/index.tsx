@@ -453,6 +453,7 @@ export default function Page() {
   const [mediaPermission, requestMediaPermission] = MediaLibrary.usePermissions();
   const [facing, setFacing] = useState<CameraType>('front');
   const [camMode, setCamMode] = useState<'video' | 'photo'>('video');
+  const [recSecs, setRecSecs] = useState<3 | 5 | 7>(5);
   const [isRecording, setIsRecording] = useState(false);
   const [countdown, setCountdown] = useState<number | null>(null);       // 撮影前 3-2-1
   const [recordingCountdown, setRecordingCountdown] = useState<number | null>(null); // 録画中残り秒数
@@ -934,9 +935,9 @@ export default function Page() {
       return;
     }
 
-    // ── 動画モード（5秒録画 → ネイティブでオーバーレイ焼き込み）──
+    // ── 動画モード（recSecs 秒録画 → ネイティブでオーバーレイ焼き込み）──
     setIsRecording(true);
-    const RECORD_SECS = 5;
+    const RECORD_SECS = recSecs; // 3 | 5 | 7 (user-selected)
 
     // 録画中カウントダウン
     setRecordingCountdown(RECORD_SECS);
@@ -1596,8 +1597,16 @@ export default function Page() {
               <View style={[styles.shutterInner, isRecording && styles.shutterInnerRec]} />
             </TouchableOpacity>
 
-            {/* 右: 透明スペーサー（シャッター中央揃えのため・白い丸は削除済み）*/}
-            <View style={{ width: 48 }} />
+            {/* 右: 録画秒数トグル（3s → 5s → 7s → 3s）*/}
+            <TouchableOpacity
+              style={styles.camTimerBtn}
+              onPress={() => setRecSecs(s => s === 3 ? 5 : s === 5 ? 7 : 3)}
+              disabled={isRecording}
+            >
+              <Text style={[styles.camDurLabel, isRecording && { opacity: 0.25 }]}>
+                {recSecs}s
+              </Text>
+            </TouchableOpacity>
           </View>
 
         </View>
@@ -2914,6 +2923,13 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.7,
     shadowRadius: 8,
     elevation: 4,
+  },
+  // 録画秒数トグルのラベル
+  camDurLabel: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700',
+    letterSpacing: 0.5,
   },
 
   // シャッターボタン: 白枠 + 赤い内側（image_3）
