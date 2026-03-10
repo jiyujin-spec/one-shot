@@ -389,12 +389,14 @@ async function scheduleDailyNotification(timeStr: string, title: string, body: s
   const h = parseInt(parts[0], 10);
   const m = parseInt(parts[1] ?? '0', 10);
   if (isNaN(h) || isNaN(m)) return;
+  // Use optional chaining to guard against runtime undefined on some Expo versions
+  const dailyType = Notifications.SchedulableTriggerInputTypes?.DAILY ?? 'daily';
   await Notifications.scheduleNotificationAsync({
     content: { title, body, sound: true },
     trigger: {
       hour: h,
       minute: m,
-      type: Notifications.SchedulableTriggerInputTypes.DAILY,
+      type: dailyType as any,
     },
   });
 }
@@ -443,6 +445,8 @@ export default function Page() {
   const [isLoading, setIsLoading] = useState(true);
   const [guideVisible, setGuideVisible] = useState(false);
   const [milestone10Visible, setMilestone10Visible] = useState(false);
+  const [legalVisible, setLegalVisible] = useState(false);
+  const [legalType, setLegalType] = useState<'terms' | 'privacy'>('terms');
 
   // Camera state
   const [camPermission, requestCamPermission] = useCameraPermissions();
@@ -506,6 +510,11 @@ export default function Page() {
     setToastError(isError);
     if (toastTimer.current) clearTimeout(toastTimer.current);
     toastTimer.current = setTimeout(() => setToastMsg(''), 3000);
+  }, []);
+
+  const openLegal = useCallback((type: 'terms' | 'privacy') => {
+    setLegalType(type);
+    setLegalVisible(true);
   }, []);
 
   // ── State persistence ───────────────────────────────────────────────────────
@@ -1275,9 +1284,13 @@ export default function Page() {
           <Text style={styles.linkText}>{t('paywall_restore_btn')}</Text>
         </TouchableOpacity>
         <View style={styles.paywallLinks}>
-          <Text style={styles.linkSmall}>{t('paywall_terms')}</Text>
+          <TouchableOpacity onPress={() => openLegal('terms')}>
+            <Text style={[styles.linkSmall, styles.linkSmallTappable]}>{t('paywall_terms')}</Text>
+          </TouchableOpacity>
           <Text style={styles.linkSmall}>  ·  </Text>
-          <Text style={styles.linkSmall}>{t('paywall_privacy')}</Text>
+          <TouchableOpacity onPress={() => openLegal('privacy')}>
+            <Text style={[styles.linkSmall, styles.linkSmallTappable]}>{t('paywall_privacy')}</Text>
+          </TouchableOpacity>
         </View>
       </ScrollView>
     );
@@ -1910,6 +1923,17 @@ export default function Page() {
         <TouchableOpacity style={styles.btnDanger} onPress={resetAll}>
           <Text style={styles.btnDangerText}>{t('settings_reset_btn')}</Text>
         </TouchableOpacity>
+
+        {/* ── 利用規約 / プライバシーポリシー ── */}
+        <View style={styles.settingsLegalRow}>
+          <TouchableOpacity onPress={() => openLegal('terms')}>
+            <Text style={styles.settingsLegalLink}>{t('paywall_terms')}</Text>
+          </TouchableOpacity>
+          <Text style={styles.settingsLegalSep}> · </Text>
+          <TouchableOpacity onPress={() => openLegal('privacy')}>
+            <Text style={styles.settingsLegalLink}>{t('paywall_privacy')}</Text>
+          </TouchableOpacity>
+        </View>
       </ScrollView>
     );
   };
@@ -1976,6 +2000,159 @@ export default function Page() {
     </Modal>
   );
 
+  // ─── Legal Modal ──────────────────────────────────────────────────────────────
+
+  const LegalModal = () => {
+    const isTerms = legalType === 'terms';
+    const title = isTerms ? t('paywall_terms') : t('paywall_privacy');
+
+    const jaTerms =
+`【利用規約】最終更新: 2024年
+
+本規約は One Shot（以下「本アプリ」）のご利用条件を定めます。
+
+■ サブスクリプション
+・年額・月額プランは自動更新されます。
+・更新停止は期間終了の24時間前までに行ってください。
+・購入確認後の払い戻しはできません。
+・料金はApple IDに請求されます。
+
+■ お休みパス
+お休みパス（$0.99/枚）は消耗品です。使用後の返金はできません。
+
+■ 禁止事項
+・本アプリを違法な目的に使用すること。
+・他者への迷惑行為・不正アクセス。
+・アプリのリバースエンジニアリング。
+
+■ 免責事項
+ストリークデータの保全は保証しません。端末障害等によるデータ損失について責任を負いません。
+
+■ 規約の変更
+本規約は予告なく変更される場合があります。継続利用をもって同意とみなします。
+
+■ 準拠法
+本規約は日本法に準拠します。
+
+■ お問い合わせ
+アプリ内の「お問い合わせ」からご連絡ください。`;
+
+    const enTerms =
+`TERMS OF SERVICE — Last updated: 2024
+
+These terms govern your use of One Shot (the "App").
+
+SUBSCRIPTIONS
+· Annual and monthly plans auto-renew.
+· Cancel at least 24 hours before the renewal date to avoid charges.
+· No refunds after purchase confirmation.
+· Billed to your Apple ID.
+
+REST PASSES
+Rest passes ($0.99 each) are consumable and non-refundable after use.
+
+PROHIBITED USES
+· Using the App for illegal purposes.
+· Harassing other users or unauthorized access.
+· Reverse engineering the App.
+
+DISCLAIMER
+We do not guarantee preservation of streak data. We are not liable for data loss due to device failure or other technical issues.
+
+CHANGES TO TERMS
+We may update these terms without prior notice. Continued use constitutes acceptance.
+
+GOVERNING LAW
+These terms are governed by applicable law.
+
+CONTACT
+Use the in-app contact feature to reach us.`;
+
+    const jaPrivacy =
+`【プライバシーポリシー】最終更新: 2024年
+
+■ 収集する情報
+・目標テキスト（端末内にのみ保存）
+・撮影した動画・写真（端末内にのみ保存）
+・ストリーク・利用統計（端末内にのみ保存）
+・RevenueCat経由の購入情報
+
+■ 収集しない情報
+氏名・住所・位置情報・連絡先などの個人情報は収集しません。
+
+■ データの保存
+コンテンツデータはすべてお使いの端末内にのみ保存されます。クラウドへのアップロードは行いません。
+
+■ 第三者サービス
+・RevenueCat: 購入管理（revenuecat.com/privacy）
+・Apple App Store: アプリ配信
+
+■ データの削除
+設定画面の「すべてのデータをリセット」からいつでも削除できます。
+
+■ ポリシーの変更
+本ポリシーは予告なく変更される場合があります。
+
+■ お問い合わせ
+アプリ内の「お問い合わせ」からご連絡ください。`;
+
+    const enPrivacy =
+`PRIVACY POLICY — Last updated: 2024
+
+INFORMATION WE COLLECT
+· Your habit goal text (stored locally only)
+· Recorded videos and photos (on-device only)
+· Streak and usage statistics (local)
+· Purchase information via RevenueCat
+
+INFORMATION WE DO NOT COLLECT
+We do not collect personal identifiers such as your name, address, location, or contact information.
+
+DATA STORAGE
+All content data is stored exclusively on your device. We do not upload content to the cloud.
+
+THIRD-PARTY SERVICES
+· RevenueCat: Purchase management (revenuecat.com/privacy)
+· Apple App Store: App distribution
+
+DATA DELETION
+You can delete all data at any time via Settings → Reset All Data.
+
+CHANGES
+This policy may be updated without prior notice.
+
+CONTACT
+Use the in-app contact feature to reach us.`;
+
+    const content = lang === 'ja'
+      ? (isTerms ? jaTerms : jaPrivacy)
+      : (isTerms ? enTerms : enPrivacy);
+
+    return (
+      <Modal visible={legalVisible} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={styles.legalSheet}>
+            <View style={styles.legalHeader}>
+              <Text style={styles.legalTitle}>{title}</Text>
+              <TouchableOpacity
+                onPress={() => setLegalVisible(false)}
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              >
+                <Feather name="x" size={22} color="#888" />
+              </TouchableOpacity>
+            </View>
+            <ScrollView
+              style={styles.legalScroll}
+              contentContainerStyle={styles.legalScrollContent}
+            >
+              <Text style={styles.legalBody}>{content}</Text>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+    );
+  };
+
   // ─── Bottom Nav ───────────────────────────────────────────────────────────────
 
   const hideNav = screen === 'onboarding' || screen === 'camera' || screen === 'paywall';
@@ -2029,6 +2206,7 @@ export default function Page() {
 
       <GuideModal />
       <Milestone10Modal />
+      <LegalModal />
       {toastMsg ? <Toast message={toastMsg} isError={toastError} /> : null}
 
       {/* ── Off-screen photo filter processor ──────────────────────────────── */}
@@ -2412,6 +2590,10 @@ const styles = StyleSheet.create({
   linkSmall: {
     color: '#444',
     fontSize: 11,
+  },
+  linkSmallTappable: {
+    color: '#666',
+    textDecorationLine: 'underline',
   },
 
   // ── Home ──
@@ -3409,6 +3591,57 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 24,
     lineHeight: 22,
+  },
+
+  // ── Legal Modal ──
+  legalSheet: {
+    backgroundColor: '#0a0a0a',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '85%',
+    minHeight: '60%',
+  },
+  legalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#1a1a1a',
+  },
+  legalTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#fff',
+    letterSpacing: 1,
+  },
+  legalScroll: {
+    flex: 1,
+  },
+  legalScrollContent: {
+    padding: 20,
+    paddingBottom: 40,
+  },
+  legalBody: {
+    fontSize: 13,
+    color: '#aaa',
+    lineHeight: 22,
+  },
+  settingsLegalRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 20,
+  },
+  settingsLegalLink: {
+    color: '#444',
+    fontSize: 12,
+    textDecorationLine: 'underline',
+  },
+  settingsLegalSep: {
+    color: '#333',
+    fontSize: 12,
+    paddingHorizontal: 6,
   },
 
   // ── Toast ──
