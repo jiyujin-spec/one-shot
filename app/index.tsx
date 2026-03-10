@@ -116,8 +116,8 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     paywall_feature4: '毎週1枚の無料パス自動付与',
     paywall_feature5: '撮影履歴・カレンダー表示',
     paywall_subscribe_btn: '年額プランで始める',
-    paywall_iap_note: '年額: ¥29.99/年  ·  月額: ¥4.99/月\nApple IDに課金されます。サブスクリプションは購入後、現在の期間終了前に解約しない限り自動更新されます。',
-    paywall_pass_note: 'お休みパスは ¥100/枚 で別途購入できます',
+    paywall_iap_note: '年額: $24.99/年  ·  月額: $4.99/月\nApple IDに課金されます。サブスクリプションは購入後、現在の期間終了前に解約しない限り自動更新されます。',
+    paywall_pass_note: 'お休みパスは $0.99/枚 で別途購入できます',
     paywall_restore_btn: '購入を復元する',
     paywall_terms: '利用規約',
     paywall_privacy: 'プライバシーポリシー',
@@ -139,9 +139,9 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     guide_card4_title: 'パス（お休み）機能',
     guide_card4_body: '週に1回、お休みできる「パス」が付与されます。どうしても継続できない時に使いましょう。ストリークがそのまま維持されます。',
     guide_card5_title: 'パスの購入',
-    guide_card5_body: 'パスは1枚¥100で追加購入できます。有効期限なし、何枚でもストックできます。',
+    guide_card5_body: 'パスは1枚$0.99で追加購入できます。有効期限なし、何枚でもストックできます。',
     guide_start_btn: 'はじめる',
-    pass_purchase_btn: 'パスを購入（¥100）',
+    pass_purchase_btn: 'パスを購入（$0.99）',
     use_pass_btn_prefix: 'パスを使う（残り ',
     use_pass_btn_suffix: '枚）',
     toast_save_error: '保存エラー',
@@ -161,7 +161,7 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     toast_no_pass: 'パスがありません',
     toast_pass_used: 'パスを使用しました。お疲れ様！',
     toast_paid_pass_added: '有料パス +1 追加されました（ストック中）',
-    confirm_purchase_pass: 'パスを1回分購入しますか？（¥100）',
+    confirm_purchase_pass: 'パスを1回分購入しますか？（$0.99）',
     confirm_subscribe: '月額¥300のメンバーシップを開始しますか？',
     confirm_restore: '購入を復元しますか？',
     confirm_use_pass: '本日はパス（お休み）を使用しますか？\nストリークがそのまま維持されます。',
@@ -237,8 +237,8 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     paywall_feature4: 'Weekly free rest pass — auto-granted',
     paywall_feature5: 'Full history with calendar view',
     paywall_subscribe_btn: 'Get Access',
-    paywall_iap_note: 'Annual: $29.99/yr  ·  Monthly: $4.99/mo\nCharged to your Apple ID. Subscription auto-renews unless cancelled before the end of the current period.',
-    paywall_pass_note: 'Rest passes available separately at ¥100/pass',
+    paywall_iap_note: 'Annual: $24.99/yr  ·  Monthly: $4.99/mo\nCharged to your Apple ID. Subscription auto-renews unless cancelled before the end of the current period.',
+    paywall_pass_note: 'Rest passes available separately at $0.99/pass',
     paywall_restore_btn: 'Restore Purchases',
     paywall_terms: 'Terms of Service',
     paywall_privacy: 'Privacy Policy',
@@ -260,9 +260,9 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     guide_card4_title: 'Rest pass',
     guide_card4_body: "One free pass per week. Use it when life intervenes. Your streak stays intact — one pass, one miss.",
     guide_card5_title: 'Extra passes',
-    guide_card5_body: 'Additional passes at ¥100 each. No expiry. Stock them before you need them.',
+    guide_card5_body: 'Additional passes at $0.99 each. No expiry. Stock them before you need them.',
     guide_start_btn: 'START',
-    pass_purchase_btn: 'BUY A PASS (¥100)',
+    pass_purchase_btn: 'BUY A PASS ($0.99)',
     use_pass_btn_prefix: 'USE PASS  (',
     use_pass_btn_suffix: ' left)',
     toast_save_error: 'Save error',
@@ -282,7 +282,7 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     toast_no_pass: 'No passes remaining',
     toast_pass_used: 'Pass used. Stay on track.',
     toast_paid_pass_added: 'Pass +1 stocked',
-    confirm_purchase_pass: 'Purchase 1 rest pass? (¥100)',
+    confirm_purchase_pass: 'Purchase 1 rest pass? ($0.99)',
     confirm_subscribe: 'Start your annual membership?',
     confirm_restore: 'Restore purchases?',
     confirm_use_pass: 'Use a rest pass for today?\nYour streak will be maintained.',
@@ -389,12 +389,14 @@ async function scheduleDailyNotification(timeStr: string, title: string, body: s
   const h = parseInt(parts[0], 10);
   const m = parseInt(parts[1] ?? '0', 10);
   if (isNaN(h) || isNaN(m)) return;
+  // Use optional chaining to guard against runtime undefined on some Expo versions
+  const dailyType = Notifications.SchedulableTriggerInputTypes?.DAILY ?? 'daily';
   await Notifications.scheduleNotificationAsync({
     content: { title, body, sound: true },
     trigger: {
       hour: h,
       minute: m,
-      type: Notifications.SchedulableTriggerInputTypes.DAILY,
+      type: dailyType as any,
     },
   });
 }
@@ -443,12 +445,15 @@ export default function Page() {
   const [isLoading, setIsLoading] = useState(true);
   const [guideVisible, setGuideVisible] = useState(false);
   const [milestone10Visible, setMilestone10Visible] = useState(false);
+  const [legalVisible, setLegalVisible] = useState(false);
+  const [legalType, setLegalType] = useState<'terms' | 'privacy'>('terms');
 
   // Camera state
   const [camPermission, requestCamPermission] = useCameraPermissions();
   const [mediaPermission, requestMediaPermission] = MediaLibrary.usePermissions();
   const [facing, setFacing] = useState<CameraType>('front');
   const [camMode, setCamMode] = useState<'video' | 'photo'>('video');
+  const [recSecs, setRecSecs] = useState<3 | 5 | 7>(5);
   const [isRecording, setIsRecording] = useState(false);
   const [countdown, setCountdown] = useState<number | null>(null);       // 撮影前 3-2-1
   const [recordingCountdown, setRecordingCountdown] = useState<number | null>(null); // 録画中残り秒数
@@ -506,6 +511,11 @@ export default function Page() {
     setToastError(isError);
     if (toastTimer.current) clearTimeout(toastTimer.current);
     toastTimer.current = setTimeout(() => setToastMsg(''), 3000);
+  }, []);
+
+  const openLegal = useCallback((type: 'terms' | 'privacy') => {
+    setLegalType(type);
+    setLegalVisible(true);
   }, []);
 
   // ── State persistence ───────────────────────────────────────────────────────
@@ -925,9 +935,9 @@ export default function Page() {
       return;
     }
 
-    // ── 動画モード（5秒録画 → ネイティブでオーバーレイ焼き込み）──
+    // ── 動画モード（recSecs 秒録画 → ネイティブでオーバーレイ焼き込み）──
     setIsRecording(true);
-    const RECORD_SECS = 5;
+    const RECORD_SECS = recSecs; // 3 | 5 | 7 (user-selected)
 
     // 録画中カウントダウン
     setRecordingCountdown(RECORD_SECS);
@@ -1275,9 +1285,13 @@ export default function Page() {
           <Text style={styles.linkText}>{t('paywall_restore_btn')}</Text>
         </TouchableOpacity>
         <View style={styles.paywallLinks}>
-          <Text style={styles.linkSmall}>{t('paywall_terms')}</Text>
+          <TouchableOpacity onPress={() => openLegal('terms')}>
+            <Text style={[styles.linkSmall, styles.linkSmallTappable]}>{t('paywall_terms')}</Text>
+          </TouchableOpacity>
           <Text style={styles.linkSmall}>  ·  </Text>
-          <Text style={styles.linkSmall}>{t('paywall_privacy')}</Text>
+          <TouchableOpacity onPress={() => openLegal('privacy')}>
+            <Text style={[styles.linkSmall, styles.linkSmallTappable]}>{t('paywall_privacy')}</Text>
+          </TouchableOpacity>
         </View>
       </ScrollView>
     );
@@ -1583,8 +1597,16 @@ export default function Page() {
               <View style={[styles.shutterInner, isRecording && styles.shutterInnerRec]} />
             </TouchableOpacity>
 
-            {/* 右: スペーサー（対称性のため）*/}
-            <View style={styles.camTimerBtn} />
+            {/* 右: 録画秒数トグル（3s → 5s → 7s → 3s）*/}
+            <TouchableOpacity
+              style={styles.camTimerBtn}
+              onPress={() => setRecSecs(s => s === 3 ? 5 : s === 5 ? 7 : 3)}
+              disabled={isRecording}
+            >
+              <Text style={[styles.camDurLabel, isRecording && { opacity: 0.25 }]}>
+                {recSecs}s
+              </Text>
+            </TouchableOpacity>
           </View>
 
         </View>
@@ -1665,10 +1687,6 @@ export default function Page() {
             );
           })}
         </View>
-        {records.length === 0 && (
-          <Text style={styles.noHistoryText}>{t('no_history')}</Text>
-        )}
-
         {/* Fullscreen record modal */}
         <Modal
           visible={!!selectedRecord}
@@ -1910,6 +1928,17 @@ export default function Page() {
         <TouchableOpacity style={styles.btnDanger} onPress={resetAll}>
           <Text style={styles.btnDangerText}>{t('settings_reset_btn')}</Text>
         </TouchableOpacity>
+
+        {/* ── 利用規約 / プライバシーポリシー ── */}
+        <View style={styles.settingsLegalRow}>
+          <TouchableOpacity onPress={() => openLegal('terms')}>
+            <Text style={styles.settingsLegalLink}>{t('paywall_terms')}</Text>
+          </TouchableOpacity>
+          <Text style={styles.settingsLegalSep}> · </Text>
+          <TouchableOpacity onPress={() => openLegal('privacy')}>
+            <Text style={styles.settingsLegalLink}>{t('paywall_privacy')}</Text>
+          </TouchableOpacity>
+        </View>
       </ScrollView>
     );
   };
@@ -1976,6 +2005,159 @@ export default function Page() {
     </Modal>
   );
 
+  // ─── Legal Modal ──────────────────────────────────────────────────────────────
+
+  const LegalModal = () => {
+    const isTerms = legalType === 'terms';
+    const title = isTerms ? t('paywall_terms') : t('paywall_privacy');
+
+    const jaTerms =
+`【利用規約】最終更新: 2024年
+
+本規約は One Shot（以下「本アプリ」）のご利用条件を定めます。
+
+■ サブスクリプション
+・年額・月額プランは自動更新されます。
+・更新停止は期間終了の24時間前までに行ってください。
+・購入確認後の払い戻しはできません。
+・料金はApple IDに請求されます。
+
+■ お休みパス
+お休みパス（$0.99/枚）は消耗品です。使用後の返金はできません。
+
+■ 禁止事項
+・本アプリを違法な目的に使用すること。
+・他者への迷惑行為・不正アクセス。
+・アプリのリバースエンジニアリング。
+
+■ 免責事項
+ストリークデータの保全は保証しません。端末障害等によるデータ損失について責任を負いません。
+
+■ 規約の変更
+本規約は予告なく変更される場合があります。継続利用をもって同意とみなします。
+
+■ 準拠法
+本規約は日本法に準拠します。
+
+■ お問い合わせ
+アプリ内の「お問い合わせ」からご連絡ください。`;
+
+    const enTerms =
+`TERMS OF SERVICE — Last updated: 2024
+
+These terms govern your use of One Shot (the "App").
+
+SUBSCRIPTIONS
+· Annual and monthly plans auto-renew.
+· Cancel at least 24 hours before the renewal date to avoid charges.
+· No refunds after purchase confirmation.
+· Billed to your Apple ID.
+
+REST PASSES
+Rest passes ($0.99 each) are consumable and non-refundable after use.
+
+PROHIBITED USES
+· Using the App for illegal purposes.
+· Harassing other users or unauthorized access.
+· Reverse engineering the App.
+
+DISCLAIMER
+We do not guarantee preservation of streak data. We are not liable for data loss due to device failure or other technical issues.
+
+CHANGES TO TERMS
+We may update these terms without prior notice. Continued use constitutes acceptance.
+
+GOVERNING LAW
+These terms are governed by applicable law.
+
+CONTACT
+Use the in-app contact feature to reach us.`;
+
+    const jaPrivacy =
+`【プライバシーポリシー】最終更新: 2024年
+
+■ 収集する情報
+・目標テキスト（端末内にのみ保存）
+・撮影した動画・写真（端末内にのみ保存）
+・ストリーク・利用統計（端末内にのみ保存）
+・RevenueCat経由の購入情報
+
+■ 収集しない情報
+氏名・住所・位置情報・連絡先などの個人情報は収集しません。
+
+■ データの保存
+コンテンツデータはすべてお使いの端末内にのみ保存されます。クラウドへのアップロードは行いません。
+
+■ 第三者サービス
+・RevenueCat: 購入管理（revenuecat.com/privacy）
+・Apple App Store: アプリ配信
+
+■ データの削除
+設定画面の「すべてのデータをリセット」からいつでも削除できます。
+
+■ ポリシーの変更
+本ポリシーは予告なく変更される場合があります。
+
+■ お問い合わせ
+アプリ内の「お問い合わせ」からご連絡ください。`;
+
+    const enPrivacy =
+`PRIVACY POLICY — Last updated: 2024
+
+INFORMATION WE COLLECT
+· Your habit goal text (stored locally only)
+· Recorded videos and photos (on-device only)
+· Streak and usage statistics (local)
+· Purchase information via RevenueCat
+
+INFORMATION WE DO NOT COLLECT
+We do not collect personal identifiers such as your name, address, location, or contact information.
+
+DATA STORAGE
+All content data is stored exclusively on your device. We do not upload content to the cloud.
+
+THIRD-PARTY SERVICES
+· RevenueCat: Purchase management (revenuecat.com/privacy)
+· Apple App Store: App distribution
+
+DATA DELETION
+You can delete all data at any time via Settings → Reset All Data.
+
+CHANGES
+This policy may be updated without prior notice.
+
+CONTACT
+Use the in-app contact feature to reach us.`;
+
+    const content = lang === 'ja'
+      ? (isTerms ? jaTerms : jaPrivacy)
+      : (isTerms ? enTerms : enPrivacy);
+
+    return (
+      <Modal visible={legalVisible} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={styles.legalSheet}>
+            <View style={styles.legalHeader}>
+              <Text style={styles.legalTitle}>{title}</Text>
+              <TouchableOpacity
+                onPress={() => setLegalVisible(false)}
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              >
+                <Feather name="x" size={22} color="#888" />
+              </TouchableOpacity>
+            </View>
+            <ScrollView
+              style={styles.legalScroll}
+              contentContainerStyle={styles.legalScrollContent}
+            >
+              <Text style={styles.legalBody}>{content}</Text>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+    );
+  };
+
   // ─── Bottom Nav ───────────────────────────────────────────────────────────────
 
   const hideNav = screen === 'onboarding' || screen === 'camera' || screen === 'paywall';
@@ -2029,6 +2211,7 @@ export default function Page() {
 
       <GuideModal />
       <Milestone10Modal />
+      <LegalModal />
       {toastMsg ? <Toast message={toastMsg} isError={toastError} /> : null}
 
       {/* ── Off-screen photo filter processor ──────────────────────────────── */}
@@ -2413,6 +2596,10 @@ const styles = StyleSheet.create({
     color: '#444',
     fontSize: 11,
   },
+  linkSmallTappable: {
+    color: '#666',
+    textDecorationLine: 'underline',
+  },
 
   // ── Home ──
   homeScreen: {
@@ -2736,6 +2923,13 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.7,
     shadowRadius: 8,
     elevation: 4,
+  },
+  // 録画秒数トグルのラベル
+  camDurLabel: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700',
+    letterSpacing: 0.5,
   },
 
   // シャッターボタン: 白枠 + 赤い内側（image_3）
@@ -3409,6 +3603,57 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 24,
     lineHeight: 22,
+  },
+
+  // ── Legal Modal ──
+  legalSheet: {
+    backgroundColor: '#0a0a0a',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '85%',
+    minHeight: '60%',
+  },
+  legalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#1a1a1a',
+  },
+  legalTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#fff',
+    letterSpacing: 1,
+  },
+  legalScroll: {
+    flex: 1,
+  },
+  legalScrollContent: {
+    padding: 20,
+    paddingBottom: 40,
+  },
+  legalBody: {
+    fontSize: 13,
+    color: '#aaa',
+    lineHeight: 22,
+  },
+  settingsLegalRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 20,
+  },
+  settingsLegalLink: {
+    color: '#444',
+    fontSize: 12,
+    textDecorationLine: 'underline',
+  },
+  settingsLegalSep: {
+    color: '#333',
+    fontSize: 12,
+    paddingHorizontal: 6,
   },
 
   // ── Toast ──
