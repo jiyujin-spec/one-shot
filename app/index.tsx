@@ -1596,8 +1596,8 @@ export default function Page() {
               <View style={[styles.shutterInner, isRecording && styles.shutterInnerRec]} />
             </TouchableOpacity>
 
-            {/* 右: スペーサー（対称性のため）*/}
-            <View style={styles.camTimerBtn} />
+            {/* 右: 透明スペーサー（シャッター中央揃えのため・白い丸は削除済み）*/}
+            <View style={{ width: 48 }} />
           </View>
 
         </View>
@@ -1678,10 +1678,6 @@ export default function Page() {
             );
           })}
         </View>
-        {records.length === 0 && (
-          <Text style={styles.noHistoryText}>{t('no_history')}</Text>
-        )}
-
         {/* Fullscreen record modal */}
         <Modal
           visible={!!selectedRecord}
