@@ -54,14 +54,16 @@ let patchedFiles = 0;
  * Patch a Swift file:
  *  1. Replace #if / #elseif uses of TARGET_IPHONE_SIMULATOR or TARGET_OS_SIMULATOR
  *     with `targetEnvironment(simulator)` — the Swift-native conditional syntax.
- *  2. If any bare macro references remain (rare, non-#if usage), ensure
+ *  2. Replace bare value usages like `let isSimulator = TARGET_OS_SIMULATOR > 0`
+ *     with a compilable #if targetEnvironment(simulator) block.
+ *  3. If any bare macro references remain (rare, non-#if usage), ensure
  *     `import Foundation` and `import TargetConditionals` appear before
  *     the first import statement to avoid "cannot find in scope" errors.
  */
 function patchSwift(content) {
   let changed = false;
 
-  // Replace #if / #elseif directive usages with targetEnvironment(simulator).
+  // 1. Replace #if / #elseif directive usages with targetEnvironment(simulator).
   // Handles patterns like:
   //   #if TARGET_IPHONE_SIMULATOR
   //   #elseif TARGET_IPHONE_SIMULATOR
@@ -75,14 +77,33 @@ function patchSwift(content) {
   });
   content = replaced;
 
-  // Also replace any remaining bare TARGET_IPHONE_SIMULATOR → TARGET_OS_SIMULATOR
+  // 2. Replace bare value expressions like:
+  //   let isSimulator = TARGET_OS_SIMULATOR > 0
+  //   var isSimulator = TARGET_IPHONE_SIMULATOR > 0
+  //   let isSimulator = TARGET_OS_SIMULATOR != 0
+  //   let isSimulator = TARGET_OS_SIMULATOR (no comparison)
+  // These cannot be used as runtime values in Swift; replace with a compilable
+  // #if targetEnvironment(simulator) block that assigns a Bool literal.
+  const valuePattern = /^([ \t]*)(let|var)(\s+\w+)\s*(?::\s*Bool\s*)?=\s*(?:TARGET_OS_SIMULATOR|TARGET_IPHONE_SIMULATOR)\s*(?:[><!]=?\s*\d+)?/gm;
+  content = content.replace(valuePattern, (match, indent, keyword, namePart) => {
+    changed = true;
+    return (
+      `${indent}#if targetEnvironment(simulator)\n` +
+      `${indent}${keyword}${namePart} = true\n` +
+      `${indent}#else\n` +
+      `${indent}${keyword}${namePart} = false\n` +
+      `${indent}#endif`
+    );
+  });
+
+  // 3. Also replace any remaining bare TARGET_IPHONE_SIMULATOR → TARGET_OS_SIMULATOR
   // (non-#if context, e.g. used as a value — uncommon in Swift but possible).
   if (content.includes(OLD_IPHONE)) {
     content = content.split(OLD_IPHONE).join(OLD_OS);
     changed = true;
   }
 
-  // If TARGET_OS_SIMULATOR still appears after the above replacements, the file
+  // 4. If TARGET_OS_SIMULATOR still appears after the above replacements, the file
   // needs `import TargetConditionals` (and `import Foundation` for safety).
   // Insert them before the first existing `import` statement.
   if (content.includes(OLD_OS)) {
