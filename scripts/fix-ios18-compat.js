@@ -6,7 +6,11 @@
  * references this symbol as a runtime constant will fail to compile with
  * "cannot find 'TARGET_IPHONE_SIMULATOR' in scope".
  *
- * This script replaces every occurrence with the canonical replacement
+ * For Swift files: replaces TARGET_IPHONE_SIMULATOR / TARGET_OS_SIMULATOR with
+ * the Swift-native `targetEnvironment(simulator)` conditional compilation syntax,
+ * which does NOT require any imports and is the canonical approach for Swift code.
+ *
+ * For Obj-C / C / C++ files: replaces TARGET_IPHONE_SIMULATOR with
  * TARGET_OS_SIMULATOR, which has been the preferred API since iOS 9.
  *
  * Run automatically via the "postinstall" npm script.
@@ -38,12 +42,88 @@ const SEARCH_DIRS = [
   path.join(ROOT, 'node_modules', 'expo-linear-gradient'),
 ];
 
-const EXTENSIONS = new Set(['.swift', '.m', '.mm', '.h', '.cpp', '.c']);
+const SWIFT_EXT = new Set(['.swift']);
+const NATIVE_EXT = new Set(['.m', '.mm', '.h', '.cpp', '.c']);
 
-const OLD = 'TARGET_IPHONE_SIMULATOR';
-const NEW = 'TARGET_OS_SIMULATOR';
+const OLD_IPHONE = 'TARGET_IPHONE_SIMULATOR';
+const OLD_OS = 'TARGET_OS_SIMULATOR';
 
 let patchedFiles = 0;
+
+/**
+ * Patch a Swift file:
+ *  1. Replace #if / #elseif uses of TARGET_IPHONE_SIMULATOR or TARGET_OS_SIMULATOR
+ *     with `targetEnvironment(simulator)` — the Swift-native conditional syntax.
+ *  2. If any bare macro references remain (rare, non-#if usage), ensure
+ *     `import Foundation` and `import TargetConditionals` appear before
+ *     the first import statement to avoid "cannot find in scope" errors.
+ */
+function patchSwift(content) {
+  let changed = false;
+
+  // Replace #if / #elseif directive usages with targetEnvironment(simulator).
+  // Handles patterns like:
+  //   #if TARGET_IPHONE_SIMULATOR
+  //   #elseif TARGET_IPHONE_SIMULATOR
+  //   #if TARGET_OS_SIMULATOR
+  //   #if TARGET_IPHONE_SIMULATOR == 1
+  //   #if TARGET_OS_SIMULATOR == 1
+  const directivePattern = /(#(?:if|elseif)\s+)(TARGET_IPHONE_SIMULATOR|TARGET_OS_SIMULATOR)(\s*==\s*1)?/g;
+  const replaced = content.replace(directivePattern, (_, prefix, _macro, _eq) => {
+    changed = true;
+    return `${prefix}targetEnvironment(simulator)`;
+  });
+  content = replaced;
+
+  // Also replace any remaining bare TARGET_IPHONE_SIMULATOR → TARGET_OS_SIMULATOR
+  // (non-#if context, e.g. used as a value — uncommon in Swift but possible).
+  if (content.includes(OLD_IPHONE)) {
+    content = content.split(OLD_IPHONE).join(OLD_OS);
+    changed = true;
+  }
+
+  // If TARGET_OS_SIMULATOR still appears after the above replacements, the file
+  // needs `import TargetConditionals` (and `import Foundation` for safety).
+  // Insert them before the first existing `import` statement.
+  if (content.includes(OLD_OS)) {
+    const hasFoundation = /\bimport\s+Foundation\b/.test(content);
+    const hasTargetConditionals = /\bimport\s+TargetConditionals\b/.test(content);
+
+    if (!hasFoundation || !hasTargetConditionals) {
+      const importInsert = [
+        !hasFoundation ? 'import Foundation' : null,
+        !hasTargetConditionals ? 'import TargetConditionals' : null,
+      ]
+        .filter(Boolean)
+        .join('\n');
+
+      // Insert before the first `import` line so that the macros are available.
+      const firstImportIndex = content.search(/^import\s+/m);
+      if (firstImportIndex !== -1) {
+        content =
+          content.slice(0, firstImportIndex) +
+          importInsert +
+          '\n' +
+          content.slice(firstImportIndex);
+      } else {
+        // No existing import found — prepend at the very top.
+        content = importInsert + '\n' + content;
+      }
+      changed = true;
+    }
+  }
+
+  return { content, changed };
+}
+
+/**
+ * Patch Obj-C / C / C++ files:
+ *   Replace TARGET_IPHONE_SIMULATOR → TARGET_OS_SIMULATOR (macro still valid here).
+ */
+function patchNative(content) {
+  if (!content.includes(OLD_IPHONE)) return { content, changed: false };
+  return { content: content.split(OLD_IPHONE).join(OLD_OS), changed: true };
+}
 
 function walk(dir) {
   if (!fs.existsSync(dir)) return;
@@ -51,25 +131,20 @@ function walk(dir) {
     const fullPath = path.join(dir, entry.name);
     if (entry.isDirectory()) {
       walk(fullPath);
-    } else if (EXTENSIONS.has(path.extname(entry.name))) {
+    } else {
+      const ext = path.extname(entry.name);
+      const isSwift = SWIFT_EXT.has(ext);
+      const isNative = NATIVE_EXT.has(ext);
+      if (!isSwift && !isNative) continue;
+
       try {
-        let original = fs.readFileSync(fullPath, 'utf8');
-        let changed = false;
-        if (original.includes(OLD)) {
-          original = original.split(OLD).join(NEW);
-          changed = true;
-        }
-        // Swift files using TARGET_OS_SIMULATOR need `import TargetConditionals`
-        if (
-          path.extname(entry.name) === '.swift' &&
-          original.includes(NEW) &&
-          !original.includes('import TargetConditionals')
-        ) {
-          original = 'import TargetConditionals\n' + original;
-          changed = true;
-        }
+        const original = fs.readFileSync(fullPath, 'utf8');
+        const { content, changed } = isSwift
+          ? patchSwift(original)
+          : patchNative(original);
+
         if (changed) {
-          fs.writeFileSync(fullPath, original, 'utf8');
+          fs.writeFileSync(fullPath, content, 'utf8');
           console.log(`  patched: ${path.relative(ROOT, fullPath)}`);
           patchedFiles++;
         }
@@ -80,7 +155,9 @@ function walk(dir) {
   }
 }
 
-console.log(`[fix-ios18-compat] Replacing ${OLD} → ${NEW} in native sources…`);
+console.log(
+  `[fix-ios18-compat] Replacing deprecated simulator macros in native sources…`
+);
 for (const dir of SEARCH_DIRS) {
   walk(dir);
 }
