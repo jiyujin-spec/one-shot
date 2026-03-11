@@ -53,10 +53,23 @@ function walk(dir) {
       walk(fullPath);
     } else if (EXTENSIONS.has(path.extname(entry.name))) {
       try {
-        const original = fs.readFileSync(fullPath, 'utf8');
+        let original = fs.readFileSync(fullPath, 'utf8');
+        let changed = false;
         if (original.includes(OLD)) {
-          const patched = original.split(OLD).join(NEW);
-          fs.writeFileSync(fullPath, patched, 'utf8');
+          original = original.split(OLD).join(NEW);
+          changed = true;
+        }
+        // Swift files using TARGET_OS_SIMULATOR need `import TargetConditionals`
+        if (
+          path.extname(entry.name) === '.swift' &&
+          original.includes(NEW) &&
+          !original.includes('import TargetConditionals')
+        ) {
+          original = 'import TargetConditionals\n' + original;
+          changed = true;
+        }
+        if (changed) {
+          fs.writeFileSync(fullPath, original, 'utf8');
           console.log(`  patched: ${path.relative(ROOT, fullPath)}`);
           patchedFiles++;
         }
