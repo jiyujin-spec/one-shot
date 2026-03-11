@@ -15,7 +15,6 @@
       "supportsTablet": false,
       "bundleIdentifier": "com.jin.oneshot",
       "icon": "./assets/images/icon.png",
-      "deploymentTarget": "13.4",
       "infoPlist": {
         "NSCameraUsageDescription": "One Shot uses the camera to record your habits as videos and photos.",
         "NSMicrophoneUsageDescription": "One Shot uses the microphone for video recording.",
@@ -39,6 +38,14 @@
       ]
     },
     "plugins": [
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "deploymentTarget": "13.4"
+          }
+        }
+      ],
       "expo-dev-client",
       "expo-router",
       "./modules/video-overlay/plugin",
