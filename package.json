@@ -21,7 +21,7 @@
     "expo-linear-gradient": "~12.7.2",
     "expo-linking": "~6.3.1",
     "expo-media-library": "~16.0.4",
-    "expo-sharing": "~11.0.3",
+    "expo-sharing": "~12.0.1",
     "expo-notifications": "~0.28.15",
     "expo-router": "~3.5.23",
     "expo-splash-screen": "~0.27.5",
