@@ -813,6 +813,19 @@ export default function Page() {
         try {
           Purchases.configure({ apiKey: RC_API_KEY, appUserID: loaded.rcUserID });
           const offerings = await Purchases.getOfferings();
+          // ── [DEBUG] RC offerings の生データを確認 ──────────────────────────
+          console.log('[RC Debug] getOfferings() raw result:', JSON.stringify({
+            currentOfferingId: offerings.current?.identifier,
+            packages: offerings.current?.availablePackages.map(p => ({
+              rcIdentifier: p.identifier,
+              productId:    p.product.identifier,
+              price:        p.product.price,
+              priceString:  p.product.priceString,
+              currency:     p.product.currencyCode,
+              title:        p.product.title,
+            })) ?? [],
+          }, null, 2));
+          // ──────────────────────────────────────────────────────────────────
           setRcOfferings(offerings);
           const active = await syncRCEntitlements();
           if (active !== loaded.subscribed) {
@@ -862,6 +875,28 @@ export default function Page() {
       AsyncStorage.setItem('oneshot_records_v2', JSON.stringify(records)).catch(() => {});
     }
   }, [records, isLoading]);
+
+  // ── Refresh RC offerings when paywall is shown ─────────────────────────────
+  // RevenueCat SDK は内部的に offerings をキャッシュするため、
+  // App Store Connect で価格を更新した直後はキャッシュが古い値を返すことがある。
+  // Paywall 表示のたびに再取得することで常に最新価格を反映させる。
+  useEffect(() => {
+    if (screen === 'paywall') {
+      Purchases.getOfferings()
+        .then(fresh => {
+          console.log('[RC Debug] Paywall refresh - annual priceString:',
+            fresh.current?.availablePackages
+              .find(p => p.product.identifier === 'com.jin.oneshot.annual.premium')
+              ?.product.priceString ?? 'NOT FOUND');
+          console.log('[RC Debug] Paywall refresh - monthly priceString:',
+            fresh.current?.availablePackages
+              .find(p => p.product.identifier === 'com.jin.oneshot.premium')
+              ?.product.priceString ?? 'NOT FOUND');
+          setRcOfferings(fresh);
+        })
+        .catch(e => console.warn('[RC Debug] Paywall offerings refresh error:', e));
+    }
+  }, [screen]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Refresh home (streak/pass) ──────────────────────────────────────────────
 
@@ -1220,6 +1255,19 @@ export default function Page() {
     const monthlyPkg  = findRCPackage('monthly');
     const annualPrice = annualPkg?.product.priceString ?? null;
     const monthlyPrice = monthlyPkg?.product.priceString ?? null;
+
+    // ── [DEBUG] PaywallScreen がレンダリングされた時点の価格を確認 ──────────
+    console.log('[RC Debug] PaywallScreen render:', {
+      annualProductId:   annualPkg?.product.identifier   ?? 'null',
+      annualPrice:       annualPkg?.product.price        ?? 'null',
+      annualPriceString: annualPkg?.product.priceString  ?? 'null',
+      annualCurrency:    annualPkg?.product.currencyCode ?? 'null',
+      monthlyProductId:   monthlyPkg?.product.identifier   ?? 'null',
+      monthlyPrice:       monthlyPkg?.product.price        ?? 'null',
+      monthlyPriceString: monthlyPkg?.product.priceString  ?? 'null',
+      monthlyCurrency:    monthlyPkg?.product.currencyCode ?? 'null',
+    });
+    // ────────────────────────────────────────────────────────────────────────
 
     return (
       <ScrollView style={styles.screen} contentContainerStyle={styles.paywallContent}>
