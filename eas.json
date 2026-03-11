@@ -7,15 +7,19 @@
       "developmentClient": true,
       "distribution": "internal",
       "ios": {
-        "simulator": false
+        "simulator": false,
+        "image": "macos-sonoma-16.2"
       }
     },
     "preview": {
-      "distribution": "internal"
+      "distribution": "internal",
+      "ios": {
+        "image": "macos-sonoma-16.2"
+      }
     },
     "production": {
       "ios": {
-        "image": "latest"
+        "image": "macos-sonoma-16.2"
       }
     }
   },
