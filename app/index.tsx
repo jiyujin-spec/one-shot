@@ -137,9 +137,9 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     guide_tip2: 'ハイライトに記録が積み上がる',
     guide_tip3: '継続を可視化して自信につなげる',
     guide_card4_title: 'パス（お休み）機能',
-    guide_card4_body: '週に1回、お休みできる「パス」が付与されます。どうしても継続できない時に使いましょう。ストリークがそのまま維持されます。',
-    guide_card5_title: 'パスの購入',
-    guide_card5_body: 'パスはApp Storeに表示される現在の価格で追加購入できます。有効期限なし、何枚でもストックできます。',
+    guide_card4_body: 'パスは毎週月曜日に1回分付与されます。\nどうしても継続できない時に使いましょう。\nストリークがそのまま維持されます。\n\n使わなかったパスは翌週以降も残ります。',
+    guide_card5_title: 'パスの追加購入',
+    guide_card5_body: 'パスはApp Storeに表示される現在の価格で追加購入できます。\n有効期限なし、何枚でもストックできます。',
     guide_start_btn: 'はじめる',
     pass_purchase_btn: 'パスを購入',
     use_pass_btn_prefix: 'パスを使う（残り ',
@@ -258,9 +258,9 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     guide_tip2: 'Your highlight reel is your proof of work',
     guide_tip3: 'Visible data builds unshakeable confidence',
     guide_card4_title: 'Rest pass',
-    guide_card4_body: "One free pass per week. Use it when life intervenes. Your streak stays intact — one pass, one miss.",
+    guide_card4_body: 'One pass is granted every Monday.\nUse it when life intervenes.\nYour streak stays intact — one pass, one miss.\n\nUnused passes carry over to the following week.',
     guide_card5_title: 'Extra passes',
-    guide_card5_body: 'Additional passes available at the current price shown in the App Store. No expiry. Stock them before you need them.',
+    guide_card5_body: 'Additional passes available at the current price shown in the App Store.\nNo expiry. Stock them before you need them.',
     guide_start_btn: 'START',
     pass_purchase_btn: 'BUY A PASS',
     use_pass_btn_prefix: 'USE PASS  (',
@@ -374,6 +374,26 @@ const defaultState: AppState = {
 };
 
 // ─── Notifications ────────────────────────────────────────────────────────────
+
+const NOTIFY_MESSAGES: Record<Lang, { title: string; body: (goal: string) => string }[]> = {
+  ja: [
+    { title: '諦めますか？',                    body: (g) => `「${g || 'One Shot'}」— 記録は嘘をつきません。` },
+    { title: '記録は嘘をつきません。',           body: (g) => `「${g || 'One Shot'}」— 今日も積み上げてください。` },
+    { title: '今日の1秒が、未来のあなたを作ります。', body: (g) => `「${g || 'One Shot'}」— 今すぐ記録しましょう。` },
+  ],
+  en: [
+    { title: 'Are you giving up?',    body: (g) => `"${g || 'One Shot'}" — The record never lies.` },
+    { title: 'The record never lies.', body: (g) => `"${g || 'One Shot'}" — Log it. Now.` },
+    { title: 'Your future self is watching.', body: (g) => `"${g || 'One Shot'}" — One second. Every day.` },
+  ],
+};
+
+function pickNotifyMessage(lang: Lang, goal: string): { title: string; body: string } {
+  const messages = NOTIFY_MESSAGES[lang];
+  const idx = new Date().getDay() % messages.length; // deterministic rotation by day-of-week
+  const m = messages[idx];
+  return { title: m.title, body: m.body(goal) };
+}
 
 Notifications.setNotificationHandler({
   handleNotification: async (): Promise<Notifications.NotificationBehavior> => ({
@@ -725,6 +745,19 @@ export default function Page() {
       if (newStreak === 10 && !prev.milestone10Shown) {
         setTimeout(() => setMilestone10Visible(true), 800);
       }
+      // 30-day celebration push notification
+      if (newStreak === 30) {
+        Notifications.scheduleNotificationAsync({
+          content: {
+            title: lang === 'ja' ? '🎉 30日連続達成！' : '🎉 30-Day Streak!',
+            body: lang === 'ja'
+              ? `「${prev.goal || 'One Shot'}」30日間、記録は嘘をつきません。本物の習慣が始まりました。`
+              : `"${prev.goal || 'One Shot'}" — 30 days. The record never lies. This is real.`,
+            sound: true,
+          },
+          trigger: null, // fire immediately
+        }).catch(() => {});
+      }
       const next = {
         ...prev,
         streak: newStreak,
@@ -842,11 +875,8 @@ export default function Page() {
         try {
           const { status } = await Notifications.requestPermissionsAsync();
           if (status === 'granted') {
-            const notifyLang = savedLang ?? 'ja';
-            const notifyTitle = notifyLang === 'ja' ? '今日の記録をしましょう！' : "Time to record today's habit!";
-            const notifyBody = notifyLang === 'ja'
-              ? `目標: ${loaded.goal || 'One Shot'}`
-              : `Goal: ${loaded.goal || 'One Shot'}`;
+            const notifyLang = (savedLang ?? 'ja') as Lang;
+            const { title: notifyTitle, body: notifyBody } = pickNotifyMessage(notifyLang, loaded.goal);
             await scheduleDailyNotification(loaded.notifyTime, notifyTitle, notifyBody);
           }
         } catch (e) {
@@ -1253,7 +1283,8 @@ export default function Page() {
   const PaywallScreen = () => {
     const annualPkg   = findRCPackage('annual');
     const monthlyPkg  = findRCPackage('monthly');
-    const annualPrice = annualPkg?.product.priceString ?? null;
+    const annualFallback  = lang === 'ja' ? '¥6,000' : '$39.99';
+    const annualPrice = annualPkg?.product.priceString ?? annualFallback;
     const monthlyPrice = monthlyPkg?.product.priceString ?? null;
 
     // ── [DEBUG] PaywallScreen がレンダリングされた時点の価格を確認 ──────────
@@ -1832,10 +1863,7 @@ export default function Page() {
           try {
             const { status } = await Notifications.getPermissionsAsync();
             if (status === 'granted') {
-              const title = lang === 'ja' ? '今日の記録をしましょう！' : "Time to record today's habit!";
-              const body = lang === 'ja'
-                ? `目標: ${newGoal || 'One Shot'}`
-                : `Goal: ${newGoal || 'One Shot'}`;
+              const { title, body } = pickNotifyMessage(lang, newGoal);
               await scheduleDailyNotification(notifyEdit.trim(), title, body);
             }
           } catch {}
@@ -2012,13 +2040,6 @@ export default function Page() {
               <Text style={styles.guideCardBody}>{card.body}</Text>
             </View>
           ))}
-
-          <View style={styles.guideCard}>
-            <Text style={styles.guideCardTitle}>{t('guide_card2_title')}</Text>
-            {[1, 2, 3, 4].map(i => (
-              <Text key={i} style={styles.guideStep}>{i}. {t(`guide_step${i}`)}</Text>
-            ))}
-          </View>
 
           <TouchableOpacity
             style={[styles.btnPrimary, { marginTop: 8 }]}
