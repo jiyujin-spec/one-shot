@@ -116,8 +116,8 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     paywall_feature4: '毎週1枚の無料パス自動付与',
     paywall_feature5: '撮影履歴・カレンダー表示',
     paywall_subscribe_btn: '年額プランで始める',
-    paywall_iap_note: '年額: $24.99/年  ·  月額: $4.99/月\nApple IDに課金されます。サブスクリプションは購入後、現在の期間終了前に解約しない限り自動更新されます。',
-    paywall_pass_note: 'お休みパスは $0.99/枚 で別途購入できます',
+    paywall_iap_note: 'App Storeに表示される現在の価格が適用されます。\nApple IDに課金されます。サブスクリプションは購入後、現在の期間終了前に解約しない限り自動更新されます。',
+    paywall_pass_note: 'お休みパスはApp Storeに表示される現在の価格で別途購入できます',
     paywall_restore_btn: '購入を復元する',
     paywall_terms: '利用規約',
     paywall_privacy: 'プライバシーポリシー',
@@ -137,11 +137,11 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     guide_tip2: 'ハイライトに記録が積み上がる',
     guide_tip3: '継続を可視化して自信につなげる',
     guide_card4_title: 'パス（お休み）機能',
-    guide_card4_body: '週に1回、お休みできる「パス」が付与されます。どうしても継続できない時に使いましょう。ストリークがそのまま維持されます。',
-    guide_card5_title: 'パスの購入',
-    guide_card5_body: 'パスは1枚$0.99で追加購入できます。有効期限なし、何枚でもストックできます。',
+    guide_card4_body: 'パスは毎週月曜日に1回分付与されます。\nどうしても継続できない時に使いましょう。\nストリークがそのまま維持されます。\n\n使わなかったパスは翌週以降も残ります。',
+    guide_card5_title: 'パスの追加購入',
+    guide_card5_body: 'パスはApp Storeに表示される現在の価格で追加購入できます。\n有効期限なし、何枚でもストックできます。',
     guide_start_btn: 'はじめる',
-    pass_purchase_btn: 'パスを購入（$0.99）',
+    pass_purchase_btn: 'パスを購入',
     use_pass_btn_prefix: 'パスを使う（残り ',
     use_pass_btn_suffix: '枚）',
     toast_save_error: '保存エラー',
@@ -161,8 +161,8 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     toast_no_pass: 'パスがありません',
     toast_pass_used: 'パスを使用しました。お疲れ様！',
     toast_paid_pass_added: '有料パス +1 追加されました（ストック中）',
-    confirm_purchase_pass: 'パスを1回分購入しますか？（$0.99）',
-    confirm_subscribe: '月額¥300のメンバーシップを開始しますか？',
+    confirm_purchase_pass: 'パスを1回分購入しますか？（App Storeに表示される現在の価格）',
+    confirm_subscribe: 'メンバーシップを開始しますか？',
     confirm_restore: '購入を復元しますか？',
     confirm_use_pass: '本日はパス（お休み）を使用しますか？\nストリークがそのまま維持されます。',
     confirm_reset: 'すべてのデータを削除しますか？',
@@ -237,8 +237,8 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     paywall_feature4: 'Weekly free rest pass — auto-granted',
     paywall_feature5: 'Full history with calendar view',
     paywall_subscribe_btn: 'Get Access',
-    paywall_iap_note: 'Annual: $24.99/yr  ·  Monthly: $4.99/mo\nCharged to your Apple ID. Subscription auto-renews unless cancelled before the end of the current period.',
-    paywall_pass_note: 'Rest passes available separately at $0.99/pass',
+    paywall_iap_note: 'Current price shown in the App Store applies.\nCharged to your Apple ID. Subscription auto-renews unless cancelled before the end of the current period.',
+    paywall_pass_note: 'Rest passes available separately at the current price shown in the App Store',
     paywall_restore_btn: 'Restore Purchases',
     paywall_terms: 'Terms of Service',
     paywall_privacy: 'Privacy Policy',
@@ -258,11 +258,11 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     guide_tip2: 'Your highlight reel is your proof of work',
     guide_tip3: 'Visible data builds unshakeable confidence',
     guide_card4_title: 'Rest pass',
-    guide_card4_body: "One free pass per week. Use it when life intervenes. Your streak stays intact — one pass, one miss.",
+    guide_card4_body: 'One pass is granted every Monday.\nUse it when life intervenes.\nYour streak stays intact — one pass, one miss.\n\nUnused passes carry over to the following week.',
     guide_card5_title: 'Extra passes',
-    guide_card5_body: 'Additional passes at $0.99 each. No expiry. Stock them before you need them.',
+    guide_card5_body: 'Additional passes available at the current price shown in the App Store.\nNo expiry. Stock them before you need them.',
     guide_start_btn: 'START',
-    pass_purchase_btn: 'BUY A PASS ($0.99)',
+    pass_purchase_btn: 'BUY A PASS',
     use_pass_btn_prefix: 'USE PASS  (',
     use_pass_btn_suffix: ' left)',
     toast_save_error: 'Save error',
@@ -282,7 +282,7 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     toast_no_pass: 'No passes remaining',
     toast_pass_used: 'Pass used. Stay on track.',
     toast_paid_pass_added: 'Pass +1 stocked',
-    confirm_purchase_pass: 'Purchase 1 rest pass? ($0.99)',
+    confirm_purchase_pass: 'Purchase 1 rest pass? (Current price shown in the App Store)',
     confirm_subscribe: 'Start your annual membership?',
     confirm_restore: 'Restore purchases?',
     confirm_use_pass: 'Use a rest pass for today?\nYour streak will be maintained.',
@@ -374,6 +374,26 @@ const defaultState: AppState = {
 };
 
 // ─── Notifications ────────────────────────────────────────────────────────────
+
+const NOTIFY_MESSAGES: Record<Lang, { title: string; body: (goal: string) => string }[]> = {
+  ja: [
+    { title: '諦めますか？',                    body: (g) => `「${g || 'One Shot'}」— 記録は嘘をつきません。` },
+    { title: '記録は嘘をつきません。',           body: (g) => `「${g || 'One Shot'}」— 今日も積み上げてください。` },
+    { title: '今日の1秒が、未来のあなたを作ります。', body: (g) => `「${g || 'One Shot'}」— 今すぐ記録しましょう。` },
+  ],
+  en: [
+    { title: 'Are you giving up?',    body: (g) => `"${g || 'One Shot'}" — The record never lies.` },
+    { title: 'The record never lies.', body: (g) => `"${g || 'One Shot'}" — Log it. Now.` },
+    { title: 'Your future self is watching.', body: (g) => `"${g || 'One Shot'}" — One second. Every day.` },
+  ],
+};
+
+function pickNotifyMessage(lang: Lang, goal: string): { title: string; body: string } {
+  const messages = NOTIFY_MESSAGES[lang];
+  const idx = new Date().getDay() % messages.length; // deterministic rotation by day-of-week
+  const m = messages[idx];
+  return { title: m.title, body: m.body(goal) };
+}
 
 Notifications.setNotificationHandler({
   handleNotification: async (): Promise<Notifications.NotificationBehavior> => ({
@@ -725,6 +745,19 @@ export default function Page() {
       if (newStreak === 10 && !prev.milestone10Shown) {
         setTimeout(() => setMilestone10Visible(true), 800);
       }
+      // 30-day celebration push notification
+      if (newStreak === 30) {
+        Notifications.scheduleNotificationAsync({
+          content: {
+            title: lang === 'ja' ? '🎉 30日連続達成！' : '🎉 30-Day Streak!',
+            body: lang === 'ja'
+              ? `「${prev.goal || 'One Shot'}」30日間、記録は嘘をつきません。本物の習慣が始まりました。`
+              : `"${prev.goal || 'One Shot'}" — 30 days. The record never lies. This is real.`,
+            sound: true,
+          },
+          trigger: null, // fire immediately
+        }).catch(() => {});
+      }
       const next = {
         ...prev,
         streak: newStreak,
@@ -813,6 +846,19 @@ export default function Page() {
         try {
           Purchases.configure({ apiKey: RC_API_KEY, appUserID: loaded.rcUserID });
           const offerings = await Purchases.getOfferings();
+          // ── [DEBUG] RC offerings の生データを確認 ──────────────────────────
+          console.log('[RC Debug] getOfferings() raw result:', JSON.stringify({
+            currentOfferingId: offerings.current?.identifier,
+            packages: offerings.current?.availablePackages.map(p => ({
+              rcIdentifier: p.identifier,
+              productId:    p.product.identifier,
+              price:        p.product.price,
+              priceString:  p.product.priceString,
+              currency:     p.product.currencyCode,
+              title:        p.product.title,
+            })) ?? [],
+          }, null, 2));
+          // ──────────────────────────────────────────────────────────────────
           setRcOfferings(offerings);
           const active = await syncRCEntitlements();
           if (active !== loaded.subscribed) {
@@ -829,11 +875,8 @@ export default function Page() {
         try {
           const { status } = await Notifications.requestPermissionsAsync();
           if (status === 'granted') {
-            const notifyLang = savedLang ?? 'ja';
-            const notifyTitle = notifyLang === 'ja' ? '今日の記録をしましょう！' : "Time to record today's habit!";
-            const notifyBody = notifyLang === 'ja'
-              ? `目標: ${loaded.goal || 'One Shot'}`
-              : `Goal: ${loaded.goal || 'One Shot'}`;
+            const notifyLang = (savedLang ?? 'ja') as Lang;
+            const { title: notifyTitle, body: notifyBody } = pickNotifyMessage(notifyLang, loaded.goal);
             await scheduleDailyNotification(loaded.notifyTime, notifyTitle, notifyBody);
           }
         } catch (e) {
@@ -862,6 +905,28 @@ export default function Page() {
       AsyncStorage.setItem('oneshot_records_v2', JSON.stringify(records)).catch(() => {});
     }
   }, [records, isLoading]);
+
+  // ── Refresh RC offerings when paywall is shown ─────────────────────────────
+  // RevenueCat SDK は内部的に offerings をキャッシュするため、
+  // App Store Connect で価格を更新した直後はキャッシュが古い値を返すことがある。
+  // Paywall 表示のたびに再取得することで常に最新価格を反映させる。
+  useEffect(() => {
+    if (screen === 'paywall') {
+      Purchases.getOfferings()
+        .then(fresh => {
+          console.log('[RC Debug] Paywall refresh - annual priceString:',
+            fresh.current?.availablePackages
+              .find(p => p.product.identifier === 'com.jin.oneshot.annual.premium')
+              ?.product.priceString ?? 'NOT FOUND');
+          console.log('[RC Debug] Paywall refresh - monthly priceString:',
+            fresh.current?.availablePackages
+              .find(p => p.product.identifier === 'com.jin.oneshot.premium')
+              ?.product.priceString ?? 'NOT FOUND');
+          setRcOfferings(fresh);
+        })
+        .catch(e => console.warn('[RC Debug] Paywall offerings refresh error:', e));
+    }
+  }, [screen]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Refresh home (streak/pass) ──────────────────────────────────────────────
 
@@ -1218,8 +1283,22 @@ export default function Page() {
   const PaywallScreen = () => {
     const annualPkg   = findRCPackage('annual');
     const monthlyPkg  = findRCPackage('monthly');
-    const annualPrice = annualPkg?.product.priceString ?? null;
+    const annualFallback  = lang === 'ja' ? '¥6,000' : '$39.99';
+    const annualPrice = annualPkg?.product.priceString ?? annualFallback;
     const monthlyPrice = monthlyPkg?.product.priceString ?? null;
+
+    // ── [DEBUG] PaywallScreen がレンダリングされた時点の価格を確認 ──────────
+    console.log('[RC Debug] PaywallScreen render:', {
+      annualProductId:   annualPkg?.product.identifier   ?? 'null',
+      annualPrice:       annualPkg?.product.price        ?? 'null',
+      annualPriceString: annualPkg?.product.priceString  ?? 'null',
+      annualCurrency:    annualPkg?.product.currencyCode ?? 'null',
+      monthlyProductId:   monthlyPkg?.product.identifier   ?? 'null',
+      monthlyPrice:       monthlyPkg?.product.price        ?? 'null',
+      monthlyPriceString: monthlyPkg?.product.priceString  ?? 'null',
+      monthlyCurrency:    monthlyPkg?.product.currencyCode ?? 'null',
+    });
+    // ────────────────────────────────────────────────────────────────────────
 
     return (
       <ScrollView style={styles.screen} contentContainerStyle={styles.paywallContent}>
@@ -1784,10 +1863,7 @@ export default function Page() {
           try {
             const { status } = await Notifications.getPermissionsAsync();
             if (status === 'granted') {
-              const title = lang === 'ja' ? '今日の記録をしましょう！' : "Time to record today's habit!";
-              const body = lang === 'ja'
-                ? `目標: ${newGoal || 'One Shot'}`
-                : `Goal: ${newGoal || 'One Shot'}`;
+              const { title, body } = pickNotifyMessage(lang, newGoal);
               await scheduleDailyNotification(notifyEdit.trim(), title, body);
             }
           } catch {}
@@ -1965,13 +2041,6 @@ export default function Page() {
             </View>
           ))}
 
-          <View style={styles.guideCard}>
-            <Text style={styles.guideCardTitle}>{t('guide_card2_title')}</Text>
-            {[1, 2, 3, 4].map(i => (
-              <Text key={i} style={styles.guideStep}>{i}. {t(`guide_step${i}`)}</Text>
-            ))}
-          </View>
-
           <TouchableOpacity
             style={[styles.btnPrimary, { marginTop: 8 }]}
             onPress={() => {
@@ -2036,8 +2105,8 @@ export default function Page() {
 4. サブスクリプションプラン
 本アプリのすべての機能はサブスクリプションプランでご利用いただけます。課金は Apple ID アカウントを通じて処理されます。
 
-* 年額プラン： $24.99 / 年（年払い）
-* 月額プラン： $4.99 / 月（月払い）
+* 年額プラン： App Storeに表示される現在の価格（年払い）
+* 月額プラン： App Storeに表示される現在の価格（月払い）
 * 更新周期： 各契約期間終了時に自動更新されます。
 * 課金タイミング： 購入確認後、Apple ID アカウントに課金されます。以降、各更新期間の開始24時間以内に自動的に課金されます。
 * 無料トライアル（提供する場合）： 無料トライアル期間終了の24時間前までに解約しない場合、有料サブスクリプションに移行します。
@@ -2052,7 +2121,7 @@ Apple サブスクリプションの管理・解約は以下から行えます�
 5. アプリ内課金（パスの購入）
 本アプリのアプリ内課金はすべて Apple App Store を通じて処理されます。購入・払い戻し・キャンセルは Apple の規約に従います。
 
-* 有料パス（$0.99/枚）： ストリークを維持するための消費アイテムです。消費後の返金はいたしかねます。有効期限なしで何枚でもストックできます。
+* 有料パス（App Storeに表示される現在の価格）： ストリークを維持するための消費アイテムです。消費後の返金はいたしかねます。有効期限なしで何枚でもストックできます。
 * 無料パス： 毎週月曜日 AM3:00 に1枚付与されます。繰り越し不可です。
 * 消費順序： 有料パスが先に消費され、次に無料パスが消費されます。
 
@@ -2134,8 +2203,8 @@ Minors must obtain parental or guardian consent before using this App.
 4. Subscription Plans
 All features of the App are available through a subscription plan. Payments are processed through your Apple ID account.
 
-* Annual Plan: $24.99 / year (billed annually)
-* Monthly Plan: $4.99 / month (billed monthly)
+* Annual Plan: Current price shown in the App Store (billed annually)
+* Monthly Plan: Current price shown in the App Store (billed monthly)
 * Renewal: Automatically renews at the end of each billing period.
 * Billing: Charged to your Apple ID account upon purchase confirmation. Subsequent charges occur within 24 hours before the start of each renewal period.
 * Free Trial (if offered): If you do not cancel at least 24 hours before the end of the free trial period, you will be charged for a paid subscription.
@@ -2150,7 +2219,7 @@ To manage or cancel your Apple subscription:
 5. In-App Purchases (Passes)
 All in-app purchases are processed through the Apple App Store. Purchases, refunds, and cancellations are subject to Apple's policies.
 
-* Paid Pass ($0.99/pass): A consumable item used to maintain your streak. No refunds after use. No expiry — stock as many as you like.
+* Paid Pass (current price shown in the App Store): A consumable item used to maintain your streak. No refunds after use. No expiry — stock as many as you like.
 * Free Pass: One pass is automatically granted every Monday at 3:00 AM. Cannot be carried over to the next week.
 * Consumption order: Paid passes are consumed first, then free passes.
 
