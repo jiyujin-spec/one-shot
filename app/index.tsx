@@ -360,6 +360,51 @@ function daysBetween(a: string, b: string): number {
   return differenceInCalendarDays(new Date(b), new Date(a));
 }
 
+// ─── Pure streak calculator ───────────────────────────────────────────────────
+// records 配列のみを唯一の正解源として streak を算出する純粋関数。
+// appState.streak への依存を一切排除することで、削除/再撮影ループで値が壊れるのを
+// 構造的に防ぐ。
+//
+// ロジック:
+//   1. records の全日付（パス含む）を重複排除・降順ソート
+//   2. 最新日付が today から 2日以上前なら streak = 0（継続途切れ）
+//   3. 最新日付から遡って連続する日付を数える → それが streak
+//
+// これにより「撮影→削除→再撮影」を何度繰り返しても、
+// records に前日までのエントリが存在する限り streak は正しく復元される。
+function calculateStreak(records: RecordEntry[], today: string): number {
+  // 未来日を除外した一意の日付を降順で取得
+  const uniqueDates = [...new Set(records.map(r => r.date))]
+    .filter(d => d <= today)
+    .sort()
+    .reverse();
+
+  if (uniqueDates.length === 0) return 0;
+
+  // 最新記録が 2日以上前 → 継続途切れ
+  if (daysBetween(uniqueDates[0], today) >= 2) return 0;
+
+  // 連続日数をカウント（1日ずつ遡る）
+  let streak = 1;
+  for (let i = 1; i < uniqueDates.length; i++) {
+    if (daysBetween(uniqueDates[i], uniqueDates[i - 1]) === 1) {
+      streak++;
+    } else {
+      break;
+    }
+  }
+  return streak;
+}
+
+// records 配列から最新の記録日付を返す（streak と同じ基準: 未来日除外）
+function getLastRecordDate(records: RecordEntry[], today: string): string {
+  const dates = [...new Set(records.map(r => r.date))]
+    .filter(d => d <= today)
+    .sort()
+    .reverse();
+  return dates[0] ?? '';
+}
+
 const defaultState: AppState = {
   goal: '',
   streak: 0,
@@ -591,12 +636,15 @@ export default function Page() {
     return s;
   }, []);
 
-  // 当日限定モデル: 前日までに記録もパスもなければ容赦なくリセット
-  const updateStreak = useCallback((s: AppState): AppState => {
-    if (!s.lastRecordDate) return s;
-    const diff = daysBetween(s.lastRecordDate, getAppDate());
-    if (diff >= 2) return { ...s, streak: 0 }; // 昨日以前から未記録 → 即リセット
-    return s; // diff=0(今日済) or diff=1(昨日済・今日まだ) はそのまま
+  // records 配列から streak を再計算して appState を更新する（唯一の正解源を強制適用）
+  // 旧実装は lastRecordDate との diff だけで判定していたが、
+  // calculateStreak は records 全体を走査するため不整合が発生しない。
+  const updateStreak = useCallback((s: AppState, currentRecords: RecordEntry[]): AppState => {
+    const today = getAppDate();
+    const computedStreak = calculateStreak(currentRecords, today);
+    const computedLastDate = getLastRecordDate(currentRecords, today);
+    if (s.streak === computedStreak && s.lastRecordDate === computedLastDate) return s;
+    return { ...s, streak: computedStreak, lastRecordDate: computedLastDate };
   }, []);
 
   // ── RevenueCat helpers ──────────────────────────────────────────────────────
@@ -726,11 +774,13 @@ export default function Page() {
       {
         text: t('confirm_use_pass_ok'),
         onPress: () => {
+          // records を唯一の正解源として streak を計算（appState.streak に依存しない）
+          const recordsWithToday = [...records.filter(r => r.date !== today),
+            { date: today, ts: Date.now(), day: 0 } as RecordEntry];
+          const newStreak = calculateStreak(recordsWithToday, today);
+          const passEntry: RecordEntry = { date: today, day: newStreak, ts: Date.now(), isPass: true };
+          setRecords(r => [passEntry, ...r.filter(x => x.date !== today)]);
           setAppState(prev => {
-            const diff = prev.lastRecordDate ? daysBetween(prev.lastRecordDate, today) : 999;
-            const newStreak = diff <= 1 ? prev.streak + 1 : 1;
-            const passEntry: RecordEntry = { date: today, day: newStreak, ts: Date.now(), isPass: true };
-            setRecords(r => [passEntry, ...r.filter(x => x.date !== today)]);
             const consumed = consumePass({ ...prev, streak: newStreak, lastRecordDate: today });
             saveAppState(consumed);
             return consumed;
@@ -739,7 +789,7 @@ export default function Page() {
         },
       },
     ]);
-  }, [appState, totalPassCount, purchasePass, consumePass, saveAppState, showToast, t]);
+  }, [appState, records, totalPassCount, purchasePass, consumePass, saveAppState, showToast, t]);
 
   // ── Record today ────────────────────────────────────────────────────────────
   // ・1日1本目：ストリーク更新 + レコード作成 + 通知キャンセル
@@ -774,8 +824,12 @@ export default function Page() {
     }
 
     // ── 1本目：ストリーク計算・更新 ──
-    const diff = appState.lastRecordDate ? daysBetween(appState.lastRecordDate, today) : 999;
-    const newStreak = diff <= 1 ? appState.streak + 1 : 1;
+    // records 配列を唯一の正解源として calculateStreak で算出する。
+    // appState.streak / lastRecordDate には依存しないため、
+    // 削除後に appState が不整合な状態でも正しい値が得られる。
+    const recordsWithToday = [...records.filter(r => r.date !== today),
+      { date: today, ts: Date.now(), day: 0 } as RecordEntry];
+    const newStreak = calculateStreak(recordsWithToday, today);
 
     const newEntry: RecordEntry = { date: today, day: newStreak, ts: Date.now(), uris: [uri], uri };
     setRecords(prev => [newEntry, ...prev.filter(r => r.date !== today)]);
@@ -883,7 +937,18 @@ export default function Page() {
 
         // Load records
         const recRaw = await AsyncStorage.getItem('oneshot_records_v2');
-        if (recRaw) setRecords(JSON.parse(recRaw));
+        let loadedRecords: RecordEntry[] = [];
+        if (recRaw) {
+          loadedRecords = JSON.parse(recRaw);
+          setRecords(loadedRecords);
+        }
+
+        // ── records 配列を唯一の正解源として streak を再計算 ──
+        // 保存された appState.streak は過去の不整合で壊れている可能性があるため、
+        // 起動のたびに records から正しい値を導出して上書きする。
+        const initToday = getAppDate();
+        loaded.streak = calculateStreak(loadedRecords, initToday);
+        loaded.lastRecordDate = getLastRecordDate(loadedRecords, initToday);
 
         setAppState(loaded);
         await saveAppState(loaded);
@@ -975,12 +1040,14 @@ export default function Page() {
   }, [screen]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Refresh home (streak/pass) ──────────────────────────────────────────────
+  // ホーム画面表示のたびに records から streak を再計算し、appState と同期させる。
+  // これにより、バックグラウンド復帰時や日付またぎでも正しい値が表示される。
 
   useEffect(() => {
     if (screen === 'home') {
       setAppState(prev => {
-        const afterStreak = updateStreak(prev);        // diff>=2 → streak=0
-        const afterPass = checkPassGrant(afterStreak); // 月曜フリーパス付与
+        const afterStreak = updateStreak(prev, records);  // records → streak 再計算
+        const afterPass = checkPassGrant(afterStreak);    // 月曜フリーパス付与
         if (afterPass !== prev) saveAppState(afterPass);
         return afterPass;
       });
@@ -1179,18 +1246,17 @@ export default function Page() {
               return next;
             });
           } else {
-            // ── エントリ全削除 → 直前の記録にストリークを確実に復元 ──
-            // records から当日エントリを除いた配列をここで計算してから使用
+            // ── エントリ全削除 → calculateStreak で streak を動的に再計算 ──
+            // latestBefore.day（保存済みの古い値）には依存しない。
+            // records 配列が唯一の正解源なので、削除後の配列から計算すれば
+            // 「撮影→削除→再撮影」を何度繰り返しても正しい値が必ず得られる。
             const recordsAfterDelete = records.filter(r => r.date !== record.date);
             setRecords(recordsAfterDelete);
             AsyncStorage.setItem('oneshot_records_v2', JSON.stringify(recordsAfterDelete)).catch(() => {});
 
-            // 直前（最新）のエントリを取得してストリーク復元
-            // （パスも含む：パス使用日もストリーク継続として扱う）
-            const latestBefore = [...recordsAfterDelete]
-              .sort((a, b) => b.ts - a.ts)[0];
-            const restoredDate = latestBefore?.date ?? '';
-            const restoredStreak = latestBefore?.day ?? 0;
+            const todayForCalc = getAppDate();
+            const restoredStreak = calculateStreak(recordsAfterDelete, todayForCalc);
+            const restoredDate = getLastRecordDate(recordsAfterDelete, todayForCalc);
 
             setAppState(prev => {
               const next = { ...prev, streak: restoredStreak, lastRecordDate: restoredDate };
