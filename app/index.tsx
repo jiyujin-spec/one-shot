@@ -939,8 +939,22 @@ export default function Page() {
         const recRaw = await AsyncStorage.getItem('oneshot_records_v2');
         let loadedRecords: RecordEntry[] = [];
         if (recRaw) {
-          loadedRecords = JSON.parse(recRaw);
+          const parsed: RecordEntry[] = JSON.parse(recRaw);
+          // ── 旧データ移行: uri のみ持つ単一 URI 形式を uris 配列に統一 ──
+          // アップデート前の古いエントリは uri?: string のみ存在し uris が無い。
+          // ここで一括変換することで getRecordUris() の後方互換処理に依存せず、
+          // 動画パスが確実に解決できる状態にしてから setRecords する。
+          loadedRecords = parsed.map(r => {
+            if (r.uri && (!r.uris || r.uris.length === 0)) {
+              return { ...r, uris: [r.uri] };
+            }
+            return r;
+          });
           setRecords(loadedRecords);
+          // 移行が発生した場合は永続化しておく
+          if (loadedRecords.some((r, i) => r !== parsed[i])) {
+            AsyncStorage.setItem('oneshot_records_v2', JSON.stringify(loadedRecords)).catch(() => {});
+          }
         }
 
         // ── records 配列を唯一の正解源として streak を再計算 ──
@@ -1086,6 +1100,21 @@ export default function Page() {
     await new Promise<void>(r => setTimeout(r, 200));
     if (!cameraRef.current) return; // 待機中に unmount された場合のガード
 
+    // ── フィルター用 currentDay を計算（ホーム画面ストリークと同ロジック）──
+    // 同日2本目以降は todayRec.day を流用しカウントアップを防ぐ。
+    // 1本目は records から calculateStreak で正しい値を導出する。
+    const filterToday = getAppDate();
+    const filterTodayRec = records.find(r => r.date === filterToday && !r.isPass);
+    const filterCurrentDay = filterTodayRec
+      ? filterTodayRec.day  // 2本目以降: 1本目と同じ day 番号を再利用
+      : (() => {             // 1本目: 今日分を仮追加してストリークを計算
+          const withToday = [
+            ...records.filter(r => r.date !== filterToday),
+            { date: filterToday, ts: Date.now(), day: 0 } as RecordEntry,
+          ];
+          return calculateStreak(withToday, filterToday);
+        })();
+
     // ── 写真モード ──
     if (camMode === 'photo') {
       try {
@@ -1101,7 +1130,7 @@ export default function Page() {
           setPhotoProcessorData({
             uri: photo.uri,
             habitName: (appState.goal || 'HABIT').toUpperCase(),
-            currentDay: appState.streak + 1,
+            currentDay: filterCurrentDay,
             captureTime,
           });
         }
@@ -1170,13 +1199,13 @@ export default function Page() {
     setIsProcessingVideo(true);
     try {
       const currentPhase = appState.phase ?? 1;
-      const nextDay = appState.streak + 1;
+      // filterCurrentDay は上で計算済み（同日2本目以降はカウントアップしない）
       const processed = await processVideo({
         inputPath: rawUri,
         habitName: (appState.goal || 'HABIT').toUpperCase(),
-        currentDay: nextDay,
+        currentDay: filterCurrentDay,
         captureTime: format(captureTime, "yyyy.MM/dd HH:mm"),
-        dayLabel: currentPhase > 1 ? `P${currentPhase} DAY${nextDay}` : undefined,
+        dayLabel: currentPhase > 1 ? `P${currentPhase} DAY${filterCurrentDay}` : undefined,
       });
       setCapturedUri(processed);  // transition to preview with processed video
     } catch (vErr) {
@@ -1186,8 +1215,8 @@ export default function Page() {
       setIsProcessingVideo(false);
     }
   }, [camPermission, requestCamPermission, isRecording, countdown, camMode,
-      appState.showRecordingCountdown, appState.goal,
-      appState.streak, clearCamTimers, showToast, t]);
+      appState.showRecordingCountdown, appState.goal, appState.phase,
+      records, clearCamTimers, showToast, t]);
 
   const retake = useCallback(() => {
     clearCamTimers();
@@ -2697,7 +2726,11 @@ Email: ristu.japan@gmail.com`;
            → React が JSX ツリーの同じ位置に View/StableCameraView を見つけ続ける
            → countdown state が変わっても CameraView を再マウントしない → フリッカー根絶 */}
       {screen === 'camera' && CameraScreen()}
-      {screen === 'history' && <HistoryScreen />}
+      {/* HistoryScreen() を関数として直接呼び出す（<HistoryScreen /> ではない）
+          → Page 再レンダリング時も同一位置の JSX ノードとして扱われる
+          → selectedRecord 等の state 変更が即座にモーダル visible に反映され、
+            タブ切り替えなしで画面が更新される「レンダリング詰まり」を解消 */}
+      {screen === 'history' && HistoryScreen()}
       {screen === 'settings' && <SettingsScreen />}
 
       {!hideNav && (
