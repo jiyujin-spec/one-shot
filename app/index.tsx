@@ -47,6 +47,7 @@ const RC_API_KEY = 'appl_hxzNKcnblLemtdWosMHSIFpQWYR';
 const HOUR_BOUNDARY = 3; // Day resets at 3 AM
 const STORAGE_KEY = 'oneshot_state_v2';
 const LANG_KEY = 'oneshot_lang';
+const MAX_SLOTS = 5; // 1日あたり最大撮影枚数
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -79,8 +80,16 @@ interface RecordEntry {
   date: string;
   day: number;
   ts: number;
-  uri?: string;
+  uri?: string;    // legacy: single URI (kept for backward compat)
+  uris?: string[]; // multi-slot: up to MAX_SLOTS URIs
   isPass?: boolean;
+}
+
+// RecordEntry から URI 配列を取得するヘルパー（後方互換）
+function getRecordUris(rec: RecordEntry): string[] {
+  if (rec.uris && rec.uris.length > 0) return rec.uris;
+  if (rec.uri) return [rec.uri];
+  return [];
 }
 
 // ─── Translations ─────────────────────────────────────────────────────────────
@@ -503,6 +512,10 @@ export default function Page() {
   const [calYear, setCalYear] = useState(new Date().getFullYear());
   const [calMonth, setCalMonth] = useState(new Date().getMonth());
   const [selectedRecord, setSelectedRecord] = useState<RecordEntry | null>(null);
+  // 日付セルタップで開くデイリー詳細シート用
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  // デイリー詳細シートから再生する動画スロットのインデックス
+  const [selectedSlotIdx, setSelectedSlotIdx] = useState<number | null>(null);
 
   // RevenueCat state
   const [rcOfferings, setRcOfferings] = useState<PurchasesOfferings | null>(null);
@@ -729,47 +742,80 @@ export default function Page() {
   }, [appState, totalPassCount, purchasePass, consumePass, saveAppState, showToast, t]);
 
   // ── Record today ────────────────────────────────────────────────────────────
+  // ・1日1本目：ストリーク更新 + レコード作成 + 通知キャンセル
+  // ・2本目以降（最大MAX_SLOTS）：既存エントリの uris に追記のみ（ストリーク変更なし）
 
   const recordToday = useCallback((uri: string) => {
-    setAppState(prev => {
-      const today = getAppDate();
-      if (prev.lastRecordDate === today) return prev;
-      const diff = prev.lastRecordDate ? daysBetween(prev.lastRecordDate, today) : 999;
-      const newStreak = diff <= 1 ? prev.streak + 1 : 1;
-      const newEntry: RecordEntry = { date: today, day: newStreak, ts: Date.now(), uri };
-      setRecords(r => [newEntry, ...r]);
-      // Trigger store review when streak first reaches 5
-      const shouldReview = newStreak === 5 && !prev.reviewRequested;
-      if (shouldReview) setReviewReady(true);
-      // Trigger 10-day milestone popup (once only)
-      if (newStreak === 10 && !prev.milestone10Shown) {
-        setTimeout(() => setMilestone10Visible(true), 800);
-      }
-      // 30-day celebration push notification
-      if (newStreak === 30) {
-        Notifications.scheduleNotificationAsync({
-          content: {
-            title: lang === 'ja' ? '🎉 30日連続達成！' : '🎉 30-Day Streak!',
-            body: lang === 'ja'
-              ? `「${prev.goal || 'One Shot'}」30日間、記録は嘘をつきません。本物の習慣が始まりました。`
-              : `"${prev.goal || 'One Shot'}" — 30 days. The record never lies. This is real.`,
-            sound: true,
-          },
-          trigger: null, // fire immediately
-        }).catch(() => {});
-      }
-      const next = {
-        ...prev,
-        streak: newStreak,
-        lastRecordDate: today,
-        reviewRequested: shouldReview ? true : prev.reviewRequested,
-        milestone10Shown: newStreak >= 10 ? true : prev.milestone10Shown,
-      };
-      saveAppState(next);
-      showToast(t('toast_save_complete', { day: newStreak }));
-      return next;
-    });
-  }, [saveAppState, showToast, t]);
+    const today = getAppDate();
+
+    // ── 既に今日記録済みかチェック（最新の records を直接参照） ──
+    // useCallback の deps に records を含めることで最新値を保持
+    const todayRec = records.find(r => r.date === today && !r.isPass);
+    const todayUris = todayRec ? getRecordUris(todayRec) : [];
+
+    if (todayUris.length >= MAX_SLOTS) {
+      // 5本上限に達している場合は何もしない
+      showToast(lang === 'ja' ? '今日の記録は最大5件です' : 'Max 5 recordings per day', true);
+      return;
+    }
+
+    if (todayRec) {
+      // ── 2本目以降：既存エントリに URI を追加（ストリーク変更なし）──
+      const updatedUris = [...todayUris, uri];
+      setRecords(prev =>
+        prev.map(r =>
+          r.date === today && !r.isPass
+            ? { ...r, uris: updatedUris, uri: updatedUris[0] }
+            : r
+        )
+      );
+      showToast(t('toast_save_complete', { day: appState.streak }));
+      return;
+    }
+
+    // ── 1本目：ストリーク計算・更新 ──
+    const diff = appState.lastRecordDate ? daysBetween(appState.lastRecordDate, today) : 999;
+    const newStreak = diff <= 1 ? appState.streak + 1 : 1;
+
+    const newEntry: RecordEntry = { date: today, day: newStreak, ts: Date.now(), uris: [uri], uri };
+    setRecords(prev => [newEntry, ...prev.filter(r => r.date !== today)]);
+
+    // Trigger store review when streak first reaches 5
+    const shouldReview = newStreak === 5 && !appState.reviewRequested;
+    if (shouldReview) setReviewReady(true);
+    // Trigger 10-day milestone popup (once only)
+    if (newStreak === 10 && !appState.milestone10Shown) {
+      setTimeout(() => setMilestone10Visible(true), 800);
+    }
+    // 30-day celebration push notification
+    if (newStreak === 30) {
+      Notifications.scheduleNotificationAsync({
+        content: {
+          title: lang === 'ja' ? '🎉 30日連続達成！' : '🎉 30-Day Streak!',
+          body: lang === 'ja'
+            ? `「${appState.goal || 'One Shot'}」30日間、記録は嘘をつきません。本物の習慣が始まりました。`
+            : `"${appState.goal || 'One Shot'}" — 30 days. The record never lies. This is real.`,
+          sound: true,
+        },
+        trigger: null, // fire immediately
+      }).catch(() => {});
+    }
+
+    const next: AppState = {
+      ...appState,
+      streak: newStreak,
+      lastRecordDate: today,
+      reviewRequested: shouldReview ? true : appState.reviewRequested,
+      milestone10Shown: newStreak >= 10 ? true : appState.milestone10Shown,
+    };
+    setAppState(next);
+    saveAppState(next);
+    showToast(t('toast_save_complete', { day: newStreak }));
+
+    // ── 通知キャンセル: 1本目を記録したら当日の未発火通知を無効化 ──
+    // 次回アプリ起動時（Init effect）で再スケジュールされる
+    Notifications.cancelAllScheduledNotificationsAsync().catch(() => {});
+  }, [appState, records, lang, saveAppState, showToast, t]);
 
   // ── Off-screen photo processor: view-shot after image loads ─────────────────
 
@@ -1103,46 +1149,70 @@ export default function Page() {
     }
   }, [capturedUri, mediaPermission, requestMediaPermission, recordToday, showToast, t]);
 
-  // ── 履歴レコード削除（当日分はストリーク・lastRecordDateもリセット）──
-  const deleteRecord = useCallback((record: RecordEntry) => {
+  // ── 履歴レコード削除 ────────────────────────────────────────────────────────
+  // ・当日分のみ削除可（過去のデータはガードで保護）
+  // ・slotIdx を指定すると、その動画スロットのみ削除（残スロットがある場合はエントリ保持）
+  // ・最後の1本を削除した場合は、直前の記録日時・ストリーク値に確実に復元する
+  const deleteRecord = useCallback((record: RecordEntry, slotIdx?: number) => {
+    const today = getAppDate();
+    // ── ガード: 当日以外の削除は完全に無効 ──
+    if (record.date !== today) return;
+
     Alert.alert('', t('confirm_delete_record'), [
       { text: t('cancel'), style: 'cancel' },
       {
         text: t('history_delete'),
         style: 'destructive',
         onPress: () => {
-          const today = getAppDate();
-          const isToday = record.date === today;
+          const existingUris = getRecordUris(record);
 
-          setRecords(prev => {
-            const next = prev.filter(r => r.date !== record.date);
-            AsyncStorage.setItem('oneshot_records_v2', JSON.stringify(next)).catch(() => {});
-            return next;
-          });
+          if (slotIdx !== undefined && existingUris.length > 1) {
+            // ── 特定スロットのみ削除（残スロットあり → エントリ保持）──
+            const newUris = existingUris.filter((_, i) => i !== slotIdx);
+            setRecords(prev => {
+              const next = prev.map(r =>
+                r.date === today && !r.isPass
+                  ? { ...r, uris: newUris, uri: newUris[0] }
+                  : r
+              );
+              AsyncStorage.setItem('oneshot_records_v2', JSON.stringify(next)).catch(() => {});
+              return next;
+            });
+          } else {
+            // ── エントリ全削除 → 直前の記録にストリークを確実に復元 ──
+            // records から当日エントリを除いた配列をここで計算してから使用
+            const recordsAfterDelete = records.filter(r => r.date !== record.date);
+            setRecords(recordsAfterDelete);
+            AsyncStorage.setItem('oneshot_records_v2', JSON.stringify(recordsAfterDelete)).catch(() => {});
 
-          // 今日の記録を削除 → 今日もう一度撮影できるようにリセット
-          if (isToday) {
+            // 直前（最新）のエントリを取得してストリーク復元
+            // （パスも含む：パス使用日もストリーク継続として扱う）
+            const latestBefore = [...recordsAfterDelete]
+              .sort((a, b) => b.ts - a.ts)[0];
+            const restoredDate = latestBefore?.date ?? '';
+            const restoredStreak = latestBefore?.day ?? 0;
+
             setAppState(prev => {
-              const prevStreak = Math.max(0, prev.streak - 1);
-              const next = { ...prev, streak: prevStreak, lastRecordDate: '' };
+              const next = { ...prev, streak: restoredStreak, lastRecordDate: restoredDate };
               saveAppState(next);
               return next;
             });
           }
 
           setSelectedRecord(null);
+          setSelectedDate(null);
           showToast(t('toast_deleted'));
         },
       },
     ]);
-  }, [t, saveAppState, showToast]);
+  }, [records, t, saveAppState, showToast]);
 
   // ── 履歴レコード再保存（カメラロールへ）──
-  const resaveRecord = useCallback(async (record: RecordEntry) => {
-    if (!record.uri) { showToast(t('toast_no_data'), true); return; }
+  const resaveRecord = useCallback(async (uri: string) => {
+    if (!uri) { showToast(t('toast_no_data'), true); return; }
     try {
       if (!mediaPermission?.granted) await requestMediaPermission();
-      await MediaLibrary.saveToLibraryAsync(record.uri);
+      await MediaLibrary.saveToLibraryAsync(uri);
       showToast(t('toast_resave_done'));
     } catch (e) {
       console.error('[resaveRecord] error:', e);
@@ -1151,11 +1221,11 @@ export default function Page() {
   }, [mediaPermission, requestMediaPermission, showToast, t]);
 
   // ── 履歴レコードSNSシェア ──
-  const shareRecord = useCallback(async (record: RecordEntry) => {
-    if (!record.uri) { showToast(t('toast_no_data'), true); return; }
+  const shareRecord = useCallback(async (uri: string) => {
+    if (!uri) { showToast(t('toast_no_data'), true); return; }
     try {
-      const isPhoto = /\.(jpg|jpeg|png)$/i.test(record.uri);
-      await Sharing.shareAsync(record.uri, {
+      const isPhoto = /\.(jpg|jpeg|png)$/i.test(uri);
+      await Sharing.shareAsync(uri, {
         mimeType: isPhoto ? 'image/jpeg' : 'video/mp4',
         UTI: isPhoto ? 'public.image' : 'public.movie',
         dialogTitle: 'Share to Instagram Stories',
@@ -1230,7 +1300,11 @@ export default function Page() {
   }
 
   const today = getAppDate();
-  const recordedToday = appState.lastRecordDate === today;
+  const recordedToday = appState.lastRecordDate === today; // 今日1本以上記録済み
+  // 今日のスロット数（0〜MAX_SLOTS）
+  const todayRecord = records.find(r => r.date === today && !r.isPass);
+  const todaySlotCount = todayRecord ? getRecordUris(todayRecord).length : 0;
+  const recordingFull = recordedToday && todaySlotCount >= MAX_SLOTS; // 5本上限に達している
 
   // ─── Onboarding Screen ───────────────────────────────────────────────────────
 
@@ -1428,7 +1502,7 @@ export default function Page() {
         <View style={styles.statusRow}>
           <View style={styles.statusPill}>
             <Text style={[styles.statusVal, recordedToday ? styles.statusValDone : styles.statusValPending]}>
-              {recordedToday ? '✓' : '−'}
+              {recordedToday ? (todaySlotCount > 1 ? `${todaySlotCount}` : '✓') : '−'}
             </Text>
             <Text style={styles.statusLabel}>{t('today_label')}</Text>
           </View>
@@ -1441,21 +1515,23 @@ export default function Page() {
 
       {/* ── カメラボタン（写真カメラアイコン・赤グロー） ── */}
       <TouchableOpacity
-        style={[styles.recBtn, recordedToday && styles.recBtnDone]}
+        style={[styles.recBtn, recordingFull && styles.recBtnDone]}
         onPress={() => {
-          if (recordedToday) {
+          if (recordingFull) {
             Alert.alert('', t('alert_already_recorded') ?? 'Already recorded today.');
             return;
           }
           setScreen('camera');
         }}
       >
-        <Ionicons name="camera-outline" size={32} color={recordedToday ? '#555' : '#fff'} />
+        <Ionicons name="camera-outline" size={32} color={recordingFull ? '#555' : '#fff'} />
       </TouchableOpacity>
 
-      {/* ── 記録済みラベル（緑） ── */}
+      {/* ── 記録済みラベル（今日の記録件数を表示） ── */}
       {recordedToday && (
-        <Text style={styles.recDoneLabel}>✓ {t('recorded_today')}</Text>
+        <Text style={styles.recDoneLabel}>
+          ✓ {t('recorded_today')}{todaySlotCount > 1 ? `  ${todaySlotCount}/${MAX_SLOTS}` : ''}
+        </Text>
       )}
 
       {/* ── パスを使うボタン（赤アウトライン） ── */}
@@ -1704,6 +1780,15 @@ export default function Page() {
       ? ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
       : ['日', '月', '火', '水', '木', '金', '土'];
 
+    // デイリー詳細シートで表示するレコード
+    const selectedDateRecord = selectedDate ? recordMap.get(selectedDate) : null;
+    const selectedDateUris = selectedDateRecord ? getRecordUris(selectedDateRecord) : [];
+
+    // 再生モーダルで表示する URI（スロット指定）
+    const playingUri = selectedRecord && selectedSlotIdx !== null
+      ? getRecordUris(selectedRecord)[selectedSlotIdx] ?? null
+      : selectedRecord ? getRecordUris(selectedRecord)[0] ?? null : null;
+
     return (
       <ScrollView style={styles.screen} contentContainerStyle={styles.historyContent} contentInsetAdjustmentBehavior="automatic">
         <View style={styles.calHeader}>
@@ -1736,6 +1821,8 @@ export default function Page() {
             const recorded = !!rec;
             const isPass = rec?.isPass === true;
             const isToday = ds === todayStr;
+            // 複数スロットの場合は件数バッジを表示
+            const slotCount = rec && !isPass ? getRecordUris(rec).length : 0;
             const cell = (
               <>
                 <Text style={[styles.calDayNum, recorded && styles.calDayNumRecorded]}>
@@ -1743,6 +1830,9 @@ export default function Page() {
                 </Text>
                 {recorded && !isPass && <Text style={styles.calCheck}>✓</Text>}
                 {isPass && <Text style={styles.calPassMark}>○</Text>}
+                {slotCount > 1 && (
+                  <Text style={styles.calSlotBadge}>{slotCount}</Text>
+                )}
               </>
             );
             return recorded ? (
@@ -1751,7 +1841,10 @@ export default function Page() {
                 style={[styles.calCell, styles.calDayCell,
                   isPass ? styles.calDayCellPass : styles.calDayCellRecorded,
                   isToday && styles.calDayCellToday]}
-                onPress={() => setSelectedRecord(rec)}
+                onPress={() => {
+                  // 即座に再生せず、デイリー詳細シートを開く
+                  setSelectedDate(ds);
+                }}
                 activeOpacity={0.7}
               >
                 {cell}
@@ -1766,74 +1859,163 @@ export default function Page() {
             );
           })}
         </View>
-        {/* Fullscreen record modal */}
+
+        {/* ── デイリー詳細シート（動画リスト）── */}
+        <Modal
+          visible={!!selectedDate}
+          animationType="slide"
+          transparent={true}
+          onRequestClose={() => setSelectedDate(null)}
+        >
+          <Pressable
+            style={styles.dayDetailBackdrop}
+            onPress={() => setSelectedDate(null)}
+          >
+            <View style={styles.dayDetailSheet} onStartShouldSetResponder={() => true}>
+              {/* シートヘッダー */}
+              <View style={styles.dayDetailHeader}>
+                <Text style={styles.dayDetailTitle}>
+                  {selectedDate ?? ''}
+                </Text>
+                {selectedDateRecord && !selectedDateRecord.isPass && (
+                  <Text style={styles.dayDetailDayBadge}>
+                    DAY {selectedDateRecord.day}
+                  </Text>
+                )}
+                <TouchableOpacity onPress={() => setSelectedDate(null)} style={styles.dayDetailCloseBtn}>
+                  <Feather name="x" size={20} color="#888" />
+                </TouchableOpacity>
+              </View>
+
+              {/* 動画リスト */}
+              {selectedDateRecord && !selectedDateRecord.isPass && selectedDateUris.length > 0 ? (
+                selectedDateUris.map((uri, idx) => (
+                  <TouchableOpacity
+                    key={idx}
+                    style={styles.dayDetailItem}
+                    onPress={() => {
+                      setSelectedRecord(selectedDateRecord);
+                      setSelectedSlotIdx(idx);
+                      setSelectedDate(null);
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.dayDetailItemIcon}>
+                      <Feather
+                        name={/\.(jpg|jpeg|png)$/i.test(uri) ? 'image' : 'video'}
+                        size={20}
+                        color="#CC0000"
+                      />
+                    </View>
+                    <Text style={styles.dayDetailItemLabel}>
+                      {lang === 'ja' ? `動画 ${idx + 1}` : `Video ${idx + 1}`}
+                    </Text>
+                    <View style={styles.dayDetailItemActions}>
+                      {/* 削除ボタン：当日のみ表示 */}
+                      {selectedDate === todayStr && (
+                        <TouchableOpacity
+                          style={styles.dayDetailDeleteBtn}
+                          onPress={() => {
+                            if (selectedDateRecord) deleteRecord(selectedDateRecord, idx);
+                          }}
+                        >
+                          <Feather name="trash-2" size={14} color="#CC0000" />
+                          <Text style={styles.dayDetailDeleteText}>{t('history_delete')}</Text>
+                        </TouchableOpacity>
+                      )}
+                      <Feather name="chevron-right" size={16} color="#555" />
+                    </View>
+                  </TouchableOpacity>
+                ))
+              ) : selectedDateRecord?.isPass ? (
+                <View style={styles.dayDetailPassRow}>
+                  <Text style={styles.dayDetailPassText}>
+                    {lang === 'ja' ? 'パス使用日' : 'Rest pass used'}
+                  </Text>
+                </View>
+              ) : (
+                <View style={styles.dayDetailPassRow}>
+                  <Text style={styles.dayDetailPassText}>{t('no_history')}</Text>
+                </View>
+              )}
+            </View>
+          </Pressable>
+        </Modal>
+
+        {/* ── フルスクリーン再生モーダル ── */}
         <Modal
           visible={!!selectedRecord}
           animationType="fade"
           transparent={false}
-          onRequestClose={() => setSelectedRecord(null)}
+          onRequestClose={() => { setSelectedRecord(null); setSelectedSlotIdx(null); }}
         >
           <View style={styles.recordModalBg}>
             {/* 閉じるボタン */}
-            <TouchableOpacity style={styles.recordModalClose} onPress={() => setSelectedRecord(null)}>
+            <TouchableOpacity
+              style={styles.recordModalClose}
+              onPress={() => { setSelectedRecord(null); setSelectedSlotIdx(null); }}
+            >
               <Feather name="x" size={26} color="#fff" />
             </TouchableOpacity>
 
-            {selectedRecord && (
+            {selectedRecord && playingUri != null && (
               <>
                 {/* メディア表示 */}
-                {selectedRecord.uri ? (
-                  /\.(jpg|jpeg|png)$/i.test(selectedRecord.uri) ? (
-                    <Image source={{ uri: selectedRecord.uri }} style={styles.recordModalMedia} resizeMode="contain" />
-                  ) : (
-                    <Video
-                      source={{ uri: selectedRecord.uri }}
-                      style={styles.recordModalMedia}
-                      resizeMode={ResizeMode.CONTAIN}
-                      shouldPlay
-                      isLooping
-                      useNativeControls={false}
-                    />
-                  )
+                {/\.(jpg|jpeg|png)$/i.test(playingUri) ? (
+                  <Image source={{ uri: playingUri }} style={styles.recordModalMedia} resizeMode="contain" />
                 ) : (
-                  <View style={styles.recordModalNoMedia}>
-                    <Feather name="film" size={48} color="#444" />
-                    <Text style={styles.recordModalNoMediaText}>{t('no_history')}</Text>
-                  </View>
+                  <Video
+                    source={{ uri: playingUri }}
+                    style={styles.recordModalMedia}
+                    resizeMode={ResizeMode.CONTAIN}
+                    shouldPlay
+                    isLooping
+                    useNativeControls={false}
+                  />
                 )}
 
-                {/* フィルターはファイルに焼き込み済みのため追加オーバーレイ不要 */}
-
-                {/* ── アクションボタン（削除 | 再保存 | シェア）── */}
+                {/* ── アクションボタン（当日: 削除 | 再保存 | シェア、過去: 再保存 | シェアのみ）── */}
                 <View style={styles.recordModalActions}>
-                  <TouchableOpacity
-                    style={styles.recordModalBtnDelete}
-                    onPress={() => deleteRecord(selectedRecord)}
-                  >
-                    <Feather name="trash-2" size={16} color="#fff" />
-                    <Text style={styles.recordModalBtnText}>{t('history_delete')}</Text>
-                  </TouchableOpacity>
+                  {/* 削除ボタン：当日のみ表示（過去は非表示でストリーク保護）*/}
+                  {selectedRecord.date === todayStr && (
+                    <TouchableOpacity
+                      style={styles.recordModalBtnDelete}
+                      onPress={() => {
+                        const slotIdx = selectedSlotIdx ?? 0;
+                        setSelectedRecord(null);
+                        setSelectedSlotIdx(null);
+                        deleteRecord(selectedRecord, slotIdx);
+                      }}
+                    >
+                      <Feather name="trash-2" size={16} color="#fff" />
+                      <Text style={styles.recordModalBtnText}>{t('history_delete')}</Text>
+                    </TouchableOpacity>
+                  )}
 
-                  {selectedRecord.uri ? (
-                    <>
-                      <TouchableOpacity
-                        style={styles.recordModalBtnSave}
-                        onPress={() => resaveRecord(selectedRecord)}
-                      >
-                        <Feather name="download" size={16} color="#fff" />
-                        <Text style={styles.recordModalBtnText}>{t('history_resave')}</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={styles.recordModalBtnShare}
-                        onPress={() => shareRecord(selectedRecord)}
-                      >
-                        <Feather name="share" size={16} color="#fff" />
-                        <Text style={styles.recordModalBtnText}>{t('share_btn')}</Text>
-                      </TouchableOpacity>
-                    </>
-                  ) : null}
+                  <TouchableOpacity
+                    style={styles.recordModalBtnSave}
+                    onPress={() => resaveRecord(playingUri)}
+                  >
+                    <Feather name="download" size={16} color="#fff" />
+                    <Text style={styles.recordModalBtnText}>{t('history_resave')}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.recordModalBtnShare}
+                    onPress={() => shareRecord(playingUri)}
+                  >
+                    <Feather name="share" size={16} color="#fff" />
+                    <Text style={styles.recordModalBtnText}>{t('share_btn')}</Text>
+                  </TouchableOpacity>
                 </View>
               </>
+            )}
+
+            {/* URI がない場合（パス使用日など）*/}
+            {selectedRecord && playingUri == null && (
+              <View style={styles.recordModalNoMedia}>
+                <Feather name="film" size={48} color="#444" />
+                <Text style={styles.recordModalNoMediaText}>{t('no_history')}</Text>
+              </View>
             )}
           </View>
         </Modal>
@@ -3486,6 +3668,107 @@ const styles = StyleSheet.create({
     color: '#CC9900',
     fontWeight: '900',
   },
+  // 複数スロット件数バッジ（カレンダーセル左下）
+  calSlotBadge: {
+    position: 'absolute',
+    bottom: 2,
+    left: 3,
+    fontSize: 8,
+    color: '#CC0000',
+    fontWeight: '900',
+  },
+
+  // ── デイリー詳細シート ──
+  dayDetailBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'flex-end',
+  },
+  dayDetailSheet: {
+    backgroundColor: '#111',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingBottom: 40,
+    minHeight: 200,
+  },
+  dayDetailHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#1e1e1e',
+  },
+  dayDetailTitle: {
+    flex: 1,
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '700',
+    letterSpacing: 1,
+  },
+  dayDetailDayBadge: {
+    color: '#8B0000',
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 1,
+    marginRight: 12,
+  },
+  dayDetailCloseBtn: {
+    padding: 4,
+  },
+  dayDetailItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#1a1a1a',
+  },
+  dayDetailItemIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    backgroundColor: 'rgba(139,0,0,0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  dayDetailItemLabel: {
+    flex: 1,
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  dayDetailItemActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  dayDetailDeleteBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(204,0,0,0.4)',
+  },
+  dayDetailDeleteText: {
+    color: '#CC0000',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  dayDetailPassRow: {
+    padding: 20,
+    alignItems: 'center',
+  },
+  dayDetailPassText: {
+    color: '#555',
+    fontSize: 14,
+  },
+
   noHistoryText: {
     color: '#555',
     fontSize: 14,
