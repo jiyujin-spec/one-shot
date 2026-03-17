@@ -561,6 +561,8 @@ export default function Page() {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   // デイリー詳細シートから再生する動画スロットのインデックス
   const [selectedSlotIdx, setSelectedSlotIdx] = useState<number | null>(null);
+  // 再生モーダルでの画像読み込みエラー追跡（旧 tmpfile URI が失効した場合のフォールバック用）
+  const [playingUriError, setPlayingUriError] = useState(false);
 
   // RevenueCat state
   const [rcOfferings, setRcOfferings] = useState<PurchasesOfferings | null>(null);
@@ -1053,6 +1055,13 @@ export default function Page() {
     }
   }, [screen]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ── selectedRecord / selectedSlotIdx が変わったら画像エラー状態をリセット ──
+  // 旧データの tmpfile URI が失効して onError が発火した後、別のスロットを開く際に
+  // エラー状態が残らないよう、選択変更のたびにリセットする。
+  useEffect(() => {
+    setPlayingUriError(false);
+  }, [selectedRecord, selectedSlotIdx]);
+
   // ── Refresh home (streak/pass) ──────────────────────────────────────────────
   // ホーム画面表示のたびに records から streak を再計算し、appState と同期させる。
   // これにより、バックグラウンド復帰時や日付またぎでも正しい値が表示される。
@@ -1233,9 +1242,27 @@ export default function Page() {
     if (!capturedUri) return;
     try {
       if (!mediaPermission?.granted) await requestMediaPermission();
-      // capturedUri is always a fully baked (filter + square crop) file for both photo and video
-      await MediaLibrary.saveToLibraryAsync(capturedUri);
-      recordToday(capturedUri);
+
+      // ── 永続 URI の取得 ──────────────────────────────────────────────────────
+      // 【修正理由】旧実装は saveToLibraryAsync(capturedUri) の後に capturedUri（tmpfile）
+      // をそのままレコードへ保存していた。写真の capturedUri は captureRef が生成する
+      // NSTemporaryDirectory 内の一時ファイルであり、iOS がアプリ非アクティブ時・
+      // ストレージ圧迫時に積極的に削除する。その結果、翌日以降に履歴を開くと
+      // <Image> が真っ黒になり、シェア/保存操作でエラーが発生していた。
+      //
+      // 動画は processVideo ネイティブモジュールが Documents ディレクトリへ保存する
+      // ため問題が顕在化しなかったが、写真の tmpfile は揮発性で必ず消える。
+      //
+      // 【修正】createAssetAsync でカメラロールへ保存し、getAssetInfoAsync で
+      // Photos ライブラリ内の永続的な localUri（file:// パス）を取得してレコードへ
+      // 保存する。localUri はユーザーが写真を削除しない限り消えない。
+      const asset = await MediaLibrary.createAssetAsync(capturedUri);
+      const assetInfo = await MediaLibrary.getAssetInfoAsync(asset);
+      // localUri が取得できない場合（iCloud 専用など稀なケース）は capturedUri に
+      // フォールバック（当日中は tmpfile が存在するため今日の記録は正常動作する）
+      const persistentUri = assetInfo.localUri ?? capturedUri;
+
+      recordToday(persistentUri);
       setCapturedUri(null);
       setCapturedTime(null);
       setScreen('home');
@@ -1319,7 +1346,8 @@ export default function Page() {
   const shareRecord = useCallback(async (uri: string) => {
     if (!uri) { showToast(t('toast_no_data'), true); return; }
     try {
-      const isPhoto = /\.(jpg|jpeg|png)$/i.test(uri);
+      // heic/heif も画像として扱う（getAssetInfoAsync 経由の localUri は .HEIC になることがある）
+      const isPhoto = /\.(jpg|jpeg|png|heic|heif)$/i.test(uri);
       await Sharing.shareAsync(uri, {
         mimeType: isPhoto ? 'image/jpeg' : 'video/mp4',
         UTI: isPhoto ? 'public.image' : 'public.movie',
@@ -2056,8 +2084,27 @@ export default function Page() {
             {selectedRecord && playingUri != null && (
               <>
                 {/* メディア表示 */}
-                {/\.(jpg|jpeg|png)$/i.test(playingUri) ? (
-                  <Image source={{ uri: playingUri }} style={styles.recordModalMedia} resizeMode="contain" />
+                {/* ── 画像/動画の判定: 拡張子で判断（heic/heif も対応）─── */}
+                {/\.(jpg|jpeg|png|heic|heif)$/i.test(playingUri) ? (
+                  // ── 旧 tmpfile URI が失効した場合の onError フォールバック ──
+                  // iOS は NSTemporaryDirectory を積極的に削除するため、Build 5 以前に
+                  // 保存された写真の URI が無効になっている場合がある。
+                  // onError で playingUriError=true にし、プレースホルダーを表示する。
+                  playingUriError ? (
+                    <View style={styles.recordModalNoMedia}>
+                      <Feather name="image" size={48} color="#444" />
+                      <Text style={styles.recordModalNoMediaText}>
+                        {lang === 'ja' ? '画像データが見つかりません\n（カメラロールをご確認ください）' : 'Image unavailable\n(check your camera roll)'}
+                      </Text>
+                    </View>
+                  ) : (
+                    <Image
+                      source={{ uri: playingUri }}
+                      style={styles.recordModalMedia}
+                      resizeMode="contain"
+                      onError={() => setPlayingUriError(true)}
+                    />
+                  )
                 ) : (
                   <Video
                     source={{ uri: playingUri }}
