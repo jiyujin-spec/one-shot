@@ -519,20 +519,19 @@ Notifications.setNotificationHandler({
   }),
 });
 
-async function scheduleDailyNotification(timeStr: string, title: string, body: string) {
+async function scheduleDailyNotification(timeStr: string, title: string, body: string, hasRecordedToday = false) {
   await Notifications.cancelAllScheduledNotificationsAsync();
+  if (hasRecordedToday) return;
   const parts = timeStr.split(':');
   const h = parseInt(parts[0], 10);
   const m = parseInt(parts[1] ?? '0', 10);
   if (isNaN(h) || isNaN(m)) return;
-  // Use optional chaining to guard against runtime undefined on some Expo versions
-  const dailyType = Notifications.SchedulableTriggerInputTypes?.DAILY ?? 'daily';
   await Notifications.scheduleNotificationAsync({
     content: { title, body, sound: true },
     trigger: {
       hour: h,
       minute: m,
-      type: dailyType as any,
+      repeats: true,
     },
   });
 }
@@ -1115,7 +1114,8 @@ export default function Page() {
           if (status === 'granted') {
             const notifyLang = (savedLang ?? 'ja') as Lang;
             const { title: notifyTitle, body: notifyBody } = pickNotifyMessage(notifyLang, loaded.goal);
-            await scheduleDailyNotification(loaded.notifyTime, notifyTitle, notifyBody);
+            const alreadyRecordedToday = loadedRecords.some(r => r.date === initToday && !r.isPass);
+            await scheduleDailyNotification(loaded.notifyTime, notifyTitle, notifyBody, alreadyRecordedToday);
           }
         } catch (e) {
           console.warn('[Notify] init error:', e);
@@ -1387,6 +1387,7 @@ export default function Page() {
       const persistentUri = toRelativeUri(rawPersistentUri);
 
       recordToday(persistentUri);
+      Notifications.cancelAllScheduledNotificationsAsync().catch(() => {});
       setCapturedUri(null);
       setCapturedTime(null);
       setScreen('home');
