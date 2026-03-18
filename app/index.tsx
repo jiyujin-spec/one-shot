@@ -37,6 +37,7 @@ import Purchases, {
   CustomerInfo,
 } from 'react-native-purchases';
 import { captureRef } from 'react-native-view-shot';
+import * as FileSystem from 'expo-file-system';
 import * as Notifications from 'expo-notifications';
 import * as StoreReview from 'expo-store-review';
 import { processVideo } from '../modules/video-overlay';
@@ -45,9 +46,21 @@ import { processVideo } from '../modules/video-overlay';
 
 const RC_API_KEY = 'appl_hxzNKcnblLemtdWosMHSIFpQWYR';
 const HOUR_BOUNDARY = 3; // Day resets at 3 AM
-const STORAGE_KEY = 'oneshot_state_v2';
-const LANG_KEY = 'oneshot_lang';
 const MAX_SLOTS = 5; // 1日あたり最大撮影枚数
+
+// ── Build 7: スキーマバージョン管理 ─────────────────────────────────────────
+// schema_version = 7 を起点に、ストレージフォーマットを永続的に管理する。
+// 将来のフォーマット変更は SCHEMA_VERSION を上げてマイグレーション関数を追加する。
+const SCHEMA_VERSION = 7;
+
+// v7+ ストレージキー（v2 → v3 キー変更で旧データを明示的に分離）
+const STORAGE_KEY   = 'oneshot_state_v3';
+const RECORDS_KEY   = 'oneshot_records_v3';
+const LANG_KEY      = 'oneshot_lang';
+
+// v2 レガシーキー（マイグレーション時のみ参照）
+const LEGACY_STORAGE_KEY  = 'oneshot_state_v2';
+const LEGACY_RECORDS_KEY  = 'oneshot_records_v2';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -85,11 +98,60 @@ interface RecordEntry {
   isPass?: boolean;
 }
 
-// RecordEntry から URI 配列を取得するヘルパー（後方互換）
+// ── Build 7: URI 永続化ヘルパー ───────────────────────────────────────────────
+//
+// 【設計思想】
+//   iOS のアプリコンテナ UUID はアプリの更新では変わらないが、
+//   完全な再インストール時に変化する。
+//   documentDirectory 内のファイルを絶対 URI で保存すると、
+//   万が一 UUID が変わった際にパスが無効になりデータが消える。
+//
+//   Build 7 以降はすべての documentDirectory ファイルを「相対パス」で保存し、
+//   読み出し時に実行時の documentDirectory を先頭に付与して絶対 URI を復元する。
+//   Photos ライブラリ URI（ph:// / file://...Media/...）は
+//   アプリコンテナ外に存在するため変換不要 → そのまま保存・返却する。
+//
+//   これにより Build 7 以降は「データが消えない」を構造レベルで保証する。
+
+/**
+ * documentDirectory 配下のファイルを相対パスに変換して返す。
+ * Photos ライブラリ URI など documentDirectory 外のパスはそのまま返す。
+ *
+ * 例: "file:///...UUID.../Documents/oneshot_abc.mp4" → "oneshot_abc.mp4"
+ *      "file:///var/mobile/Media/DCIM/IMG_001.MP4"   → そのまま（変換なし）
+ */
+function toRelativeUri(uri: string): string {
+  const docDir = FileSystem.documentDirectory ?? '';
+  if (docDir && uri.startsWith(docDir)) {
+    return uri.slice(docDir.length); // e.g. "oneshot_processed_abc.mp4"
+  }
+  return uri; // Photos library URI / 外部 URI はそのまま
+}
+
+/**
+ * 相対パスを実行時の documentDirectory を使って絶対 URI に復元する。
+ * すでに絶対 URI（file://, ph://, https://）の場合はそのまま返す。
+ *
+ * 例: "oneshot_abc.mp4"     → "file:///...UUID.../Documents/oneshot_abc.mp4"
+ *      "file://...absolute" → そのまま（変換なし）
+ */
+function toAbsoluteUri(uri: string): string {
+  if (!uri) return uri;
+  if (uri.startsWith('file://') || uri.startsWith('ph://') || uri.startsWith('http')) {
+    return uri; // すでに絶対 URI
+  }
+  return (FileSystem.documentDirectory ?? '') + uri;
+}
+
+// RecordEntry から URI 配列を取得するヘルパー（後方互換 + Build 7 絶対URI復元）
 function getRecordUris(rec: RecordEntry): string[] {
-  if (rec.uris && rec.uris.length > 0) return rec.uris;
-  if (rec.uri) return [rec.uri];
-  return [];
+  const raw: string[] = (() => {
+    if (rec.uris && rec.uris.length > 0) return rec.uris;
+    if (rec.uri) return [rec.uri];
+    return [];
+  })();
+  // Build 7: 相対パスで保存されたエントリを実行時に絶対 URI へ復元
+  return raw.map(toAbsoluteUri);
 }
 
 // ─── Translations ─────────────────────────────────────────────────────────────
@@ -602,7 +664,8 @@ export default function Page() {
 
   const saveAppState = useCallback(async (newState: AppState) => {
     try {
-      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(newState));
+      // Build 7: schema_version を付与して v3 キーに保存
+      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({ schema_version: SCHEMA_VERSION, ...newState }));
     } catch {
       // silent
     }
@@ -803,9 +866,13 @@ export default function Page() {
     // ── 既に今日記録済みかチェック（最新の records を直接参照） ──
     // useCallback の deps に records を含めることで最新値を保持
     const todayRec = records.find(r => r.date === today && !r.isPass);
-    const todayUris = todayRec ? getRecordUris(todayRec) : [];
 
-    if (todayUris.length >= MAX_SLOTS) {
+    // Build 7: ストレージ用 URI は raw（相対パスのまま）を使う。
+    // getRecordUris は表示・シェア用の絶対 URI を返すため、
+    // ストレージへの書き込みには使用しない。
+    const todayStorageUris: string[] = todayRec?.uris ?? (todayRec?.uri ? [todayRec.uri] : []);
+
+    if (todayStorageUris.length >= MAX_SLOTS) {
       // 5本上限に達している場合は何もしない
       showToast(lang === 'ja' ? '今日の記録は最大5件です' : 'Max 5 recordings per day', true);
       return;
@@ -813,7 +880,8 @@ export default function Page() {
 
     if (todayRec) {
       // ── 2本目以降：既存エントリに URI を追加（ストリーク変更なし）──
-      const updatedUris = [...todayUris, uri];
+      // Build 7: uri は toRelativeUri 済みの相対パスで渡ってくる
+      const updatedUris = [...todayStorageUris, uri];
       setRecords(prev =>
         prev.map(r =>
           r.date === today && !r.isPass
@@ -917,12 +985,25 @@ export default function Page() {
         const savedLang = await AsyncStorage.getItem(LANG_KEY);
         if (savedLang === 'en' || savedLang === 'ja') setLang(savedLang);
 
-        // Load state
-        const raw = await AsyncStorage.getItem(STORAGE_KEY);
+        // ── Build 7: State ロード（v3 → v2 フォールバック）────────────────────
+        // v3 キーが存在しない場合は v2 レガシーキーから移行する。
+        // AppState 自体にファイル URI は含まれないため、構造コピーのみで完了する。
         let loaded: AppState = { ...defaultState };
-        if (raw) {
-          const parsed = JSON.parse(raw);
-          loaded = { ...defaultState, ...parsed };
+        {
+          const rawV3 = await AsyncStorage.getItem(STORAGE_KEY);
+          if (rawV3) {
+            // v3 データが存在 → schema_version フィールドを除いて AppState にマージ
+            const { schema_version: _sv, ...parsed } = JSON.parse(rawV3);
+            loaded = { ...defaultState, ...parsed };
+          } else {
+            // v3 なし → v2 レガシーから移行
+            const rawV2 = await AsyncStorage.getItem(LEGACY_STORAGE_KEY);
+            if (rawV2) {
+              const parsed = JSON.parse(rawV2);
+              loaded = { ...defaultState, ...parsed };
+              console.log('[Build7] State migrated from v2 to v3');
+            }
+          }
         }
 
         // Ensure rcUserID
@@ -937,27 +1018,57 @@ export default function Page() {
           loaded.userId = `OS-${year}-${String(num).padStart(3, '0')}`;
         }
 
-        // Load records
-        const recRaw = await AsyncStorage.getItem('oneshot_records_v2');
+        // ── Build 7: Records ロード（v3 → v2 フォールバック + URI 相対化移行）──
+        //
+        // 【マイグレーション戦略】
+        //   v2: [ RecordEntry, ... ]         （生配列、絶対 URI 混在）
+        //   v3: { schema_version: 7, records: RecordEntry[] }
+        //              （ラップ形式、documentDirectory URI は相対パス）
+        //
+        //   v2 → v3 移行時に各 URI に toRelativeUri を適用する。
+        //   ・現行 documentDirectory 内のファイル → 相対パスに変換（永続化）
+        //   ・Photos ライブラリ URI              → そのまま（変換不要）
+        //   ・旧 UUID の壊れた絶対パス           → 変換は不完全だが
+        //     エントリ（日付・ストリーク情報）は必ず保持する
         let loadedRecords: RecordEntry[] = [];
-        if (recRaw) {
-          const parsed: RecordEntry[] = JSON.parse(recRaw);
-          // ── 旧データ移行: uri のみ持つ単一 URI 形式を uris 配列に統一 ──
-          // アップデート前の古いエントリは uri?: string のみ存在し uris が無い。
-          // ここで一括変換することで getRecordUris() の後方互換処理に依存せず、
-          // 動画パスが確実に解決できる状態にしてから setRecords する。
-          loadedRecords = parsed.map(r => {
-            if (r.uri && (!r.uris || r.uris.length === 0)) {
-              return { ...r, uris: [r.uri] };
+        {
+          const recRawV3 = await AsyncStorage.getItem(RECORDS_KEY);
+          if (recRawV3) {
+            // v3 形式から直接ロード
+            const stored = JSON.parse(recRawV3) as { schema_version: number; records: RecordEntry[] };
+            loadedRecords = stored.records ?? [];
+          } else {
+            // v3 なし → v2 レガシーから移行
+            const recRawV2 = await AsyncStorage.getItem(LEGACY_RECORDS_KEY);
+            if (recRawV2) {
+              const legacyParsed: RecordEntry[] = JSON.parse(recRawV2);
+              console.log(`[Build7] Records migrating ${legacyParsed.length} entries from v2 to v3`);
+
+              // Step 1: uri → uris 統一（v1→v2 の残留対応）
+              const step1 = legacyParsed.map(r => {
+                if (r.uri && (!r.uris || r.uris.length === 0)) {
+                  return { ...r, uris: [r.uri] };
+                }
+                return r;
+              });
+
+              // Step 2: 絶対 URI を相対パスに変換（Build 7 の核心）
+              loadedRecords = step1.map(r => {
+                if (!r.uris || r.uris.length === 0) return r;
+                const relUris = r.uris.map(toRelativeUri);
+                return { ...r, uris: relUris, uri: relUris[0] };
+              });
+
+              // v3 形式で永続化
+              AsyncStorage.setItem(
+                RECORDS_KEY,
+                JSON.stringify({ schema_version: SCHEMA_VERSION, records: loadedRecords })
+              ).catch(() => {});
+              console.log('[Build7] Records migration to v3 complete');
             }
-            return r;
-          });
-          setRecords(loadedRecords);
-          // 移行が発生した場合は永続化しておく
-          if (loadedRecords.some((r, i) => r !== parsed[i])) {
-            AsyncStorage.setItem('oneshot_records_v2', JSON.stringify(loadedRecords)).catch(() => {});
           }
         }
+        setRecords(loadedRecords);
 
         // ── records 配列を唯一の正解源として streak を再計算 ──
         // 保存された appState.streak は過去の不整合で壊れている可能性があるため、
@@ -1025,11 +1136,16 @@ export default function Page() {
     })();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Save records ────────────────────────────────────────────────────────────
+  // ── Save records (Build 7: v3 形式で永続化) ─────────────────────────────────
+  // { schema_version: 7, records: [...] } 形式で RECORDS_KEY に保存する。
+  // 個々のエントリの uris は toRelativeUri 適用済みの相対パスが入っている。
 
   useEffect(() => {
     if (!isLoading) {
-      AsyncStorage.setItem('oneshot_records_v2', JSON.stringify(records)).catch(() => {});
+      AsyncStorage.setItem(
+        RECORDS_KEY,
+        JSON.stringify({ schema_version: SCHEMA_VERSION, records })
+      ).catch(() => {});
     }
   }, [records, isLoading]);
 
@@ -1258,9 +1374,17 @@ export default function Page() {
       // 保存する。localUri はユーザーが写真を削除しない限り消えない。
       const asset = await MediaLibrary.createAssetAsync(capturedUri);
       const assetInfo = await MediaLibrary.getAssetInfoAsync(asset);
-      // localUri が取得できない場合（iCloud 専用など稀なケース）は capturedUri に
-      // フォールバック（当日中は tmpfile が存在するため今日の記録は正常動作する）
-      const persistentUri = assetInfo.localUri ?? capturedUri;
+
+      // ── Build 7: 永続 URI の決定と相対パス変換 ──────────────────────────────
+      // 優先順位:
+      //   1. assetInfo.localUri   → Photos ライブラリの安定パス（絶対 URI のまま保存）
+      //   2. capturedUri fallback → documentDirectory 内のファイル → 相対パスに変換
+      //
+      // toRelativeUri は:
+      //   - documentDirectory 配下のパス → 相対パスに変換 (UUID 変化に強い)
+      //   - Photos ライブラリ URI       → そのまま（変換対象外）
+      const rawPersistentUri = assetInfo.localUri ?? capturedUri;
+      const persistentUri = toRelativeUri(rawPersistentUri);
 
       recordToday(persistentUri);
       setCapturedUri(null);
@@ -1291,14 +1415,18 @@ export default function Page() {
 
           if (slotIdx !== undefined && existingUris.length > 1) {
             // ── 特定スロットのみ削除（残スロットあり → エントリ保持）──
-            const newUris = existingUris.filter((_, i) => i !== slotIdx);
+            // Build 7: getRecordUris は絶対URIを返すので、保存前に相対化する
+            const newUris = existingUris.filter((_, i) => i !== slotIdx).map(toRelativeUri);
             setRecords(prev => {
               const next = prev.map(r =>
                 r.date === today && !r.isPass
                   ? { ...r, uris: newUris, uri: newUris[0] }
                   : r
               );
-              AsyncStorage.setItem('oneshot_records_v2', JSON.stringify(next)).catch(() => {});
+              AsyncStorage.setItem(
+                RECORDS_KEY,
+                JSON.stringify({ schema_version: SCHEMA_VERSION, records: next })
+              ).catch(() => {});
               return next;
             });
           } else {
@@ -1308,7 +1436,10 @@ export default function Page() {
             // 「撮影→削除→再撮影」を何度繰り返しても正しい値が必ず得られる。
             const recordsAfterDelete = records.filter(r => r.date !== record.date);
             setRecords(recordsAfterDelete);
-            AsyncStorage.setItem('oneshot_records_v2', JSON.stringify(recordsAfterDelete)).catch(() => {});
+            AsyncStorage.setItem(
+              RECORDS_KEY,
+              JSON.stringify({ schema_version: SCHEMA_VERSION, records: recordsAfterDelete })
+            ).catch(() => {});
 
             const todayForCalc = getAppDate();
             const restoredStreak = calculateStreak(recordsAfterDelete, todayForCalc);
@@ -1403,7 +1534,11 @@ export default function Page() {
         text: 'OK',
         style: 'destructive',
         onPress: async () => {
-          await AsyncStorage.multiRemove([STORAGE_KEY, LANG_KEY, 'oneshot_records_v2']);
+          // Build 7: v2 レガシーキーも含めてすべてクリア
+          await AsyncStorage.multiRemove([
+            STORAGE_KEY, RECORDS_KEY, LANG_KEY,
+            LEGACY_STORAGE_KEY, LEGACY_RECORDS_KEY,
+          ]);
           setAppState(defaultState);
           setRecords([]);
           setScreen('onboarding');
