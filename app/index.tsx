@@ -40,6 +40,7 @@ import { captureRef } from 'react-native-view-shot';
 import * as FileSystem from 'expo-file-system';
 import * as Notifications from 'expo-notifications';
 import * as StoreReview from 'expo-store-review';
+import * as WebBrowser from 'expo-web-browser';
 import { processVideo } from '../modules/video-overlay';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -240,9 +241,11 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     no_history: 'まだ記録がありません',
     recorded_today: 'RECORDED TODAY',
     share_hashtag: '#oneshot #習慣化',
-    cam_permission_title: 'カメラへのアクセスを許可してください',
-    cam_permission_body: 'One Shot はカメラとマイクを使用して動画を記録します。設定からアクセスを許可してください。',
-    cam_permission_btn: 'カメラ設定を開く',
+    cam_permission_title: 'カメラへのアクセスが必要です',
+    cam_permission_body: 'One Shot はカメラとマイクを使用して動画を記録します。次の画面でアクセスを許可してください。',
+    cam_permission_btn: 'カメラへのアクセスを許可する',
+    cam_permission_denied_body: 'カメラへのアクセスが拒否されています。設定アプリからカメラとマイクへのアクセスを許可してください。',
+    cam_permission_settings_btn: '設定を開く',
     cam_permission_back: '戻る',
     settings_countdown_label: '録画中カウントダウン',
     settings_countdown_hint: '録画中に残り時間を表示',
@@ -362,8 +365,10 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     recorded_today: 'LOGGED TODAY',
     share_hashtag: '#oneshot #habitbuilding',
     cam_permission_title: 'Camera Access Required',
-    cam_permission_body: 'ONE SHOT needs camera and microphone access to record. Please enable in Settings.',
-    cam_permission_btn: 'Open Settings',
+    cam_permission_body: 'ONE SHOT needs camera and microphone access to record. Tap the button below to allow access.',
+    cam_permission_btn: 'Allow Camera Access',
+    cam_permission_denied_body: 'Camera access has been denied. Please go to Settings to allow camera and microphone access.',
+    cam_permission_settings_btn: 'Open Settings',
     cam_permission_back: 'Go Back',
     settings_countdown_label: 'Recording Countdown',
     settings_countdown_hint: 'Display timer during recording',
@@ -1654,6 +1659,25 @@ export default function Page() {
           </View>
         ))}
 
+        {/* ── サブスクリプション情報（Apple審査必須） ── */}
+        <View style={styles.subscriptionInfoBox}>
+          <Text style={styles.subscriptionInfoTitle}>
+            {lang === 'ja' ? 'One Shot Premium' : 'One Shot Premium'}
+          </Text>
+          <Text style={styles.subscriptionInfoDetail}>
+            {lang === 'ja'
+              ? `年額プラン（1年間・自動更新）  ${annualPrice ?? '—'}`
+              : `Annual Plan (1 year · auto-renews)  ${annualPrice ?? '—'}`}
+          </Text>
+          {monthlyPkg && (
+            <Text style={styles.subscriptionInfoDetail}>
+              {lang === 'ja'
+                ? `月額プラン（1ヶ月・自動更新）  ${monthlyPrice ?? '—'}`
+                : `Monthly Plan (1 month · auto-renews)  ${monthlyPrice ?? '—'}`}
+            </Text>
+          )}
+        </View>
+
         {/* ── 年額プランカード（メイン） ── */}
         <TouchableOpacity
           style={styles.planCardActive}
@@ -1697,11 +1721,11 @@ export default function Page() {
           <Text style={styles.linkText}>{t('paywall_restore_btn')}</Text>
         </TouchableOpacity>
         <View style={styles.paywallLinks}>
-          <TouchableOpacity onPress={() => openLegal('terms')}>
+          <TouchableOpacity onPress={() => WebBrowser.openBrowserAsync('https://ivory-green-d0a.notion.site/One-shot-Term-of-Service-3285c8dc66068011bacad02879f4ddc2?pvs=73')}>
             <Text style={[styles.linkSmall, styles.linkSmallTappable]}>{t('paywall_terms')}</Text>
           </TouchableOpacity>
           <Text style={styles.linkSmall}>  ·  </Text>
-          <TouchableOpacity onPress={() => openLegal('privacy')}>
+          <TouchableOpacity onPress={() => WebBrowser.openBrowserAsync('https://ivory-green-d0a.notion.site/One-shot-Privacy-policy-3285c8dc660680d7ac1fe514d6690703')}>
             <Text style={[styles.linkSmall, styles.linkSmallTappable]}>{t('paywall_privacy')}</Text>
           </TouchableOpacity>
         </View>
@@ -1821,13 +1845,21 @@ export default function Page() {
     // ── 権限なし ──
     if (!camPermission) return <ActivityIndicator color="#fff" style={styles.screenCenter} />;
     if (!camPermission.granted) {
+      const canAsk = camPermission.canAskAgain !== false;
       return (
         <View style={styles.screenCenter}>
           <Feather name="camera-off" size={44} color="#555" style={{ marginBottom: 24 }} />
           <Text style={styles.permTitle}>{t('cam_permission_title')}</Text>
-          <Text style={styles.permBody}>{t('cam_permission_body')}</Text>
-          <TouchableOpacity style={styles.btnPrimary} onPress={requestCamPermission}>
-            <Text style={styles.btnPrimaryText}>{t('cam_permission_btn')}</Text>
+          <Text style={styles.permBody}>
+            {canAsk ? t('cam_permission_body') : t('cam_permission_denied_body')}
+          </Text>
+          <TouchableOpacity
+            style={styles.btnPrimary}
+            onPress={canAsk ? requestCamPermission : () => Linking.openSettings()}
+          >
+            <Text style={styles.btnPrimaryText}>
+              {canAsk ? t('cam_permission_btn') : t('cam_permission_settings_btn')}
+            </Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={() => setScreen('home')}>
             <Text style={styles.linkText}>{t('cam_permission_back')}</Text>
@@ -4277,6 +4309,30 @@ const styles = StyleSheet.create({
     textShadowColor: 'rgba(0,0,0,0.6)',
     textShadowOffset: { width: 1, height: 1 },
     textShadowRadius: 4,
+  },
+
+  // ── Subscription info box (Apple Review 3.1.2(c) compliance) ──
+  subscriptionInfoBox: {
+    backgroundColor: '#111',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#333',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    marginBottom: 16,
+    width: '100%',
+  },
+  subscriptionInfoTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#fff',
+    marginBottom: 6,
+    letterSpacing: 0.5,
+  },
+  subscriptionInfoDetail: {
+    fontSize: 12,
+    color: '#aaa',
+    lineHeight: 18,
   },
 
   // ── Subscription IAP note (Apple Review compliance) ──
