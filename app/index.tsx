@@ -40,6 +40,7 @@ import { captureRef } from 'react-native-view-shot';
 import * as FileSystem from 'expo-file-system';
 import * as Notifications from 'expo-notifications';
 import * as StoreReview from 'expo-store-review';
+import * as WebBrowser from 'expo-web-browser';
 import { processVideo } from '../modules/video-overlay';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -1720,11 +1721,11 @@ export default function Page() {
           <Text style={styles.linkText}>{t('paywall_restore_btn')}</Text>
         </TouchableOpacity>
         <View style={styles.paywallLinks}>
-          <TouchableOpacity onPress={() => Linking.openURL('https://www.apple.com/legal/internet-services/itunes/dev/stdeula/')}>
+          <TouchableOpacity onPress={() => WebBrowser.openBrowserAsync('https://ivory-green-d0a.notion.site/One-shot-Term-of-Service-3285c8dc66068011bacad02879f4ddc2?pvs=73')}>
             <Text style={[styles.linkSmall, styles.linkSmallTappable]}>{t('paywall_terms')}</Text>
           </TouchableOpacity>
           <Text style={styles.linkSmall}>  ·  </Text>
-          <TouchableOpacity onPress={() => openLegal('privacy')}>
+          <TouchableOpacity onPress={() => WebBrowser.openBrowserAsync('https://ivory-green-d0a.notion.site/One-shot-Privacy-policy-3285c8dc660680d7ac1fe514d6690703')}>
             <Text style={[styles.linkSmall, styles.linkSmallTappable]}>{t('paywall_privacy')}</Text>
           </TouchableOpacity>
         </View>
