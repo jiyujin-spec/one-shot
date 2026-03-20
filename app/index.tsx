@@ -144,6 +144,40 @@ function toAbsoluteUri(uri: string): string {
   return (FileSystem.documentDirectory ?? '') + uri;
 }
 
+// ── 当日以外の動画ファイルを削除し、レコードの URI をクリアする ────────────────
+// 仕様: 動画は当日のみ保持。翌日以降のファイルはアプリ起動時に自動削除される。
+// - documentDirectory 内のファイルのみ削除対象（Photos ライブラリは対象外）
+// - レコードエントリ自体（date, day, ts, isPass）は残してストリーク計算を維持
+async function cleanupOldVideoFiles(
+  recs: RecordEntry[],
+  today: string,
+): Promise<{ records: RecordEntry[]; changed: boolean }> {
+  let changed = false;
+  const docDir = FileSystem.documentDirectory ?? '';
+
+  const updated = await Promise.all(
+    recs.map(async (r): Promise<RecordEntry> => {
+      // 当日 or パス日 or URI なし → 変更不要
+      if (r.date === today || r.isPass) return r;
+      const uris = r.uris ?? (r.uri ? [r.uri] : []);
+      if (uris.length === 0) return r;
+
+      // documentDirectory 配下のファイルを削除
+      for (const u of uris) {
+        const abs = toAbsoluteUri(u);
+        if (docDir && abs.startsWith(docDir)) {
+          await FileSystem.deleteAsync(abs, { idempotent: true }).catch(() => {});
+        }
+      }
+      changed = true;
+      // URI を除去してエントリのみ保持（ストリーク維持のため日付・day は残す）
+      return { date: r.date, day: r.day, ts: r.ts };
+    }),
+  );
+
+  return { records: updated, changed };
+}
+
 // RecordEntry から URI 配列を取得するヘルパー（後方互換 + Build 7 絶対URI復元）
 function getRecordUris(rec: RecordEntry): string[] {
   const raw: string[] = (() => {
@@ -186,7 +220,7 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     paywall_feature2: 'ストリーク管理・継続記録',
     paywall_feature3: 'Instagram / TikTok への SNS シェア',
     paywall_feature4: '毎週1枚の無料パス自動付与',
-    paywall_feature5: '撮影履歴・カレンダー表示',
+    paywall_feature5: 'ストリーク記録・カレンダー表示',
     paywall_subscribe_btn: '年額プランで始める',
     paywall_iap_note: 'App Storeに表示される現在の価格が適用されます。\nApple IDに課金されます。サブスクリプションは購入後、現在の期間終了前に解約しない限り自動更新されます。',
     paywall_pass_note: 'お休みパスはApp Storeに表示される現在の価格で別途購入できます',
@@ -280,6 +314,11 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     guide_rule_10day_title: '目標の固定ルール',
     guide_rule_10day_body: '10日を過ぎると、その目標を変えることはできなくなります（変更にはリセットが必要になります）。',
     ok: 'OK',
+    video_today_only: '動画は当日のみ保存されます\nInstagram等にシェアして記録を残しましょう',
+    onboarding_rule: '明日になれば消える。でも、投稿した記録は残る。',
+    preview_expiry_hint: 'この動画は明日消えます — 今すぐシェアして記録を残そう',
+    guide_card_storage_title: '動画の保存ルール',
+    guide_card_storage_body: '動画はアプリ内に当日のみ保存されます。翌日のアプリ起動時に自動削除されます。\n\n記録を残したいときは、当日中にInstagramやTikTokにシェアしてください。\nシェアした投稿が、あなたの継続の証になります。',
   },
   en: {
     meta_description: 'One video a day. Build the habit. Leave the record.',
@@ -309,7 +348,7 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     paywall_feature2: 'Streak tracking & accountability log',
     paywall_feature3: 'Direct share to Instagram / TikTok',
     paywall_feature4: 'Weekly free rest pass — auto-granted',
-    paywall_feature5: 'Full history with calendar view',
+    paywall_feature5: 'Streak calendar & daily check-in log',
     paywall_subscribe_btn: 'Get Access',
     paywall_iap_note: 'Current price shown in the App Store applies.\nCharged to your Apple ID. Subscription auto-renews unless cancelled before the end of the current period.',
     paywall_pass_note: 'Rest passes available separately at the current price shown in the App Store',
@@ -403,6 +442,11 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     guide_rule_10day_title: 'Goal Lock Rule',
     guide_rule_10day_body: 'After 10 days, you cannot change your goal without resetting your progress.',
     ok: 'OK',
+    video_today_only: "Videos are kept for today only\nShare before midnight to preserve them",
+    onboarding_rule: 'Gone by midnight. Unless you post it.',
+    preview_expiry_hint: 'This video disappears tomorrow — share now to keep it',
+    guide_card_storage_title: 'Video storage',
+    guide_card_storage_body: 'Videos are stored in the app for today only and automatically deleted on your next launch.\n\nTo preserve your record, share to Instagram or TikTok before the day ends.\nYour post is your proof of work.',
   },
 };
 
@@ -1072,12 +1116,26 @@ export default function Page() {
             }
           }
         }
+        // ── 当日のみ保存仕様: 過去の動画ファイルを削除 ──────────────────────────
+        // アプリ起動のたびに当日以外のファイルを削除し、URIをクリアする。
+        // レコードエントリ（date/day/ts）は保持してストリーク計算に使う。
+        const initToday = getAppDate();
+        {
+          const { records: cleaned, changed } = await cleanupOldVideoFiles(loadedRecords, initToday);
+          if (changed) {
+            loadedRecords = cleaned;
+            // 即座に永続化して次回起動時の重複削除試行を防ぐ
+            AsyncStorage.setItem(
+              RECORDS_KEY,
+              JSON.stringify({ schema_version: SCHEMA_VERSION, records: cleaned })
+            ).catch(() => {});
+          }
+        }
         setRecords(loadedRecords);
 
         // ── records 配列を唯一の正解源として streak を再計算 ──
         // 保存された appState.streak は過去の不整合で壊れている可能性があるため、
         // 起動のたびに records から正しい値を導出して上書きする。
-        const initToday = getAppDate();
         loaded.streak = calculateStreak(loadedRecords, initToday);
         loaded.lastRecordDate = getLastRecordDate(loadedRecords, initToday);
 
@@ -1578,6 +1636,7 @@ export default function Page() {
       <View style={styles.screenCenter}>
         <Text style={styles.appTitle}>ONE SHOT</Text>
         <Text style={styles.subtitle}>{t('onboarding_subtitle')}</Text>
+        <Text style={styles.onboardingRule}>{t('onboarding_rule')}</Text>
         <View style={styles.inputGroup}>
           <Text style={styles.inputLabel}>{t('onboarding_label')}</Text>
           <TextInput
@@ -1945,6 +2004,9 @@ export default function Page() {
             </TouchableOpacity>
           </View>
 
+          {/* ── 当日のみ保存ヒント ── */}
+          <Text style={styles.previewExpiryHint}>{t('preview_expiry_hint')}</Text>
+
         </View>
       );
     }
@@ -2224,6 +2286,12 @@ export default function Page() {
                     {lang === 'ja' ? 'パス使用日' : 'Rest pass used'}
                   </Text>
                 </View>
+              ) : selectedDateRecord && !selectedDateRecord.isPass ? (
+                // 記録済みだが URI なし = 当日以外（動画は削除済み）
+                <View style={styles.dayDetailPassRow}>
+                  <Feather name="film" size={20} color="#555" style={{ marginBottom: 6 }} />
+                  <Text style={styles.dayDetailPassText}>{t('video_today_only')}</Text>
+                </View>
               ) : (
                 <View style={styles.dayDetailPassRow}>
                   <Text style={styles.dayDetailPassText}>{t('no_history')}</Text>
@@ -2320,11 +2388,15 @@ export default function Page() {
               </>
             )}
 
-            {/* URI がない場合（パス使用日など）*/}
+            {/* URI がない場合（パス使用日 or 当日以外の削除済み動画）*/}
             {selectedRecord && playingUri == null && (
               <View style={styles.recordModalNoMedia}>
                 <Feather name="film" size={48} color="#444" />
-                <Text style={styles.recordModalNoMediaText}>{t('no_history')}</Text>
+                <Text style={styles.recordModalNoMediaText}>
+                  {selectedRecord.isPass
+                    ? (lang === 'ja' ? 'パス使用日' : 'Rest pass used')
+                    : t('video_today_only')}
+                </Text>
               </View>
             )}
           </View>
@@ -2522,13 +2594,14 @@ export default function Page() {
 
           {[
             { title: t('guide_card1_title'), body: t('guide_card1_body') },
+            { title: t('guide_card_storage_title'), body: t('guide_card_storage_body'), highlight: true },
             { title: t('guide_card3_title'), body: t('guide_card3_body') },
             { title: t('guide_card4_title'), body: t('guide_card4_body') },
             { title: t('guide_card5_title'), body: t('guide_card5_body') },
             { title: t('guide_rule_10day_title'), body: t('guide_rule_10day_body') },
           ].map((card, i) => (
-            <View key={i} style={styles.guideCard}>
-              <Text style={styles.guideCardTitle}>{card.title}</Text>
+            <View key={i} style={[styles.guideCard, card.highlight && styles.guideCardHighlight]}>
+              <Text style={[styles.guideCardTitle, card.highlight && styles.guideCardTitleHighlight]}>{card.title}</Text>
               <Text style={styles.guideCardBody}>{card.body}</Text>
             </View>
           ))}
@@ -3122,8 +3195,16 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#888',
     textAlign: 'center',
-    marginBottom: 40,
+    marginBottom: 12,
     letterSpacing: 0.5,
+  },
+  onboardingRule: {
+    fontSize: 13,
+    color: '#CC0000',
+    textAlign: 'center',
+    marginBottom: 32,
+    letterSpacing: 0.3,
+    fontStyle: 'italic',
   },
 
   // ── Inputs ──
@@ -3870,6 +3951,13 @@ const styles = StyleSheet.create({
     width: '100%',
     gap: 10,
   },
+  previewExpiryHint: {
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.35)',
+    textAlign: 'center',
+    marginTop: 12,
+    letterSpacing: 0.2,
+  },
   previewBtnDelete: {
     flex: 1,
     flexDirection: 'column',
@@ -4450,6 +4538,14 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#aaa',
     lineHeight: 20,
+  },
+  guideCardHighlight: {
+    borderWidth: 1,
+    borderColor: 'rgba(204,0,0,0.5)',
+    backgroundColor: 'rgba(204,0,0,0.06)',
+  },
+  guideCardTitleHighlight: {
+    color: '#CC0000',
   },
   guideStep: {
     fontSize: 13,
