@@ -41,7 +41,6 @@ import * as FileSystem from 'expo-file-system';
 import * as Notifications from 'expo-notifications';
 import * as StoreReview from 'expo-store-review';
 import * as WebBrowser from 'expo-web-browser';
-import { processVideo } from '../modules/video-overlay';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -1328,19 +1327,7 @@ export default function Page() {
     setCapturedType('video');
     setIsProcessingVideo(true);
     try {
-      const currentPhase = appState.phase ?? 1;
-      // filterCurrentDay は上で計算済み（同日2本目以降はカウントアップしない）
-      const processed = await processVideo({
-        inputPath: rawUri,
-        habitName: (appState.goal || 'HABIT').toUpperCase(),
-        currentDay: filterCurrentDay,
-        captureTime: format(captureTime, "yyyy.MM/dd HH:mm"),
-        dayLabel: currentPhase > 1 ? `P${currentPhase} DAY${filterCurrentDay}` : undefined,
-      });
-      setCapturedUri(processed);  // transition to preview with processed video
-    } catch (vErr) {
-      console.warn('[processVideo] fallback to raw video:', vErr);
-      setCapturedUri(rawUri);     // fallback: show raw video on error
+      setCapturedUri(rawUri);
     } finally {
       setIsProcessingVideo(false);
     }
@@ -1371,8 +1358,7 @@ export default function Page() {
       // ストレージ圧迫時に積極的に削除する。その結果、翌日以降に履歴を開くと
       // <Image> が真っ黒になり、シェア/保存操作でエラーが発生していた。
       //
-      // 動画は processVideo ネイティブモジュールが Documents ディレクトリへ保存する
-      // ため問題が顕在化しなかったが、写真の tmpfile は揮発性で必ず消える。
+      // 動画の tmpfile は揮発性で消えるため、写真と同様に Photos ライブラリから永続 URI を取得する。
       //
       // 【修正】createAssetAsync でカメラロールへ保存し、getAssetInfoAsync で
       // Photos ライブラリ内の永続的な localUri（file:// パス）を取得してレコードへ
