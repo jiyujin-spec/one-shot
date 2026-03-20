@@ -41,6 +41,7 @@ import * as FileSystem from 'expo-file-system';
 import * as Notifications from 'expo-notifications';
 import * as StoreReview from 'expo-store-review';
 import * as WebBrowser from 'expo-web-browser';
+import { processVideo } from '../modules/video-overlay';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -1411,7 +1412,19 @@ export default function Page() {
     setCapturedType('video');
     setIsProcessingVideo(true);
     try {
-      setCapturedUri(rawUri);
+      const currentPhase = appState.phase ?? 1;
+      // filterCurrentDay は上で計算済み（同日2本目以降はカウントアップしない）
+      const processed = await processVideo({
+        inputPath: rawUri,
+        habitName: (appState.goal || 'HABIT').toUpperCase(),
+        currentDay: filterCurrentDay,
+        captureTime: format(captureTime, "yyyy.MM/dd HH:mm"),
+        dayLabel: currentPhase > 1 ? `P${currentPhase} DAY${filterCurrentDay}` : undefined,
+      });
+      setCapturedUri(processed);  // transition to preview with processed video
+    } catch (vErr) {
+      console.warn('[processVideo] fallback to raw video:', vErr);
+      setCapturedUri(rawUri);     // fallback: show raw video on error
     } finally {
       setIsProcessingVideo(false);
     }
