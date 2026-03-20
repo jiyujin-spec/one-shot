@@ -148,32 +148,48 @@ function toAbsoluteUri(uri: string): string {
 // 仕様: 動画は当日のみ保持。翌日以降のファイルはアプリ起動時に自動削除される。
 // - documentDirectory 内のファイルのみ削除対象（Photos ライブラリは対象外）
 // - レコードエントリ自体（date, day, ts, isPass）は残してストリーク計算を維持
+// - 処理全体を try...catch で保護し、失敗してもアプリ起動を妨げない
 async function cleanupOldVideoFiles(
   recs: RecordEntry[],
   today: string,
 ): Promise<{ records: RecordEntry[]; changed: boolean }> {
-  let changed = false;
+  // 入力ガード: recs が配列でない・空の場合はそのまま返す
+  if (!Array.isArray(recs) || recs.length === 0) {
+    return { records: recs ?? [], changed: false };
+  }
+
   const docDir = FileSystem.documentDirectory ?? '';
 
   const updated = await Promise.all(
     recs.map(async (r): Promise<RecordEntry> => {
-      // 当日 or パス日 or URI なし → 変更不要
-      if (r.date === today || r.isPass) return r;
-      const uris = r.uris ?? (r.uri ? [r.uri] : []);
-      if (uris.length === 0) return r;
+      try {
+        // 当日 or パス日 or URI なし → 変更不要
+        if (r.date === today || r.isPass) return r;
+        const uris = r.uris ?? (r.uri ? [r.uri] : []);
+        if (uris.length === 0) return r;
 
-      // documentDirectory 配下のファイルを削除
-      for (const u of uris) {
-        const abs = toAbsoluteUri(u);
-        if (docDir && abs.startsWith(docDir)) {
-          await FileSystem.deleteAsync(abs, { idempotent: true }).catch(() => {});
+        // documentDirectory 配下のファイルを削除
+        for (const u of uris) {
+          try {
+            const abs = toAbsoluteUri(u);
+            if (docDir && abs.startsWith(docDir)) {
+              await FileSystem.deleteAsync(abs, { idempotent: true }).catch(() => {});
+            }
+          } catch {
+            // 個別ファイルの削除失敗は無視して続行
+          }
         }
+        // URI を除去してエントリのみ保持（ストリーク維持のため日付・day は残す）
+        return { date: r.date, day: r.day, ts: r.ts };
+      } catch {
+        // エントリ処理失敗時は元のエントリをそのまま保持（安全側に倒す）
+        return r;
       }
-      changed = true;
-      // URI を除去してエントリのみ保持（ストリーク維持のため日付・day は残す）
-      return { date: r.date, day: r.day, ts: r.ts };
     }),
   );
+
+  // 変更検出: 返されたオブジェクトが元と異なるエントリがあれば changed=true
+  const changed = updated.some((r, i) => r !== recs[i]);
 
   return { records: updated, changed };
 }
@@ -1119,8 +1135,9 @@ export default function Page() {
         // ── 当日のみ保存仕様: 過去の動画ファイルを削除 ──────────────────────────
         // アプリ起動のたびに当日以外のファイルを削除し、URIをクリアする。
         // レコードエントリ（date/day/ts）は保持してストリーク計算に使う。
+        // ※ クリーンアップ失敗はアプリ起動を妨げない（try...catch で完全保護）
         const initToday = getAppDate();
-        {
+        try {
           const { records: cleaned, changed } = await cleanupOldVideoFiles(loadedRecords, initToday);
           if (changed) {
             loadedRecords = cleaned;
@@ -1130,6 +1147,9 @@ export default function Page() {
               JSON.stringify({ schema_version: SCHEMA_VERSION, records: cleaned })
             ).catch(() => {});
           }
+        } catch (cleanupErr) {
+          // クリーンアップ失敗 → loadedRecords はそのまま使用、起動は継続
+          console.warn('[Init] cleanupOldVideoFiles failed, continuing with loaded records:', cleanupErr);
         }
         setRecords(loadedRecords);
 
@@ -1193,6 +1213,10 @@ export default function Page() {
           setScreen('home');
           if (!loaded.guideShown) setGuideVisible(true);
         }
+      } catch (initErr) {
+        // 予期しない初期化エラー → ホーム画面へ遷移してアプリを起動させる
+        console.error('[Init] unexpected error during initialization:', initErr);
+        setScreen('home');
       } finally {
         setIsLoading(false);
       }
@@ -1438,15 +1462,18 @@ export default function Page() {
       const asset = await MediaLibrary.createAssetAsync(capturedUri);
       const assetInfo = await MediaLibrary.getAssetInfoAsync(asset);
 
-      // ── Build 7: 永続 URI の決定と相対パス変換 ──────────────────────────────
+      // ── Build 9: 永続 URI の決定と相対パス変換 ──────────────────────────────
       // 優先順位:
-      //   1. assetInfo.localUri   → Photos ライブラリの安定パス（絶対 URI のまま保存）
+      //   1. assetInfo.localUri   → Photos ライブラリの安定 file:// パス（絶対 URI のまま保存）
       //   2. capturedUri fallback → documentDirectory 内のファイル → 相対パスに変換
+      //
+      // ※ `??` ではなく `||` を使用: localUri が空文字列の場合にも capturedUri へ fallback する
+      //    （`??` は null/undefined のみ fallback、`||` は falsy 値すべてで fallback）
       //
       // toRelativeUri は:
       //   - documentDirectory 配下のパス → 相対パスに変換 (UUID 変化に強い)
-      //   - Photos ライブラリ URI       → そのまま（変換対象外）
-      const rawPersistentUri = assetInfo.localUri ?? capturedUri;
+      //   - Photos ライブラリ URI (file:// / ph://)  → そのまま（変換対象外）
+      const rawPersistentUri = assetInfo.localUri || capturedUri;
       const persistentUri = toRelativeUri(rawPersistentUri);
 
       recordToday(persistentUri);
