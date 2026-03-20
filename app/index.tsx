@@ -1703,10 +1703,13 @@ export default function Page() {
     );
   }
 
-  const today = getAppDate();
+  // レンダリングフェーズでの例外を防ぐため try-catch でガードする
+  let today = '';
+  try { today = getAppDate(); } catch { today = new Date().toISOString().slice(0, 10); }
+  const safeRecords = Array.isArray(records) ? records : [];
   const recordedToday = appState.lastRecordDate === today; // 今日1本以上記録済み
   // 今日のスロット数（0〜MAX_SLOTS）
-  const todayRecord = records.find(r => r.date === today && !r.isPass);
+  const todayRecord = safeRecords.find(r => r.date === today && !r.isPass);
   const todaySlotCount = todayRecord ? getRecordUris(todayRecord).length : 0;
   const recordingFull = recordedToday && todaySlotCount >= MAX_SLOTS; // 5本上限に達している
 
@@ -1899,7 +1902,7 @@ export default function Page() {
           </Text>
         )}
         {/* MaskedView: テキスト形状をマスクとして LinearGradient を型抜き */}
-        <MaskedView maskElement={<Text style={styles.streakNum}>{appState.streak}</Text>}>
+        <MaskedView maskElement={<Text style={styles.streakNum}>{appState.streak ?? 0}</Text>}>
           <LinearGradient
             colors={['#ffffff', '#ffffff', '#555555']}
             locations={[0, 0.3, 1.0]}
@@ -1907,7 +1910,7 @@ export default function Page() {
             end={{ x: 0, y: 1 }}
           >
             {/* opacity:0 でグラデーションのサイズをテキストに合わせる */}
-            <Text style={[styles.streakNum, { opacity: 0 }]}>{appState.streak}</Text>
+            <Text style={[styles.streakNum, { opacity: 0 }]}>{appState.streak ?? 0}</Text>
           </LinearGradient>
         </MaskedView>
         <Text style={styles.streakLabel}>
@@ -2209,8 +2212,9 @@ export default function Page() {
   const HistoryScreen = () => {
     const firstDay = new Date(calYear, calMonth, 1).getDay();
     const lastDate = new Date(calYear, calMonth + 1, 0).getDate();
-    const recordMap = new Map(records.map(r => [r.date, r]));
-    const todayStr = getAppDate();
+    const recordMap = new Map((Array.isArray(records) ? records : []).map(r => [r.date, r]));
+    let todayStr = '';
+    try { todayStr = getAppDate(); } catch { todayStr = new Date().toISOString().slice(0, 10); }
     const dayLabels = lang === 'en'
       ? ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
       : ['日', '月', '火', '水', '木', '金', '土'];
@@ -3156,7 +3160,8 @@ Email: ristu.japan@gmail.com`;
         const textTop = dotY + dotSize / 2 - textSize / 2;
         const neShotX = dotX + dotSize + textSize * 0.22;
         const lineGap = textSize * 1.35;
-        const tsStr = format(captureTime, "yyyy.MM/dd HH:mm");
+        let tsStr = '';
+        try { tsStr = format(captureTime, "yyyy.MM/dd HH:mm"); } catch { tsStr = ''; }
         const habitStr = `HABIT:${habitName}`;
         const currentPhaseForPhoto = appState.phase ?? 1;
         const dayStr = currentPhaseForPhoto > 1 ? `P${currentPhaseForPhoto} DAY${currentDay}` : `DAY${currentDay}`;
