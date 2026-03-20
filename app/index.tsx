@@ -143,6 +143,7 @@ function toAbsoluteUri(uri: string): string {
   return (FileSystem.documentDirectory ?? '') + uri;
 }
 
+
 // RecordEntry から URI 配列を取得するヘルパー（後方互換 + Build 7 絶対URI復元）
 function getRecordUris(rec: RecordEntry): string[] {
   const raw: string[] = (() => {
@@ -185,7 +186,7 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     paywall_feature2: 'ストリーク管理・継続記録',
     paywall_feature3: 'Instagram / TikTok への SNS シェア',
     paywall_feature4: '毎週1枚の無料パス自動付与',
-    paywall_feature5: '撮影履歴・カレンダー表示',
+    paywall_feature5: 'ストリーク記録・カレンダー表示',
     paywall_subscribe_btn: '年額プランで始める',
     paywall_iap_note: 'App Storeに表示される現在の価格が適用されます。Apple IDに課金されます。サブスクリプションは購入後、現在の期間終了前に解約しない限り自動更新されます。サブスクリプションの管理・自動更新のオフは、購入後にApple IDのアカウント設定から行えます。',
     paywall_pass_note: 'お休みパスはApp Storeに表示される現在の価格で別途購入できます',
@@ -279,6 +280,11 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     guide_rule_10day_title: '目標の固定ルール',
     guide_rule_10day_body: '10日を過ぎると、その目標を変えることはできなくなります（変更にはリセットが必要になります）。',
     ok: 'OK',
+    video_today_only: '動画は当日のみ保存されます\nInstagram等にシェアして記録を残しましょう',
+    onboarding_rule: '明日になれば消える。でも、投稿した記録は残る。',
+    preview_expiry_hint: 'この動画は明日消えます — 今すぐシェアして記録を残そう',
+    guide_card_storage_title: '動画の保存ルール',
+    guide_card_storage_body: '動画はアプリ内に当日のみ保存されます。翌日のアプリ起動時に自動削除されます。\n\n記録を残したいときは、当日中にInstagramやTikTokにシェアしてください。\nシェアした投稿が、あなたの継続の証になります。',
   },
   en: {
     meta_description: 'One video a day. Build the habit. Leave the record.',
@@ -308,7 +314,7 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     paywall_feature2: 'Streak tracking & accountability log',
     paywall_feature3: 'Direct share to Instagram / TikTok',
     paywall_feature4: 'Weekly free rest pass — auto-granted',
-    paywall_feature5: 'Full history with calendar view',
+    paywall_feature5: 'Streak calendar & daily check-in log',
     paywall_subscribe_btn: 'Get Access',
     paywall_iap_note: 'Current price shown in the App Store applies. Charged to your Apple ID. Subscription auto-renews unless cancelled before the end of the current period. You can manage your subscription and turn off auto-renewal in your Apple ID Account Settings after purchase.',
     paywall_pass_note: 'Rest passes available separately at the current price shown in the App Store',
@@ -402,6 +408,11 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     guide_rule_10day_title: 'Goal Lock Rule',
     guide_rule_10day_body: 'After 10 days, you cannot change your goal without resetting your progress.',
     ok: 'OK',
+    video_today_only: "Videos are kept for today only\nShare before midnight to preserve them",
+    onboarding_rule: 'Gone by midnight. Unless you post it.',
+    preview_expiry_hint: 'This video disappears tomorrow — share now to keep it',
+    guide_card_storage_title: 'Video storage',
+    guide_card_storage_body: 'Videos are stored in the app for today only and automatically deleted on your next launch.\n\nTo preserve your record, share to Instagram or TikTok before the day ends.\nYour post is your proof of work.',
   },
 };
 
@@ -515,13 +526,9 @@ function pickNotifyMessage(lang: Lang, goal: string): { title: string; body: str
   return { title: m.title, body: m.body(goal) };
 }
 
-Notifications.setNotificationHandler({
-  handleNotification: async (): Promise<Notifications.NotificationBehavior> => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-  }),
-});
+// NOTE: setNotificationHandler is called inside a useEffect in the Page
+// component to avoid top-level evaluation errors crashing the app before
+// React can mount the ErrorBoundary.
 
 async function scheduleDailyNotification(timeStr: string, title: string, body: string, hasRecordedToday = false) {
   await Notifications.cancelAllScheduledNotificationsAsync();
@@ -636,6 +643,20 @@ export default function Page() {
   const [reviewReady, setReviewReady] = useState(false);
 
   const toastTimer = useRef<any>(null);
+
+  // ── Notification handler (inside useEffect to avoid top-level crash) ─────────
+
+  useEffect(() => {
+    try {
+      Notifications.setNotificationHandler({
+        handleNotification: async (): Promise<Notifications.NotificationBehavior> => ({
+          shouldShowAlert: true,
+          shouldPlaySound: true,
+          shouldSetBadge: false,
+        }),
+      });
+    } catch {}
+  }, []);
 
   // ── Translation helper ──────────────────────────────────────────────────────
 
@@ -980,19 +1001,45 @@ export default function Page() {
   }, [reviewReady]);
 
   // ── Init ────────────────────────────────────────────────────────────────────
+  // Build 10: 各初期化ステップを個別の try...catch で保護。
+  // どのステップが失敗しても setIsLoading(false) が必ず実行され、
+  // ホーム画面（またはオンボーディング）が表示される。
 
   useEffect(() => {
     (async () => {
-      try {
-        // Load lang
-        const savedLang = await AsyncStorage.getItem(LANG_KEY);
-        if (savedLang === 'en' || savedLang === 'ja') setLang(savedLang);
+      // ステップ間で共有する変数をここで宣言する。
+      // 各ステップが失敗しても後続ステップがデフォルト値で動作できるようにする。
+      let loaded: AppState = { ...defaultState };
+      let loadedRecords: RecordEntry[] = [];
+      let savedLang: string | null = null;
+      let initToday = '';
 
-        // ── Build 7: State ロード（v3 → v2 フォールバック）────────────────────
+      try {
+        // ── ステップ 0: 現在日付の取得 ──────────────────────────────────────
+        // getAppDate() が失敗した場合は ISO 日付文字列でフォールバック
+        try {
+          initToday = getAppDate();
+        } catch (e) {
+          console.error('[Init] getAppDate() failed, using ISO fallback:', e);
+          initToday = new Date().toISOString().slice(0, 10);
+        }
+
+        // ── ステップ 1: 言語設定のロード ────────────────────────────────────
+        try {
+          const rawLang = await AsyncStorage.getItem(LANG_KEY);
+          if (rawLang === 'en' || rawLang === 'ja') {
+            savedLang = rawLang;
+            setLang(rawLang);
+          }
+        } catch (e) {
+          console.error('[Init] Failed to load language setting:', e);
+          // savedLang は null のまま → 通知などは 'ja' フォールバックを使用
+        }
+
+        // ── ステップ 2: AppState のロード（v3 → v2 フォールバック）───────────
         // v3 キーが存在しない場合は v2 レガシーキーから移行する。
         // AppState 自体にファイル URI は含まれないため、構造コピーのみで完了する。
-        let loaded: AppState = { ...defaultState };
-        {
+        try {
           const rawV3 = await AsyncStorage.getItem(STORAGE_KEY);
           if (rawV3) {
             // v3 データが存在 → schema_version フィールドを除いて AppState にマージ
@@ -1007,21 +1054,26 @@ export default function Page() {
               console.log('[Build7] State migrated from v2 to v3');
             }
           }
-        }
-
-        // Ensure rcUserID
-        if (!loaded.rcUserID) {
+          // Ensure rcUserID
+          if (!loaded.rcUserID) {
+            loaded.rcUserID = 'user_' + Math.random().toString(36).substr(2, 12) + '_' + Date.now();
+          }
+          // Ensure userId (stable "OS-YYYY-NNN" identifier for overlay)
+          if (!loaded.userId) {
+            const year = new Date().getFullYear();
+            const num = Math.floor(Math.random() * 999) + 1;
+            loaded.userId = `OS-${year}-${String(num).padStart(3, '0')}`;
+          }
+        } catch (e) {
+          console.error('[Init] Failed to load AppState, using default state:', e);
+          loaded = { ...defaultState };
           loaded.rcUserID = 'user_' + Math.random().toString(36).substr(2, 12) + '_' + Date.now();
-        }
-
-        // Ensure userId (stable "OS-YYYY-NNN" identifier for overlay)
-        if (!loaded.userId) {
           const year = new Date().getFullYear();
           const num = Math.floor(Math.random() * 999) + 1;
           loaded.userId = `OS-${year}-${String(num).padStart(3, '0')}`;
         }
 
-        // ── Build 7: Records ロード（v3 → v2 フォールバック + URI 相対化移行）──
+        // ── ステップ 3: Records のロード（v3 → v2 フォールバック + URI 移行）──
         //
         // 【マイグレーション戦略】
         //   v2: [ RecordEntry, ... ]         （生配列、絶対 URI 混在）
@@ -1033,13 +1085,12 @@ export default function Page() {
         //   ・Photos ライブラリ URI              → そのまま（変換不要）
         //   ・旧 UUID の壊れた絶対パス           → 変換は不完全だが
         //     エントリ（日付・ストリーク情報）は必ず保持する
-        let loadedRecords: RecordEntry[] = [];
-        {
+        try {
           const recRawV3 = await AsyncStorage.getItem(RECORDS_KEY);
           if (recRawV3) {
             // v3 形式から直接ロード
             const stored = JSON.parse(recRawV3) as { schema_version: number; records: RecordEntry[] };
-            loadedRecords = stored.records ?? [];
+            loadedRecords = Array.isArray(stored.records) ? stored.records : [];
           } else {
             // v3 なし → v2 レガシーから移行
             const recRawV2 = await AsyncStorage.getItem(LEGACY_RECORDS_KEY);
@@ -1069,21 +1120,31 @@ export default function Page() {
               ).catch(() => {});
               console.log('[Build7] Records migration to v3 complete');
             }
+            // recRawV2 もなければ loadedRecords は [] のまま（新規インストール）
           }
+        } catch (e) {
+          console.error('[Init] Failed to load records, using empty array:', e);
+          loadedRecords = []; // データ消失を防ぐため空配列で継続
         }
+
+        // records ステートを確定（空配列でも正常）
         setRecords(loadedRecords);
 
-        // ── records 配列を唯一の正解源として streak を再計算 ──
+        // ── ステップ 5: streak 再計算と AppState の確定・永続化 ─────────────
         // 保存された appState.streak は過去の不整合で壊れている可能性があるため、
         // 起動のたびに records から正しい値を導出して上書きする。
-        const initToday = getAppDate();
-        loaded.streak = calculateStreak(loadedRecords, initToday);
-        loaded.lastRecordDate = getLastRecordDate(loadedRecords, initToday);
+        try {
+          loaded.streak = calculateStreak(loadedRecords, initToday);
+          loaded.lastRecordDate = getLastRecordDate(loadedRecords, initToday);
+          setAppState(loaded);
+          await saveAppState(loaded);
+        } catch (e) {
+          console.error('[Init] Failed to calculate streak or persist AppState:', e);
+          // streak 計算失敗時でも loaded の現在値で setAppState する
+          setAppState(loaded);
+        }
 
-        setAppState(loaded);
-        await saveAppState(loaded);
-
-        // Init RevenueCat
+        // ── ステップ 6: RevenueCat の初期化 ─────────────────────────────────
         try {
           Purchases.configure({ apiKey: RC_API_KEY, appUserID: loaded.rcUserID });
           const offerings = await Purchases.getOfferings();
@@ -1109,10 +1170,11 @@ export default function Page() {
             loaded = next;
           }
         } catch (e) {
-          console.warn('[RC] init error:', e);
+          console.error('[RC] init error:', e);
+          // RC 失敗 → subscribed は false のまま → paywall を表示（安全側）
         }
 
-        // Init notifications
+        // ── ステップ 7: 通知権限の取得とスケジューリング ─────────────────────
         try {
           const { status } = await Notifications.requestPermissionsAsync();
           if (status === 'granted') {
@@ -1122,19 +1184,31 @@ export default function Page() {
             await scheduleDailyNotification(loaded.notifyTime, notifyTitle, notifyBody, alreadyRecordedToday);
           }
         } catch (e) {
-          console.warn('[Notify] init error:', e);
+          console.error('[Notify] init error:', e);
+          // 通知の失敗はアプリ起動を妨げない
         }
 
-        // Navigate
-        if (!loaded.onboarded) {
+        // ── ステップ 8: 画面遷移 ─────────────────────────────────────────────
+        try {
+          if (!loaded.onboarded) {
+            setScreen('onboarding');
+          } else if (!loaded.subscribed) {
+            setScreen('paywall');
+          } else {
+            setScreen('home');
+            if (!loaded.guideShown) setGuideVisible(true);
+          }
+        } catch (e) {
+          console.error('[Init] Navigation failed, defaulting to onboarding:', e);
           setScreen('onboarding');
-        } else if (!loaded.subscribed) {
-          setScreen('paywall');
-        } else {
-          setScreen('home');
-          if (!loaded.guideShown) setGuideVisible(true);
         }
+
+      } catch (unexpectedErr) {
+        // 上記の個別 try...catch を突き破った予期しないエラーの最終安全網
+        console.error('[Init] Unexpected top-level error during initialization:', unexpectedErr);
+        setScreen('onboarding');
       } finally {
+        // どのステップが失敗しても必ず isLoading を解除してホーム/オンボーディングを表示
         setIsLoading(false);
       }
     })();
@@ -1376,15 +1450,18 @@ export default function Page() {
       const asset = await MediaLibrary.createAssetAsync(capturedUri);
       const assetInfo = await MediaLibrary.getAssetInfoAsync(asset);
 
-      // ── Build 7: 永続 URI の決定と相対パス変換 ──────────────────────────────
+      // ── Build 9: 永続 URI の決定と相対パス変換 ──────────────────────────────
       // 優先順位:
-      //   1. assetInfo.localUri   → Photos ライブラリの安定パス（絶対 URI のまま保存）
+      //   1. assetInfo.localUri   → Photos ライブラリの安定 file:// パス（絶対 URI のまま保存）
       //   2. capturedUri fallback → documentDirectory 内のファイル → 相対パスに変換
+      //
+      // ※ `??` ではなく `||` を使用: localUri が空文字列の場合にも capturedUri へ fallback する
+      //    （`??` は null/undefined のみ fallback、`||` は falsy 値すべてで fallback）
       //
       // toRelativeUri は:
       //   - documentDirectory 配下のパス → 相対パスに変換 (UUID 変化に強い)
-      //   - Photos ライブラリ URI       → そのまま（変換対象外）
-      const rawPersistentUri = assetInfo.localUri ?? capturedUri;
+      //   - Photos ライブラリ URI (file:// / ph://)  → そのまま（変換対象外）
+      const rawPersistentUri = assetInfo.localUri || capturedUri;
       const persistentUri = toRelativeUri(rawPersistentUri);
 
       recordToday(persistentUri);
@@ -1559,10 +1636,13 @@ export default function Page() {
     );
   }
 
-  const today = getAppDate();
+  // レンダリングフェーズでの例外を防ぐため try-catch でガードする
+  let today = '';
+  try { today = getAppDate(); } catch { today = new Date().toISOString().slice(0, 10); }
+  const safeRecords = Array.isArray(records) ? records : [];
   const recordedToday = appState.lastRecordDate === today; // 今日1本以上記録済み
   // 今日のスロット数（0〜MAX_SLOTS）
-  const todayRecord = records.find(r => r.date === today && !r.isPass);
+  const todayRecord = safeRecords.find(r => r.date === today && !r.isPass);
   const todaySlotCount = todayRecord ? getRecordUris(todayRecord).length : 0;
   const recordingFull = recordedToday && todaySlotCount >= MAX_SLOTS; // 5本上限に達している
 
@@ -1574,6 +1654,7 @@ export default function Page() {
       <View style={styles.screenCenter}>
         <Text style={styles.appTitle}>ONE SHOT</Text>
         <Text style={styles.subtitle}>{t('onboarding_subtitle')}</Text>
+        <Text style={styles.onboardingRule}>{t('onboarding_rule')}</Text>
         <View style={styles.inputGroup}>
           <Text style={styles.inputLabel}>{t('onboarding_label')}</Text>
           <TextInput
@@ -1759,7 +1840,7 @@ export default function Page() {
           </Text>
         )}
         {/* MaskedView: テキスト形状をマスクとして LinearGradient を型抜き */}
-        <MaskedView maskElement={<Text style={styles.streakNum}>{appState.streak}</Text>}>
+        <MaskedView maskElement={<Text style={styles.streakNum}>{appState.streak ?? 0}</Text>}>
           <LinearGradient
             colors={['#ffffff', '#ffffff', '#555555']}
             locations={[0, 0.3, 1.0]}
@@ -1767,7 +1848,7 @@ export default function Page() {
             end={{ x: 0, y: 1 }}
           >
             {/* opacity:0 でグラデーションのサイズをテキストに合わせる */}
-            <Text style={[styles.streakNum, { opacity: 0 }]}>{appState.streak}</Text>
+            <Text style={[styles.streakNum, { opacity: 0 }]}>{appState.streak ?? 0}</Text>
           </LinearGradient>
         </MaskedView>
         <Text style={styles.streakLabel}>
@@ -1948,6 +2029,9 @@ export default function Page() {
             </TouchableOpacity>
           </View>
 
+          {/* ── 当日のみ保存ヒント ── */}
+          <Text style={styles.previewExpiryHint}>{t('preview_expiry_hint')}</Text>
+
         </View>
       );
     }
@@ -2068,8 +2152,9 @@ export default function Page() {
   const HistoryScreen = () => {
     const firstDay = new Date(calYear, calMonth, 1).getDay();
     const lastDate = new Date(calYear, calMonth + 1, 0).getDate();
-    const recordMap = new Map(records.map(r => [r.date, r]));
-    const todayStr = getAppDate();
+    const recordMap = new Map((Array.isArray(records) ? records : []).map(r => [r.date, r]));
+    let todayStr = '';
+    try { todayStr = getAppDate(); } catch { todayStr = new Date().toISOString().slice(0, 10); }
     const dayLabels = lang === 'en'
       ? ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
       : ['日', '月', '火', '水', '木', '金', '土'];
@@ -2186,7 +2271,21 @@ export default function Page() {
               </View>
 
               {/* 動画リスト */}
-              {selectedDateRecord && !selectedDateRecord.isPass && selectedDateUris.length > 0 ? (
+              {selectedDateRecord?.isPass ? (
+                <View style={styles.dayDetailPassRow}>
+                  <Text style={styles.dayDetailPassText}>
+                    {lang === 'ja' ? 'パス使用日' : 'Rest pass used'}
+                  </Text>
+                </View>
+              ) : selectedDateRecord && !selectedDateRecord.isPass && selectedDate !== todayStr ? (
+                // 過去の記録 → ファイルパスへのアクセスを一切行わず、ロックを表示
+                <View style={styles.dayDetailPassRow}>
+                  <Feather name="lock" size={20} color="#555" style={{ marginBottom: 6 }} />
+                  <Text style={styles.dayDetailPassText}>
+                    {lang === 'ja' ? '過去の記録は閲覧できません' : 'Past records cannot be viewed'}
+                  </Text>
+                </View>
+              ) : selectedDateRecord && !selectedDateRecord.isPass && selectedDate === todayStr && selectedDateUris.length > 0 ? (
                 selectedDateUris.map((uri, idx) => (
                   <TouchableOpacity
                     key={idx}
@@ -2209,28 +2308,19 @@ export default function Page() {
                       {lang === 'ja' ? `動画 ${idx + 1}` : `Video ${idx + 1}`}
                     </Text>
                     <View style={styles.dayDetailItemActions}>
-                      {/* 削除ボタン：当日のみ表示 */}
-                      {selectedDate === todayStr && (
-                        <TouchableOpacity
-                          style={styles.dayDetailDeleteBtn}
-                          onPress={() => {
-                            if (selectedDateRecord) deleteRecord(selectedDateRecord, idx);
-                          }}
-                        >
-                          <Feather name="trash-2" size={14} color="#CC0000" />
-                          <Text style={styles.dayDetailDeleteText}>{t('history_delete')}</Text>
-                        </TouchableOpacity>
-                      )}
+                      <TouchableOpacity
+                        style={styles.dayDetailDeleteBtn}
+                        onPress={() => {
+                          if (selectedDateRecord) deleteRecord(selectedDateRecord, idx);
+                        }}
+                      >
+                        <Feather name="trash-2" size={14} color="#CC0000" />
+                        <Text style={styles.dayDetailDeleteText}>{t('history_delete')}</Text>
+                      </TouchableOpacity>
                       <Feather name="chevron-right" size={16} color="#555" />
                     </View>
                   </TouchableOpacity>
                 ))
-              ) : selectedDateRecord?.isPass ? (
-                <View style={styles.dayDetailPassRow}>
-                  <Text style={styles.dayDetailPassText}>
-                    {lang === 'ja' ? 'パス使用日' : 'Rest pass used'}
-                  </Text>
-                </View>
               ) : (
                 <View style={styles.dayDetailPassRow}>
                   <Text style={styles.dayDetailPassText}>{t('no_history')}</Text>
@@ -2256,15 +2346,22 @@ export default function Page() {
               <Feather name="x" size={26} color="#fff" />
             </TouchableOpacity>
 
-            {selectedRecord && playingUri != null && (
+            {/* 過去の記録 → ファイルパスへのアクセスを一切行わず、ロックを表示 */}
+            {selectedRecord && selectedRecord.date !== todayStr && (
+              <View style={styles.recordModalNoMedia}>
+                <Feather name="lock" size={48} color="#444" />
+                <Text style={styles.recordModalNoMediaText}>
+                  {lang === 'ja' ? '過去の記録は閲覧できません' : 'Past records cannot be viewed'}
+                </Text>
+              </View>
+            )}
+
+            {selectedRecord && selectedRecord.date === todayStr && playingUri != null && (
               <>
                 {/* メディア表示 */}
                 {/* ── 画像/動画の判定: 拡張子で判断（heic/heif も対応）─── */}
                 {/\.(jpg|jpeg|png|heic|heif)$/i.test(playingUri) ? (
                   // ── 旧 tmpfile URI が失効した場合の onError フォールバック ──
-                  // iOS は NSTemporaryDirectory を積極的に削除するため、Build 5 以前に
-                  // 保存された写真の URI が無効になっている場合がある。
-                  // onError で playingUriError=true にし、プレースホルダーを表示する。
                   playingUriError ? (
                     <View style={styles.recordModalNoMedia}>
                       <Feather name="image" size={48} color="#444" />
@@ -2291,23 +2388,20 @@ export default function Page() {
                   />
                 )}
 
-                {/* ── アクションボタン（当日: 削除 | 再保存 | シェア、過去: 再保存 | シェアのみ）── */}
+                {/* ── アクションボタン（削除 | 再保存 | シェア）── */}
                 <View style={styles.recordModalActions}>
-                  {/* 削除ボタン：当日のみ表示（過去は非表示でストリーク保護）*/}
-                  {selectedRecord.date === todayStr && (
-                    <TouchableOpacity
-                      style={styles.recordModalBtnDelete}
-                      onPress={() => {
-                        const slotIdx = selectedSlotIdx ?? 0;
-                        setSelectedRecord(null);
-                        setSelectedSlotIdx(null);
-                        deleteRecord(selectedRecord, slotIdx);
-                      }}
-                    >
-                      <Feather name="trash-2" size={16} color="#fff" />
-                      <Text style={styles.recordModalBtnText}>{t('history_delete')}</Text>
-                    </TouchableOpacity>
-                  )}
+                  <TouchableOpacity
+                    style={styles.recordModalBtnDelete}
+                    onPress={() => {
+                      const slotIdx = selectedSlotIdx ?? 0;
+                      setSelectedRecord(null);
+                      setSelectedSlotIdx(null);
+                      deleteRecord(selectedRecord, slotIdx);
+                    }}
+                  >
+                    <Feather name="trash-2" size={16} color="#fff" />
+                    <Text style={styles.recordModalBtnText}>{t('history_delete')}</Text>
+                  </TouchableOpacity>
 
                   <TouchableOpacity
                     style={styles.recordModalBtnSave}
@@ -2327,11 +2421,15 @@ export default function Page() {
               </>
             )}
 
-            {/* URI がない場合（パス使用日など）*/}
-            {selectedRecord && playingUri == null && (
+            {/* 当日だが URI がない場合（パス使用日）*/}
+            {selectedRecord && selectedRecord.date === todayStr && playingUri == null && (
               <View style={styles.recordModalNoMedia}>
                 <Feather name="film" size={48} color="#444" />
-                <Text style={styles.recordModalNoMediaText}>{t('no_history')}</Text>
+                <Text style={styles.recordModalNoMediaText}>
+                  {selectedRecord.isPass
+                    ? (lang === 'ja' ? 'パス使用日' : 'Rest pass used')
+                    : t('video_today_only')}
+                </Text>
               </View>
             )}
           </View>
@@ -2529,13 +2627,14 @@ export default function Page() {
 
           {[
             { title: t('guide_card1_title'), body: t('guide_card1_body') },
+            { title: t('guide_card_storage_title'), body: t('guide_card_storage_body'), highlight: true },
             { title: t('guide_card3_title'), body: t('guide_card3_body') },
             { title: t('guide_card4_title'), body: t('guide_card4_body') },
             { title: t('guide_card5_title'), body: t('guide_card5_body') },
             { title: t('guide_rule_10day_title'), body: t('guide_rule_10day_body') },
           ].map((card, i) => (
-            <View key={i} style={styles.guideCard}>
-              <Text style={styles.guideCardTitle}>{card.title}</Text>
+            <View key={i} style={[styles.guideCard, card.highlight && styles.guideCardHighlight]}>
+              <Text style={[styles.guideCardTitle, card.highlight && styles.guideCardTitleHighlight]}>{card.title}</Text>
               <Text style={styles.guideCardBody}>{card.body}</Text>
             </View>
           ))}
@@ -3008,7 +3107,8 @@ Email: ristu.japan@gmail.com`;
         const textTop = dotY + dotSize / 2 - textSize / 2;
         const neShotX = dotX + dotSize + textSize * 0.22;
         const lineGap = textSize * 1.35;
-        const tsStr = format(captureTime, "yyyy.MM/dd HH:mm");
+        let tsStr = '';
+        try { tsStr = format(captureTime, "yyyy.MM/dd HH:mm"); } catch { tsStr = ''; }
         const habitStr = `HABIT:${habitName}`;
         const currentPhaseForPhoto = appState.phase ?? 1;
         const dayStr = currentPhaseForPhoto > 1 ? `P${currentPhaseForPhoto} DAY${currentDay}` : `DAY${currentDay}`;
@@ -3129,8 +3229,16 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#888',
     textAlign: 'center',
-    marginBottom: 40,
+    marginBottom: 12,
     letterSpacing: 0.5,
+  },
+  onboardingRule: {
+    fontSize: 13,
+    color: '#CC0000',
+    textAlign: 'center',
+    marginBottom: 32,
+    letterSpacing: 0.3,
+    fontStyle: 'italic',
   },
 
   // ── Inputs ──
@@ -3877,6 +3985,13 @@ const styles = StyleSheet.create({
     width: '100%',
     gap: 10,
   },
+  previewExpiryHint: {
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.35)',
+    textAlign: 'center',
+    marginTop: 12,
+    letterSpacing: 0.2,
+  },
   previewBtnDelete: {
     flex: 1,
     flexDirection: 'column',
@@ -4457,6 +4572,14 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#aaa',
     lineHeight: 20,
+  },
+  guideCardHighlight: {
+    borderWidth: 1,
+    borderColor: 'rgba(204,0,0,0.5)',
+    backgroundColor: 'rgba(204,0,0,0.06)',
+  },
+  guideCardTitleHighlight: {
+    color: '#CC0000',
   },
   guideStep: {
     fontSize: 13,
