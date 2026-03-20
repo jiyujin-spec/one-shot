@@ -11,16 +11,24 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.burnTextOverlay = exports.processVideo = void 0;
 const expo_modules_core_1 = require("expo-modules-core");
-const VideoOverlay = (0, expo_modules_core_1.requireNativeModule)('VideoOverlay');
+// IMPORTANT: Do NOT call requireNativeModule at the top level.
+// Top-level calls throw synchronously during JS evaluation when the native
+// module is absent, which crashes the app before React can render the
+// ErrorBoundary. Use requireOptionalNativeModule lazily inside each function.
+function getModule() {
+    const mod = (0, expo_modules_core_1.requireOptionalNativeModule)('VideoOverlay');
+    if (!mod) {
+        throw new Error('VideoOverlay native module is not available. Run `expo run:ios` or `expo run:android` to create a development build.');
+    }
+    return mod;
+}
 /**
- * Burns Industrial Data overlays into a video file.
- * - First 3 s: normal video with overlay
- * - Last 2 s:  frozen final frame with overlay
+ * Burns One Shot filter overlays into a video file.
  * @returns file:// URI of the processed video
  */
 function processVideo(options) {
     return __awaiter(this, void 0, void 0, function* () {
-        return VideoOverlay.processVideo(options);
+        return getModule().processVideo(options);
     });
 }
 exports.processVideo = processVideo;
@@ -30,7 +38,7 @@ exports.processVideo = processVideo;
  */
 function burnTextOverlay(inputUri, overlays) {
     return __awaiter(this, void 0, void 0, function* () {
-        return VideoOverlay.burnTextOverlay(inputUri, overlays);
+        return getModule().burnTextOverlay(inputUri, overlays);
     });
 }
 exports.burnTextOverlay = burnTextOverlay;
