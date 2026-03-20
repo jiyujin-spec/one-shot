@@ -54,6 +54,11 @@ public class VideoOverlayModule: Module {
             of: audioTrack, at: .zero
           )
         }
+        // iOS 18: UIFont, NSAttributedString (text sizing), and UIColor.cgColor must
+        // be accessed on the main thread.  loadValuesAsynchronously delivers its
+        // callback on an arbitrary background queue, so we hop to main here before
+        // touching any UIKit / Core Text / NSTextStorage APIs.
+        DispatchQueue.main.async {
         let videoSize = videoTrack.naturalSize.applying(videoTrack.preferredTransform)
         let renderSize = CGSize(width: abs(videoSize.width), height: abs(videoSize.height))
         let parentLayer = CALayer()
@@ -121,6 +126,7 @@ public class VideoOverlayModule: Module {
           default: promise.reject("ERR_EXPORT_UNKNOWN", "Unknown export status")
           }
         }
+        }  // DispatchQueue.main.async
       }
     }
 
@@ -241,6 +247,11 @@ public class VideoOverlayModule: Module {
           )
         }
 
+        // iOS 18: UIFont, NSAttributedString (text sizing), and UIColor.cgColor must
+        // be accessed on the main thread.  loadValuesAsynchronously delivers its
+        // callback on an arbitrary background queue, so we hop to main here before
+        // touching any UIKit / Core Text / NSTextStorage APIs.
+        DispatchQueue.main.async {
         // ── Layer tree ──────────────────────────────────────────────────────────
         //
         // isGeometryFlipped = true so that y=0 is at the TOP of the render canvas,
@@ -409,6 +420,7 @@ public class VideoOverlayModule: Module {
               "Unknown export status: \(exportSession.status.rawValue)")
           }
         }
+        }  // DispatchQueue.main.async
       }
     }
   }
