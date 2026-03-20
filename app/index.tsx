@@ -527,13 +527,9 @@ function pickNotifyMessage(lang: Lang, goal: string): { title: string; body: str
   return { title: m.title, body: m.body(goal) };
 }
 
-Notifications.setNotificationHandler({
-  handleNotification: async (): Promise<Notifications.NotificationBehavior> => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-  }),
-});
+// NOTE: setNotificationHandler is called inside a useEffect in the Page
+// component to avoid top-level evaluation errors crashing the app before
+// React can mount the ErrorBoundary.
 
 async function scheduleDailyNotification(timeStr: string, title: string, body: string, hasRecordedToday = false) {
   await Notifications.cancelAllScheduledNotificationsAsync();
@@ -648,6 +644,20 @@ export default function Page() {
   const [reviewReady, setReviewReady] = useState(false);
 
   const toastTimer = useRef<any>(null);
+
+  // ── Notification handler (inside useEffect to avoid top-level crash) ─────────
+
+  useEffect(() => {
+    try {
+      Notifications.setNotificationHandler({
+        handleNotification: async (): Promise<Notifications.NotificationBehavior> => ({
+          shouldShowAlert: true,
+          shouldPlaySound: true,
+          shouldSetBadge: false,
+        }),
+      });
+    } catch {}
+  }, []);
 
   // ── Translation helper ──────────────────────────────────────────────────────
 
