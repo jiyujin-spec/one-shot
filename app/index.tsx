@@ -158,7 +158,13 @@ async function cleanupOldVideoFiles(
     return { records: recs ?? [], changed: false };
   }
 
-  const docDir = FileSystem.documentDirectory ?? '';
+  // iPad Air M3 等の最新環境で documentDirectory が null になる場合の安全策:
+  // null の場合はファイル削除をスキップし、元のレコードをそのまま返す。
+  const docDir = FileSystem.documentDirectory;
+  if (!docDir) {
+    console.warn('[Cleanup] FileSystem.documentDirectory is null – skipping file cleanup');
+    return { records: recs, changed: false };
+  }
 
   const updated = await Promise.all(
     recs.map(async (r): Promise<RecordEntry> => {
@@ -1041,19 +1047,45 @@ export default function Page() {
   }, [reviewReady]);
 
   // ── Init ────────────────────────────────────────────────────────────────────
+  // Build 10: 各初期化ステップを個別の try...catch で保護。
+  // どのステップが失敗しても setIsLoading(false) が必ず実行され、
+  // ホーム画面（またはオンボーディング）が表示される。
 
   useEffect(() => {
     (async () => {
-      try {
-        // Load lang
-        const savedLang = await AsyncStorage.getItem(LANG_KEY);
-        if (savedLang === 'en' || savedLang === 'ja') setLang(savedLang);
+      // ステップ間で共有する変数をここで宣言する。
+      // 各ステップが失敗しても後続ステップがデフォルト値で動作できるようにする。
+      let loaded: AppState = { ...defaultState };
+      let loadedRecords: RecordEntry[] = [];
+      let savedLang: string | null = null;
+      let initToday = '';
 
-        // ── Build 7: State ロード（v3 → v2 フォールバック）────────────────────
+      try {
+        // ── ステップ 0: 現在日付の取得 ──────────────────────────────────────
+        // getAppDate() が失敗した場合は ISO 日付文字列でフォールバック
+        try {
+          initToday = getAppDate();
+        } catch (e) {
+          console.error('[Init] getAppDate() failed, using ISO fallback:', e);
+          initToday = new Date().toISOString().slice(0, 10);
+        }
+
+        // ── ステップ 1: 言語設定のロード ────────────────────────────────────
+        try {
+          const rawLang = await AsyncStorage.getItem(LANG_KEY);
+          if (rawLang === 'en' || rawLang === 'ja') {
+            savedLang = rawLang;
+            setLang(rawLang);
+          }
+        } catch (e) {
+          console.error('[Init] Failed to load language setting:', e);
+          // savedLang は null のまま → 通知などは 'ja' フォールバックを使用
+        }
+
+        // ── ステップ 2: AppState のロード（v3 → v2 フォールバック）───────────
         // v3 キーが存在しない場合は v2 レガシーキーから移行する。
         // AppState 自体にファイル URI は含まれないため、構造コピーのみで完了する。
-        let loaded: AppState = { ...defaultState };
-        {
+        try {
           const rawV3 = await AsyncStorage.getItem(STORAGE_KEY);
           if (rawV3) {
             // v3 データが存在 → schema_version フィールドを除いて AppState にマージ
@@ -1068,21 +1100,26 @@ export default function Page() {
               console.log('[Build7] State migrated from v2 to v3');
             }
           }
-        }
-
-        // Ensure rcUserID
-        if (!loaded.rcUserID) {
+          // Ensure rcUserID
+          if (!loaded.rcUserID) {
+            loaded.rcUserID = 'user_' + Math.random().toString(36).substr(2, 12) + '_' + Date.now();
+          }
+          // Ensure userId (stable "OS-YYYY-NNN" identifier for overlay)
+          if (!loaded.userId) {
+            const year = new Date().getFullYear();
+            const num = Math.floor(Math.random() * 999) + 1;
+            loaded.userId = `OS-${year}-${String(num).padStart(3, '0')}`;
+          }
+        } catch (e) {
+          console.error('[Init] Failed to load AppState, using default state:', e);
+          loaded = { ...defaultState };
           loaded.rcUserID = 'user_' + Math.random().toString(36).substr(2, 12) + '_' + Date.now();
-        }
-
-        // Ensure userId (stable "OS-YYYY-NNN" identifier for overlay)
-        if (!loaded.userId) {
           const year = new Date().getFullYear();
           const num = Math.floor(Math.random() * 999) + 1;
           loaded.userId = `OS-${year}-${String(num).padStart(3, '0')}`;
         }
 
-        // ── Build 7: Records ロード（v3 → v2 フォールバック + URI 相対化移行）──
+        // ── ステップ 3: Records のロード（v3 → v2 フォールバック + URI 移行）──
         //
         // 【マイグレーション戦略】
         //   v2: [ RecordEntry, ... ]         （生配列、絶対 URI 混在）
@@ -1094,13 +1131,12 @@ export default function Page() {
         //   ・Photos ライブラリ URI              → そのまま（変換不要）
         //   ・旧 UUID の壊れた絶対パス           → 変換は不完全だが
         //     エントリ（日付・ストリーク情報）は必ず保持する
-        let loadedRecords: RecordEntry[] = [];
-        {
+        try {
           const recRawV3 = await AsyncStorage.getItem(RECORDS_KEY);
           if (recRawV3) {
             // v3 形式から直接ロード
             const stored = JSON.parse(recRawV3) as { schema_version: number; records: RecordEntry[] };
-            loadedRecords = stored.records ?? [];
+            loadedRecords = Array.isArray(stored.records) ? stored.records : [];
           } else {
             // v3 なし → v2 レガシーから移行
             const recRawV2 = await AsyncStorage.getItem(LEGACY_RECORDS_KEY);
@@ -1130,13 +1166,17 @@ export default function Page() {
               ).catch(() => {});
               console.log('[Build7] Records migration to v3 complete');
             }
+            // recRawV2 もなければ loadedRecords は [] のまま（新規インストール）
           }
+        } catch (e) {
+          console.error('[Init] Failed to load records, using empty array:', e);
+          loadedRecords = []; // データ消失を防ぐため空配列で継続
         }
-        // ── 当日のみ保存仕様: 過去の動画ファイルを削除 ──────────────────────────
-        // アプリ起動のたびに当日以外のファイルを削除し、URIをクリアする。
+
+        // ── ステップ 4: 当日以外の動画ファイルのクリーンアップ ──────────────
+        // アプリ起動のたびに当日以外のファイルを削除し、URI をクリアする。
         // レコードエントリ（date/day/ts）は保持してストリーク計算に使う。
-        // ※ クリーンアップ失敗はアプリ起動を妨げない（try...catch で完全保護）
-        const initToday = getAppDate();
+        // 失敗しても loadedRecords はそのまま使用し、起動は継続する。
         try {
           const { records: cleaned, changed } = await cleanupOldVideoFiles(loadedRecords, initToday);
           if (changed) {
@@ -1148,21 +1188,27 @@ export default function Page() {
             ).catch(() => {});
           }
         } catch (cleanupErr) {
-          // クリーンアップ失敗 → loadedRecords はそのまま使用、起動は継続
-          console.warn('[Init] cleanupOldVideoFiles failed, continuing with loaded records:', cleanupErr);
+          console.error('[Init] cleanupOldVideoFiles failed, continuing with loaded records:', cleanupErr);
         }
+
+        // records ステートを確定（空配列でも正常）
         setRecords(loadedRecords);
 
-        // ── records 配列を唯一の正解源として streak を再計算 ──
+        // ── ステップ 5: streak 再計算と AppState の確定・永続化 ─────────────
         // 保存された appState.streak は過去の不整合で壊れている可能性があるため、
         // 起動のたびに records から正しい値を導出して上書きする。
-        loaded.streak = calculateStreak(loadedRecords, initToday);
-        loaded.lastRecordDate = getLastRecordDate(loadedRecords, initToday);
+        try {
+          loaded.streak = calculateStreak(loadedRecords, initToday);
+          loaded.lastRecordDate = getLastRecordDate(loadedRecords, initToday);
+          setAppState(loaded);
+          await saveAppState(loaded);
+        } catch (e) {
+          console.error('[Init] Failed to calculate streak or persist AppState:', e);
+          // streak 計算失敗時でも loaded の現在値で setAppState する
+          setAppState(loaded);
+        }
 
-        setAppState(loaded);
-        await saveAppState(loaded);
-
-        // Init RevenueCat
+        // ── ステップ 6: RevenueCat の初期化 ─────────────────────────────────
         try {
           Purchases.configure({ apiKey: RC_API_KEY, appUserID: loaded.rcUserID });
           const offerings = await Purchases.getOfferings();
@@ -1188,10 +1234,11 @@ export default function Page() {
             loaded = next;
           }
         } catch (e) {
-          console.warn('[RC] init error:', e);
+          console.error('[RC] init error:', e);
+          // RC 失敗 → subscribed は false のまま → paywall を表示（安全側）
         }
 
-        // Init notifications
+        // ── ステップ 7: 通知権限の取得とスケジューリング ─────────────────────
         try {
           const { status } = await Notifications.requestPermissionsAsync();
           if (status === 'granted') {
@@ -1201,23 +1248,31 @@ export default function Page() {
             await scheduleDailyNotification(loaded.notifyTime, notifyTitle, notifyBody, alreadyRecordedToday);
           }
         } catch (e) {
-          console.warn('[Notify] init error:', e);
+          console.error('[Notify] init error:', e);
+          // 通知の失敗はアプリ起動を妨げない
         }
 
-        // Navigate
-        if (!loaded.onboarded) {
+        // ── ステップ 8: 画面遷移 ─────────────────────────────────────────────
+        try {
+          if (!loaded.onboarded) {
+            setScreen('onboarding');
+          } else if (!loaded.subscribed) {
+            setScreen('paywall');
+          } else {
+            setScreen('home');
+            if (!loaded.guideShown) setGuideVisible(true);
+          }
+        } catch (e) {
+          console.error('[Init] Navigation failed, defaulting to onboarding:', e);
           setScreen('onboarding');
-        } else if (!loaded.subscribed) {
-          setScreen('paywall');
-        } else {
-          setScreen('home');
-          if (!loaded.guideShown) setGuideVisible(true);
         }
-      } catch (initErr) {
-        // 予期しない初期化エラー → ホーム画面へ遷移してアプリを起動させる
-        console.error('[Init] unexpected error during initialization:', initErr);
-        setScreen('home');
+
+      } catch (unexpectedErr) {
+        // 上記の個別 try...catch を突き破った予期しないエラーの最終安全網
+        console.error('[Init] Unexpected top-level error during initialization:', unexpectedErr);
+        setScreen('onboarding');
       } finally {
+        // どのステップが失敗しても必ず isLoading を解除してホーム/オンボーディングを表示
         setIsLoading(false);
       }
     })();
