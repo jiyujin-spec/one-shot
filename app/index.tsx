@@ -144,61 +144,6 @@ function toAbsoluteUri(uri: string): string {
   return (FileSystem.documentDirectory ?? '') + uri;
 }
 
-// ── 当日以外の動画ファイルを削除し、レコードの URI をクリアする ────────────────
-// 仕様: 動画は当日のみ保持。翌日以降のファイルはアプリ起動時に自動削除される。
-// - documentDirectory 内のファイルのみ削除対象（Photos ライブラリは対象外）
-// - レコードエントリ自体（date, day, ts, isPass）は残してストリーク計算を維持
-// - 処理全体を try...catch で保護し、失敗してもアプリ起動を妨げない
-async function cleanupOldVideoFiles(
-  recs: RecordEntry[],
-  today: string,
-): Promise<{ records: RecordEntry[]; changed: boolean }> {
-  // 入力ガード: recs が配列でない・空の場合はそのまま返す
-  if (!Array.isArray(recs) || recs.length === 0) {
-    return { records: recs ?? [], changed: false };
-  }
-
-  // iPad Air M3 等の最新環境で documentDirectory が null になる場合の安全策:
-  // null の場合はファイル削除をスキップし、元のレコードをそのまま返す。
-  const docDir = FileSystem.documentDirectory;
-  if (!docDir) {
-    console.warn('[Cleanup] FileSystem.documentDirectory is null – skipping file cleanup');
-    return { records: recs, changed: false };
-  }
-
-  const updated = await Promise.all(
-    recs.map(async (r): Promise<RecordEntry> => {
-      try {
-        // 当日 or パス日 or URI なし → 変更不要
-        if (r.date === today || r.isPass) return r;
-        const uris = r.uris ?? (r.uri ? [r.uri] : []);
-        if (uris.length === 0) return r;
-
-        // documentDirectory 配下のファイルを削除
-        for (const u of uris) {
-          try {
-            const abs = toAbsoluteUri(u);
-            if (docDir && abs.startsWith(docDir)) {
-              await FileSystem.deleteAsync(abs, { idempotent: true }).catch(() => {});
-            }
-          } catch {
-            // 個別ファイルの削除失敗は無視して続行
-          }
-        }
-        // URI を除去してエントリのみ保持（ストリーク維持のため日付・day は残す）
-        return { date: r.date, day: r.day, ts: r.ts };
-      } catch {
-        // エントリ処理失敗時は元のエントリをそのまま保持（安全側に倒す）
-        return r;
-      }
-    }),
-  );
-
-  // 変更検出: 返されたオブジェクトが元と異なるエントリがあれば changed=true
-  const changed = updated.some((r, i) => r !== recs[i]);
-
-  return { records: updated, changed };
-}
 
 // RecordEntry から URI 配列を取得するヘルパー（後方互換 + Build 7 絶対URI復元）
 function getRecordUris(rec: RecordEntry): string[] {
@@ -1171,24 +1116,6 @@ export default function Page() {
         } catch (e) {
           console.error('[Init] Failed to load records, using empty array:', e);
           loadedRecords = []; // データ消失を防ぐため空配列で継続
-        }
-
-        // ── ステップ 4: 当日以外の動画ファイルのクリーンアップ ──────────────
-        // アプリ起動のたびに当日以外のファイルを削除し、URI をクリアする。
-        // レコードエントリ（date/day/ts）は保持してストリーク計算に使う。
-        // 失敗しても loadedRecords はそのまま使用し、起動は継続する。
-        try {
-          const { records: cleaned, changed } = await cleanupOldVideoFiles(loadedRecords, initToday);
-          if (changed) {
-            loadedRecords = cleaned;
-            // 即座に永続化して次回起動時の重複削除試行を防ぐ
-            AsyncStorage.setItem(
-              RECORDS_KEY,
-              JSON.stringify({ schema_version: SCHEMA_VERSION, records: cleaned })
-            ).catch(() => {});
-          }
-        } catch (cleanupErr) {
-          console.error('[Init] cleanupOldVideoFiles failed, continuing with loaded records:', cleanupErr);
         }
 
         // records ステートを確定（空配列でも正常）
@@ -2327,7 +2254,21 @@ export default function Page() {
               </View>
 
               {/* 動画リスト */}
-              {selectedDateRecord && !selectedDateRecord.isPass && selectedDateUris.length > 0 ? (
+              {selectedDateRecord?.isPass ? (
+                <View style={styles.dayDetailPassRow}>
+                  <Text style={styles.dayDetailPassText}>
+                    {lang === 'ja' ? 'パス使用日' : 'Rest pass used'}
+                  </Text>
+                </View>
+              ) : selectedDateRecord && !selectedDateRecord.isPass && selectedDate !== todayStr ? (
+                // 過去の記録 → ファイルパスへのアクセスを一切行わず、ロックを表示
+                <View style={styles.dayDetailPassRow}>
+                  <Feather name="lock" size={20} color="#555" style={{ marginBottom: 6 }} />
+                  <Text style={styles.dayDetailPassText}>
+                    {lang === 'ja' ? '過去の記録は閲覧できません' : 'Past records cannot be viewed'}
+                  </Text>
+                </View>
+              ) : selectedDateRecord && !selectedDateRecord.isPass && selectedDate === todayStr && selectedDateUris.length > 0 ? (
                 selectedDateUris.map((uri, idx) => (
                   <TouchableOpacity
                     key={idx}
@@ -2350,34 +2291,19 @@ export default function Page() {
                       {lang === 'ja' ? `動画 ${idx + 1}` : `Video ${idx + 1}`}
                     </Text>
                     <View style={styles.dayDetailItemActions}>
-                      {/* 削除ボタン：当日のみ表示 */}
-                      {selectedDate === todayStr && (
-                        <TouchableOpacity
-                          style={styles.dayDetailDeleteBtn}
-                          onPress={() => {
-                            if (selectedDateRecord) deleteRecord(selectedDateRecord, idx);
-                          }}
-                        >
-                          <Feather name="trash-2" size={14} color="#CC0000" />
-                          <Text style={styles.dayDetailDeleteText}>{t('history_delete')}</Text>
-                        </TouchableOpacity>
-                      )}
+                      <TouchableOpacity
+                        style={styles.dayDetailDeleteBtn}
+                        onPress={() => {
+                          if (selectedDateRecord) deleteRecord(selectedDateRecord, idx);
+                        }}
+                      >
+                        <Feather name="trash-2" size={14} color="#CC0000" />
+                        <Text style={styles.dayDetailDeleteText}>{t('history_delete')}</Text>
+                      </TouchableOpacity>
                       <Feather name="chevron-right" size={16} color="#555" />
                     </View>
                   </TouchableOpacity>
                 ))
-              ) : selectedDateRecord?.isPass ? (
-                <View style={styles.dayDetailPassRow}>
-                  <Text style={styles.dayDetailPassText}>
-                    {lang === 'ja' ? 'パス使用日' : 'Rest pass used'}
-                  </Text>
-                </View>
-              ) : selectedDateRecord && !selectedDateRecord.isPass ? (
-                // 記録済みだが URI なし = 当日以外（動画は削除済み）
-                <View style={styles.dayDetailPassRow}>
-                  <Feather name="film" size={20} color="#555" style={{ marginBottom: 6 }} />
-                  <Text style={styles.dayDetailPassText}>{t('video_today_only')}</Text>
-                </View>
               ) : (
                 <View style={styles.dayDetailPassRow}>
                   <Text style={styles.dayDetailPassText}>{t('no_history')}</Text>
@@ -2403,15 +2329,22 @@ export default function Page() {
               <Feather name="x" size={26} color="#fff" />
             </TouchableOpacity>
 
-            {selectedRecord && playingUri != null && (
+            {/* 過去の記録 → ファイルパスへのアクセスを一切行わず、ロックを表示 */}
+            {selectedRecord && selectedRecord.date !== todayStr && (
+              <View style={styles.recordModalNoMedia}>
+                <Feather name="lock" size={48} color="#444" />
+                <Text style={styles.recordModalNoMediaText}>
+                  {lang === 'ja' ? '過去の記録は閲覧できません' : 'Past records cannot be viewed'}
+                </Text>
+              </View>
+            )}
+
+            {selectedRecord && selectedRecord.date === todayStr && playingUri != null && (
               <>
                 {/* メディア表示 */}
                 {/* ── 画像/動画の判定: 拡張子で判断（heic/heif も対応）─── */}
                 {/\.(jpg|jpeg|png|heic|heif)$/i.test(playingUri) ? (
                   // ── 旧 tmpfile URI が失効した場合の onError フォールバック ──
-                  // iOS は NSTemporaryDirectory を積極的に削除するため、Build 5 以前に
-                  // 保存された写真の URI が無効になっている場合がある。
-                  // onError で playingUriError=true にし、プレースホルダーを表示する。
                   playingUriError ? (
                     <View style={styles.recordModalNoMedia}>
                       <Feather name="image" size={48} color="#444" />
@@ -2438,23 +2371,20 @@ export default function Page() {
                   />
                 )}
 
-                {/* ── アクションボタン（当日: 削除 | 再保存 | シェア、過去: 再保存 | シェアのみ）── */}
+                {/* ── アクションボタン（削除 | 再保存 | シェア）── */}
                 <View style={styles.recordModalActions}>
-                  {/* 削除ボタン：当日のみ表示（過去は非表示でストリーク保護）*/}
-                  {selectedRecord.date === todayStr && (
-                    <TouchableOpacity
-                      style={styles.recordModalBtnDelete}
-                      onPress={() => {
-                        const slotIdx = selectedSlotIdx ?? 0;
-                        setSelectedRecord(null);
-                        setSelectedSlotIdx(null);
-                        deleteRecord(selectedRecord, slotIdx);
-                      }}
-                    >
-                      <Feather name="trash-2" size={16} color="#fff" />
-                      <Text style={styles.recordModalBtnText}>{t('history_delete')}</Text>
-                    </TouchableOpacity>
-                  )}
+                  <TouchableOpacity
+                    style={styles.recordModalBtnDelete}
+                    onPress={() => {
+                      const slotIdx = selectedSlotIdx ?? 0;
+                      setSelectedRecord(null);
+                      setSelectedSlotIdx(null);
+                      deleteRecord(selectedRecord, slotIdx);
+                    }}
+                  >
+                    <Feather name="trash-2" size={16} color="#fff" />
+                    <Text style={styles.recordModalBtnText}>{t('history_delete')}</Text>
+                  </TouchableOpacity>
 
                   <TouchableOpacity
                     style={styles.recordModalBtnSave}
@@ -2474,8 +2404,8 @@ export default function Page() {
               </>
             )}
 
-            {/* URI がない場合（パス使用日 or 当日以外の削除済み動画）*/}
-            {selectedRecord && playingUri == null && (
+            {/* 当日だが URI がない場合（パス使用日）*/}
+            {selectedRecord && selectedRecord.date === todayStr && playingUri == null && (
               <View style={styles.recordModalNoMedia}>
                 <Feather name="film" size={48} color="#444" />
                 <Text style={styles.recordModalNoMediaText}>
