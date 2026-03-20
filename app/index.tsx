@@ -41,7 +41,10 @@ import * as FileSystem from 'expo-file-system';
 import * as Notifications from 'expo-notifications';
 import * as StoreReview from 'expo-store-review';
 import * as WebBrowser from 'expo-web-browser';
-import { processVideo } from '../modules/video-overlay';
+// Build 22: video-overlay は起動時にロードしない（iOS 18 クラッシュ対策）
+// 実際の呼び出し直前に require() で遅延ロードする。
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let processVideo: ((opts: any) => Promise<string>) | null = null;
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -1209,6 +1212,9 @@ export default function Page() {
         console.error('[Init] Unexpected top-level error during initialization:', unexpectedErr);
         setScreen('onboarding');
       } finally {
+        // Build 22: iOS 18 対策 — スプラッシュ画面を 1 秒維持し、
+        // OS 側のネイティブ初期化（AVFoundation・StoreKit 等）が完了するまで待つ。
+        await new Promise<void>(r => setTimeout(r, 1000));
         // どのステップが失敗しても必ず isLoading を解除してホーム/オンボーディングを表示
         setIsLoading(false);
       }
@@ -1412,6 +1418,11 @@ export default function Page() {
     setCapturedType('video');
     setIsProcessingVideo(true);
     try {
+      // Build 22: 起動時ではなく処理直前に遅延ロード（iOS 18 ネイティブ初期化衝突対策）
+      if (!processVideo) {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        processVideo = (require('../modules/video-overlay') as { processVideo: (opts: any) => Promise<string> }).processVideo;
+      }
       const currentPhase = appState.phase ?? 1;
       // filterCurrentDay は上で計算済み（同日2本目以降はカウントアップしない）
       const processed = await processVideo({
