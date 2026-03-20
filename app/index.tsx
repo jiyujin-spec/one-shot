@@ -187,7 +187,7 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     paywall_feature4: '毎週1枚の無料パス自動付与',
     paywall_feature5: '撮影履歴・カレンダー表示',
     paywall_subscribe_btn: '年額プランで始める',
-    paywall_iap_note: 'App Storeに表示される現在の価格が適用されます。\nApple IDに課金されます。サブスクリプションは購入後、現在の期間終了前に解約しない限り自動更新されます。',
+    paywall_iap_note: 'App Storeに表示される現在の価格が適用されます。Apple IDに課金されます。サブスクリプションは購入後、現在の期間終了前に解約しない限り自動更新されます。サブスクリプションの管理・自動更新のオフは、購入後にApple IDのアカウント設定から行えます。',
     paywall_pass_note: 'お休みパスはApp Storeに表示される現在の価格で別途購入できます',
     paywall_restore_btn: '購入を復元する',
     paywall_terms: '利用規約',
@@ -310,7 +310,7 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     paywall_feature4: 'Weekly free rest pass — auto-granted',
     paywall_feature5: 'Full history with calendar view',
     paywall_subscribe_btn: 'Get Access',
-    paywall_iap_note: 'Current price shown in the App Store applies.\nCharged to your Apple ID. Subscription auto-renews unless cancelled before the end of the current period.',
+    paywall_iap_note: 'Current price shown in the App Store applies. Charged to your Apple ID. Subscription auto-renews unless cancelled before the end of the current period. You can manage your subscription and turn off auto-renewal in your Apple ID Account Settings after purchase.',
     paywall_pass_note: 'Rest passes available separately at the current price shown in the App Store',
     paywall_restore_btn: 'Restore Purchases',
     paywall_terms: 'Terms of Service',
@@ -1197,6 +1197,16 @@ export default function Page() {
     }
   }, [screen]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ── Guideline 5.1.1(iv): カメラ画面に遷移したとき、権限が未決定なら即座に標準ダイアログを表示 ──
+  // Apple は「カスタム UI を挟まず、最初は必ず OS 標準ダイアログを出すこと」を要求している。
+  // canAskAgain が true（初回 or undetermined）のとき自動リクエストすることで
+  // カスタム UI が表示される前にシステムダイアログが起動する。
+  useEffect(() => {
+    if (screen === 'camera' && camPermission && !camPermission.granted && camPermission.canAskAgain !== false) {
+      requestCamPermission();
+    }
+  }, [screen]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── Camera recording ────────────────────────────────────────────────────────
 
   const clearCamTimers = useCallback(() => {
@@ -1662,6 +1672,11 @@ export default function Page() {
                 : `Monthly Plan (1 month · auto-renews)  ${monthlyPrice ?? '—'}`}
             </Text>
           )}
+          <Text style={styles.subscriptionInfoDetail}>
+            {lang === 'ja'
+              ? 'Apple IDのアカウント設定でキャンセルできます'
+              : 'Cancel anytime in Apple ID Account Settings'}
+          </Text>
         </View>
 
         {/* ── 年額プランカード（メイン） ── */}
@@ -1831,21 +1846,23 @@ export default function Page() {
     // ── 権限なし ──
     if (!camPermission) return <ActivityIndicator color="#fff" style={styles.screenCenter} />;
     if (!camPermission.granted) {
-      const canAsk = camPermission.canAskAgain !== false;
+      // Guideline 5.1.1(iv): canAskAgain=true のとき（初回/undetermined）は
+      // useEffect が自動で requestCamPermission() を呼ぶためここではローディングのみ表示。
+      // OS 標準ダイアログが必ず先に出るようにし、カスタム UI は一切表示しない。
+      if (camPermission.canAskAgain !== false) {
+        return <ActivityIndicator color="#fff" style={styles.screenCenter} />;
+      }
+      // canAskAgain=false（ユーザーが明示的に拒否済み）の場合のみ設定誘導を表示
       return (
         <View style={styles.screenCenter}>
           <Feather name="camera-off" size={44} color="#555" style={{ marginBottom: 24 }} />
           <Text style={styles.permTitle}>{t('cam_permission_title')}</Text>
-          <Text style={styles.permBody}>
-            {canAsk ? t('cam_permission_body') : t('cam_permission_denied_body')}
-          </Text>
+          <Text style={styles.permBody}>{t('cam_permission_denied_body')}</Text>
           <TouchableOpacity
             style={styles.btnPrimary}
-            onPress={canAsk ? requestCamPermission : () => Linking.openSettings()}
+            onPress={() => Linking.openSettings()}
           >
-            <Text style={styles.btnPrimaryText}>
-              {canAsk ? t('cam_permission_btn') : t('cam_permission_settings_btn')}
-            </Text>
+            <Text style={styles.btnPrimaryText}>{t('cam_permission_settings_btn')}</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={() => setScreen('home')}>
             <Text style={styles.linkText}>{t('cam_permission_back')}</Text>
@@ -2098,6 +2115,8 @@ export default function Page() {
             const recorded = !!rec;
             const isPass = rec?.isPass === true;
             const isToday = ds === todayStr;
+            // 今日以外はタップ不可・グレーアウト（クラッシュ回避 + One Shot コンセプト）
+            const isTappable = isToday && recorded && !isPass;
             // 複数スロットの場合は件数バッジを表示
             const slotCount = rec && !isPass ? getRecordUris(rec).length : 0;
             const cell = (
@@ -2112,16 +2131,18 @@ export default function Page() {
                 )}
               </>
             );
-            return recorded ? (
+            const cellStyle = [
+              styles.calCell, styles.calDayCell,
+              recorded && (isPass ? styles.calDayCellPass : styles.calDayCellRecorded),
+              isToday && styles.calDayCellToday,
+              // 今日以外はグレーアウト
+              !isToday && { opacity: 0.3 },
+            ];
+            return isTappable ? (
               <TouchableOpacity
                 key={ds}
-                style={[styles.calCell, styles.calDayCell,
-                  isPass ? styles.calDayCellPass : styles.calDayCellRecorded,
-                  isToday && styles.calDayCellToday]}
-                onPress={() => {
-                  // 即座に再生せず、デイリー詳細シートを開く
-                  setSelectedDate(ds);
-                }}
+                style={cellStyle}
+                onPress={() => setSelectedDate(ds)}
                 activeOpacity={0.7}
               >
                 {cell}
@@ -2129,7 +2150,7 @@ export default function Page() {
             ) : (
               <View
                 key={ds}
-                style={[styles.calCell, styles.calDayCell, isToday && styles.calDayCellToday]}
+                style={cellStyle}
               >
                 {cell}
               </View>
@@ -2137,9 +2158,9 @@ export default function Page() {
           })}
         </View>
 
-        {/* ── デイリー詳細シート（動画リスト）── */}
+        {/* ── デイリー詳細シート（今日のみ表示・過去日は開かないガード）── */}
         <Modal
-          visible={!!selectedDate}
+          visible={!!selectedDate && selectedDate === todayStr}
           animationType="slide"
           transparent={true}
           onRequestClose={() => setSelectedDate(null)}
