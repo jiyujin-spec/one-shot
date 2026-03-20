@@ -52,7 +52,6 @@
       ],
       "expo-dev-client",
       "expo-router",
-      "./modules/video-overlay/plugin",
       [
         "expo-camera",
         {
