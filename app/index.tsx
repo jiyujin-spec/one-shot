@@ -315,6 +315,10 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     guide_rule_10day_body: '10日を過ぎると、その目標を変えることはできなくなります（変更にはリセットが必要になります）。',
     ok: 'OK',
     video_today_only: '動画は当日のみ保存されます\nInstagram等にシェアして記録を残しましょう',
+    onboarding_rule: '明日になれば消える。でも、投稿した記録は残る。',
+    preview_expiry_hint: 'この動画は明日消えます — 今すぐシェアして記録を残そう',
+    guide_card_storage_title: '動画の保存ルール',
+    guide_card_storage_body: '動画はアプリ内に当日のみ保存されます。翌日のアプリ起動時に自動削除されます。\n\n記録を残したいときは、当日中にInstagramやTikTokにシェアしてください。\nシェアした投稿が、あなたの継続の証になります。',
   },
   en: {
     meta_description: 'One video a day. Build the habit. Leave the record.',
@@ -439,6 +443,10 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     guide_rule_10day_body: 'After 10 days, you cannot change your goal without resetting your progress.',
     ok: 'OK',
     video_today_only: "Videos are kept for today only\nShare before midnight to preserve them",
+    onboarding_rule: 'Gone by midnight. Unless you post it.',
+    preview_expiry_hint: 'This video disappears tomorrow — share now to keep it',
+    guide_card_storage_title: 'Video storage',
+    guide_card_storage_body: 'Videos are stored in the app for today only and automatically deleted on your next launch.\n\nTo preserve your record, share to Instagram or TikTok before the day ends.\nYour post is your proof of work.',
   },
 };
 
@@ -1628,6 +1636,7 @@ export default function Page() {
       <View style={styles.screenCenter}>
         <Text style={styles.appTitle}>ONE SHOT</Text>
         <Text style={styles.subtitle}>{t('onboarding_subtitle')}</Text>
+        <Text style={styles.onboardingRule}>{t('onboarding_rule')}</Text>
         <View style={styles.inputGroup}>
           <Text style={styles.inputLabel}>{t('onboarding_label')}</Text>
           <TextInput
@@ -1994,6 +2003,9 @@ export default function Page() {
               <Text style={styles.previewBtnLabel}>{t('share_btn')}</Text>
             </TouchableOpacity>
           </View>
+
+          {/* ── 当日のみ保存ヒント ── */}
+          <Text style={styles.previewExpiryHint}>{t('preview_expiry_hint')}</Text>
 
         </View>
       );
@@ -2582,13 +2594,14 @@ export default function Page() {
 
           {[
             { title: t('guide_card1_title'), body: t('guide_card1_body') },
+            { title: t('guide_card_storage_title'), body: t('guide_card_storage_body'), highlight: true },
             { title: t('guide_card3_title'), body: t('guide_card3_body') },
             { title: t('guide_card4_title'), body: t('guide_card4_body') },
             { title: t('guide_card5_title'), body: t('guide_card5_body') },
             { title: t('guide_rule_10day_title'), body: t('guide_rule_10day_body') },
           ].map((card, i) => (
-            <View key={i} style={styles.guideCard}>
-              <Text style={styles.guideCardTitle}>{card.title}</Text>
+            <View key={i} style={[styles.guideCard, card.highlight && styles.guideCardHighlight]}>
+              <Text style={[styles.guideCardTitle, card.highlight && styles.guideCardTitleHighlight]}>{card.title}</Text>
               <Text style={styles.guideCardBody}>{card.body}</Text>
             </View>
           ))}
@@ -3182,8 +3195,16 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#888',
     textAlign: 'center',
-    marginBottom: 40,
+    marginBottom: 12,
     letterSpacing: 0.5,
+  },
+  onboardingRule: {
+    fontSize: 13,
+    color: '#CC0000',
+    textAlign: 'center',
+    marginBottom: 32,
+    letterSpacing: 0.3,
+    fontStyle: 'italic',
   },
 
   // ── Inputs ──
@@ -3930,6 +3951,13 @@ const styles = StyleSheet.create({
     width: '100%',
     gap: 10,
   },
+  previewExpiryHint: {
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.35)',
+    textAlign: 'center',
+    marginTop: 12,
+    letterSpacing: 0.2,
+  },
   previewBtnDelete: {
     flex: 1,
     flexDirection: 'column',
@@ -4510,6 +4538,14 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#aaa',
     lineHeight: 20,
+  },
+  guideCardHighlight: {
+    borderWidth: 1,
+    borderColor: 'rgba(204,0,0,0.5)',
+    backgroundColor: 'rgba(204,0,0,0.06)',
+  },
+  guideCardTitleHighlight: {
+    color: '#CC0000',
   },
   guideStep: {
     fontSize: 13,
