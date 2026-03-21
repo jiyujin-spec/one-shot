@@ -1,17 +1,47 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+// ─── Build 26: Global console.error log accumulator ───────────────────────────
+// Intercept console.error BEFORE React mounts so we can capture any
+// initialization errors that happen synchronously at module-evaluation time.
+// Logs are stored here and rendered in the ErrorBoundary fallback UI.
+
+const _capturedLogs: string[] = [];
+const _origConsoleError = console.error.bind(console);
+console.error = (...args: unknown[]) => {
+  _origConsoleError(...args);
+  try {
+    const line = args
+      .map((a) =>
+        a instanceof Error
+          ? `${a.message}\n${a.stack ?? ''}`
+          : typeof a === 'object'
+          ? JSON.stringify(a)
+          : String(a)
+      )
+      .join(' ');
+    _capturedLogs.push(`[${new Date().toISOString()}] ${line}`);
+    // Keep at most 60 entries to avoid unlimited growth
+    if (_capturedLogs.length > 60) _capturedLogs.shift();
+  } catch {
+    // ignore stringify errors
+  }
+};
+
 // ─── Global Error Boundary ────────────────────────────────────────────────────
 // React のレンダリングフェーズで発生した未処理の例外を補足し、
 // ネイティブ側の SIGABRT（ExceptionsManagerQueue クラッシュ）を防ぐ。
-// ErrorBoundary はクラスコンポーネントでのみ実装できる（React の制約）。
+// Build 26: エラー詳細（message + stack + console.error ログ）を常時表示。
+//           __DEV__ ガードを外して本番ビルドでも診断情報を読めるようにする。
 
 interface ErrorBoundaryState {
   hasError: boolean;
   errorMessage: string;
+  errorStack: string;
+  logs: string[];
 }
 
 class AppErrorBoundary extends React.Component<
@@ -20,21 +50,24 @@ class AppErrorBoundary extends React.Component<
 > {
   constructor(props: { children: React.ReactNode }) {
     super(props);
-    this.state = { hasError: false, errorMessage: '' };
+    this.state = { hasError: false, errorMessage: '', errorStack: '', logs: [] };
   }
 
   static getDerivedStateFromError(error: unknown): ErrorBoundaryState {
     const msg = error instanceof Error ? error.message : String(error);
-    return { hasError: true, errorMessage: msg };
+    const stack = error instanceof Error ? (error.stack ?? '') : '';
+    // Snapshot accumulated console.error logs at the moment of crash
+    const logs = [..._capturedLogs];
+    return { hasError: true, errorMessage: msg, errorStack: stack, logs };
   }
 
   componentDidCatch(error: unknown, info: React.ErrorInfo) {
-    // 本番でも原因追跡できるようにコンソールへ出力する
     console.error('[AppErrorBoundary] Caught render error:', error, info.componentStack);
   }
 
   render() {
     if (this.state.hasError) {
+      const { errorMessage, errorStack, logs } = this.state;
       return (
         <View style={styles.errorContainer}>
           <Text style={styles.errorTitle}>予期せぬエラーが発生しました</Text>
@@ -42,9 +75,28 @@ class AppErrorBoundary extends React.Component<
           <Text style={styles.errorHint}>
             アプリを再起動してください。{'\n'}Please restart the app.
           </Text>
-          {__DEV__ && (
-            <Text style={styles.errorDetail}>{this.state.errorMessage}</Text>
-          )}
+
+          {/* ── Debug section (Build 26) ─────────────────────────── */}
+          <ScrollView style={styles.debugScroll} contentContainerStyle={styles.debugContent}>
+            <Text style={styles.debugHeader}>── Error Message ──</Text>
+            <Text style={styles.debugText} selectable>{errorMessage || '(empty)'}</Text>
+
+            {!!errorStack && (
+              <>
+                <Text style={styles.debugHeader}>── Stack Trace ──</Text>
+                <Text style={styles.debugText} selectable>{errorStack}</Text>
+              </>
+            )}
+
+            {logs.length > 0 && (
+              <>
+                <Text style={styles.debugHeader}>── console.error logs ({logs.length}) ──</Text>
+                {logs.map((line, i) => (
+                  <Text key={i} style={styles.debugText} selectable>{line}</Text>
+                ))}
+              </>
+            )}
+          </ScrollView>
         </View>
       );
     }
@@ -56,9 +108,9 @@ const styles = StyleSheet.create({
   errorContainer: {
     flex: 1,
     backgroundColor: '#000',
-    justifyContent: 'center',
     alignItems: 'center',
-    padding: 32,
+    padding: 24,
+    paddingTop: 60,
   },
   errorTitle: {
     color: '#fff',
@@ -71,24 +123,40 @@ const styles = StyleSheet.create({
     color: '#888',
     fontSize: 14,
     textAlign: 'center',
-    marginBottom: 24,
+    marginBottom: 16,
   },
   errorHint: {
     color: '#666',
     fontSize: 13,
     textAlign: 'center',
     lineHeight: 20,
+    marginBottom: 20,
   },
-  errorDetail: {
-    marginTop: 24,
-    color: '#8B0000',
+  // ── Debug UI ────────────────────────────────────────────────
+  debugScroll: {
+    flex: 1,
+    width: '100%',
+    borderWidth: 1,
+    borderColor: '#333',
+    borderRadius: 8,
+    backgroundColor: '#0d0d0d',
+  },
+  debugContent: {
+    padding: 12,
+    paddingBottom: 40,
+  },
+  debugHeader: {
+    color: '#ff6b6b',
     fontSize: 11,
-    textAlign: 'center',
-    // Build 25: fontFamily を完全に削除。
-    // 名前付きフォントは StyleSheet.create() 評価時に UIFont.bestMatchingFontForCharacters: を
-    // 経由する場合があり、iOS 18 のメインスレッド制約に抵触するリスクがある。
-    // errorDetail は __DEV__ 時のみ表示される診断テキストのため、
-    // システムデフォルトフォントで十分。
+    fontWeight: '700',
+    marginTop: 12,
+    marginBottom: 4,
+  },
+  debugText: {
+    color: '#e0e0e0',
+    fontSize: 10,
+    lineHeight: 15,
+    fontVariant: ['tabular-nums'],
   },
 });
 
