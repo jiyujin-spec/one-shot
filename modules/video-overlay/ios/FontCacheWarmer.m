@@ -1,5 +1,5 @@
 /**
- * FontCacheWarmer.m — Build 24: ShadowQueue UIFont クラッシュ根本対策
+ * FontCacheWarmer.m — Build 25: ShadowQueue UIFont クラッシュ根本対策（強化版）
  *
  * 【問題】
  *   iOS 18 + Xcode 16 環境で com.facebook.react.ShadowQueue が
@@ -9,6 +9,14 @@
  *
  *   これらの API は iOS 18 からメインスレッドでのみ安全に呼び出せるが、
  *   React Native の ShadowQueue はバックグラウンドスレッドで動作するため衝突する。
+ *
+ * 【Build 25 での強化点】
+ *   Build 24 はシステムフォント（systemFontOfSize: 等）のみウォームアップしていた。
+ *   Build 25 では「アプリの StyleSheet で使用する名前付きフォント」も明示的にウォームする:
+ *     - Courier New : _layout.tsx errorDetail スタイルで使用
+ *     - Menlo       : Build 25 で削除済みだが念のため対象に含める
+ *   名前付きフォントも NSTextStorage レイアウトパスを通すことで
+ *   グリフカバレッジキャッシュが確実に構築される。
  *
  * 【根本修正の仕組み】
  *   ObjC の +load メソッドは UIApplicationMain() より前に実行される。
@@ -60,6 +68,29 @@
         (void)[UIFont italicSystemFontOfSize:sizes[i]];
     }
 
+    // ── Step 1b: アプリ StyleSheet で使用する名前付きフォントのプリウォーム ──
+    // Build 25 強化: Courier New (_layout.tsx で使用) と Menlo (削除済みだが念のため) を
+    // メインスレッドで明示的にロードする。
+    // fontWithName: が nil を返した場合はログを出力して診断を容易にする。
+    NSArray<NSString *> *namedFonts = @[
+        @"Courier New",          // _layout.tsx errorDetail スタイルで使用
+        @"CourierNewPS-BoldMT",  // Courier New Bold バリアント
+        @"Menlo",                // Build 25 で StyleSheet から削除済み（念のため）
+        @"Menlo-Regular",        // Menlo バリアント
+    ];
+    for (NSString *fontName in namedFonts) {
+        for (NSUInteger i = 0; i < sizeCount; i++) {
+            UIFont *f = [UIFont fontWithName:fontName size:sizes[i]];
+            if (i == 0 && !f) {
+                // サイズ 11pt での nil は「フォントが iOS に存在しない」ことを示す
+                NSLog(@"[Build25][FontCacheWarmer] INFO: fontWithName:'%@' returned nil "
+                      @"(font not available on this iOS version — safe to ignore if removed from StyleSheet)",
+                      fontName);
+            }
+            (void)f; // 明示的にキャッシュを構築させる
+        }
+    }
+
     // ── Step 2: NSTextStorage + NSLayoutManager でフォント解決をプリウォーム ──
     // -[NSTextStorage fixFontAttributeInRange:] と
     // -[UIFont bestMatchingFontForCharacters:attributes:actualCoveredLength:]
@@ -100,8 +131,42 @@
         }
     }
 
-    NSLog(@"[Build24][FontCacheWarmer] ✓ UIFont/NSTextStorage cache warmed on main thread."
-          @" ShadowQueue calls are now safe on iOS 18.");
+    // ── Step 2b: 名前付きフォントでも NSTextStorage レイアウトパスを通す ──────
+    // Build 25 強化: Courier New / Menlo を NSTextStorage で解決し、
+    // グリフカバレッジキャッシュを名前付きフォントに対しても確立する。
+    UIFont *courierFont = [UIFont fontWithName:@"Courier New" size:16.0];
+    UIFont *menloFont   = [UIFont fontWithName:@"Menlo" size:16.0];
+    // フォントが存在しない場合はシステムフォントで代替（フォールバック）
+    if (!courierFont) courierFont = sysFont;
+    if (!menloFont)   menloFont   = sysFont;
+
+    NSArray<NSDictionary *> *namedAttrs = @[
+        @{NSFontAttributeName: courierFont},
+        @{NSFontAttributeName: menloFont},
+    ];
+    // ASCII + 日本語文字列でグリフカバレッジキャッシュを構築
+    NSArray<NSString *> *namedWarmStrings = @[
+        @"DAY1 HABIT One Shot 2024.01/01 12:34",
+        @"OS-2024-001 ABCDEFGHIJKLMNOPQRSTUVWXYZ 0123456789",
+        @"予期せぬエラーが発生しました Please restart the app.",
+    ];
+    for (NSString *str in namedWarmStrings) {
+        for (NSDictionary *attrs in namedAttrs) {
+            NSAttributedString *attrStr =
+                [[NSAttributedString alloc] initWithString:str attributes:attrs];
+            NSTextStorage   *storage   = [[NSTextStorage alloc] initWithAttributedString:attrStr];
+            NSLayoutManager *layout    = [[NSLayoutManager alloc] init];
+            NSTextContainer *container =
+                [[NSTextContainer alloc] initWithSize:CGSizeMake(2000.0, 2000.0)];
+            [storage addLayoutManager:layout];
+            [layout  addTextContainer:container];
+            (void)[layout usedRectForTextContainer:container];
+        }
+    }
+
+    NSLog(@"[Build25][FontCacheWarmer] ✓ UIFont/NSTextStorage cache warmed on main thread "
+          @"(system fonts + named fonts: Courier New, Menlo). "
+          @"ShadowQueue calls are now safe on iOS 18.");
 }
 
 @end

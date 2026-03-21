@@ -4412,11 +4412,15 @@ const styles = StyleSheet.create({
   },
 
   // ── Industrial Data 4-corner overlay (photo preview, matching Swift output) ──
+  // Build 25: fontFamily: 'Menlo' を全削除。
+  // Menlo は macOS 標準フォントだが iOS には搭載されていない。
+  // StyleSheet.create() はモジュールパース時に同期実行されるため、
+  // 未登録フォント名が UIFont.bestMatchingFontForCharacters: を呼び出し
+  // iOS 18 のメインスレッド制約に抵触して SIGABRT を引き起こしていた。
   idTopLeft: {
     position: 'absolute',
     top: '12%',
     left: '5%',
-    fontFamily: 'Menlo',
     fontSize: 12,
     color: '#C8C8C8',
     textShadowColor: 'rgba(0,0,0,0.6)',
@@ -4427,7 +4431,6 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: '12%',
     right: '5%',
-    fontFamily: 'Menlo',
     fontSize: 12,
     color: '#C8C8C8',
     textShadowColor: 'rgba(0,0,0,0.6)',
@@ -4438,7 +4441,6 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: '25%',
     left: '5%',
-    fontFamily: 'Menlo',
     fontSize: 12,
     color: '#C8C8C8',
     textShadowColor: 'rgba(0,0,0,0.6)',
@@ -4449,7 +4451,6 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: '25%',
     right: '5%',
-    fontFamily: 'Menlo',
     fontSize: 12,
     color: '#C8C8C8',
     textShadowColor: 'rgba(0,0,0,0.6)',

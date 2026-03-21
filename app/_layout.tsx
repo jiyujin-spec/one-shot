@@ -84,10 +84,11 @@ const styles = StyleSheet.create({
     color: '#8B0000',
     fontSize: 11,
     textAlign: 'center',
-    // Build 24: 'monospace' は iOS の有効なフォント名ではなく、
-    // ShadowQueue が UIFont bestMatchingFontForCharacters: を呼び出す際に
-    // iOS 18 で SIGABRT を引き起こす。Courier New は iOS 標準等幅フォント。
-    fontFamily: 'Courier New',
+    // Build 25: fontFamily を完全に削除。
+    // 名前付きフォントは StyleSheet.create() 評価時に UIFont.bestMatchingFontForCharacters: を
+    // 経由する場合があり、iOS 18 のメインスレッド制約に抵触するリスクがある。
+    // errorDetail は __DEV__ 時のみ表示される診断テキストのため、
+    // システムデフォルトフォントで十分。
   },
 });
 
