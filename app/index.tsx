@@ -1476,18 +1476,25 @@ export default function Page() {
       const asset = await MediaLibrary.createAssetAsync(capturedUri);
       const assetInfo = await MediaLibrary.getAssetInfoAsync(asset);
 
-      // ── Build 9: 永続 URI の決定と相対パス変換 ──────────────────────────────
-      // 優先順位:
-      //   1. assetInfo.localUri   → Photos ライブラリの安定 file:// パス（絶対 URI のまま保存）
-      //   2. capturedUri fallback → documentDirectory 内のファイル → 相対パスに変換
+      // ── Build 29: 永続 URI の決定と相対パス変換 ──────────────────────────────
+      // 動画の場合: Photos ライブラリの localUri（/var/mobile/Media/...）は
+      // expo-av の AVPlayer から直接アクセスできず黒画面になるため、
+      // documentDirectory へコピーして相対パスを保存する。
+      // これにより expo-av が常にファイルを読み込める状態を保証する。
       //
-      // ※ `??` ではなく `||` を使用: localUri が空文字列の場合にも capturedUri へ fallback する
-      //    （`??` は null/undefined のみ fallback、`||` は falsy 値すべてで fallback）
-      //
-      // toRelativeUri は:
-      //   - documentDirectory 配下のパス → 相対パスに変換 (UUID 変化に強い)
-      //   - Photos ライブラリ URI (file:// / ph://)  → そのまま（変換対象外）
-      const rawPersistentUri = assetInfo.localUri || capturedUri;
+      // 写真の場合: Photos ライブラリの localUri を従来通り使用（Image コンポーネントは
+      // Photos ライブラリのパスを問題なく読み込める）。
+      let rawPersistentUri: string;
+      if (capturedType === 'video') {
+        // Build 29: ビデオは documentDirectory にコピーして保存
+        const destFilename = 'oneshot_v_' + Date.now() + '.mp4';
+        const destUri = (FileSystem.documentDirectory ?? '') + destFilename;
+        await FileSystem.copyAsync({ from: capturedUri, to: destUri });
+        rawPersistentUri = destUri;
+      } else {
+        // 写真: Photos ライブラリの安定 file:// パスを使用（Build 9 従来ロジック）
+        rawPersistentUri = assetInfo.localUri || capturedUri;
+      }
       const persistentUri = toRelativeUri(rawPersistentUri);
 
       recordToday(persistentUri);
@@ -1499,7 +1506,7 @@ export default function Page() {
       console.error('[saveCapture] error:', e);
       showToast(t('toast_save_error'), true);
     }
-  }, [capturedUri, mediaPermission, requestMediaPermission, recordToday, showToast, t]);
+  }, [capturedUri, capturedType, mediaPermission, requestMediaPermission, recordToday, showToast, t]);
 
   // ── 履歴レコード削除 ────────────────────────────────────────────────────────
   // ・当日分のみ削除可（過去のデータはガードで保護）
