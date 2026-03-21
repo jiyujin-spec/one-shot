@@ -4,38 +4,39 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
-// ─── Build 26: Global console.error log accumulator ───────────────────────────
-// Intercept console.error BEFORE React mounts so we can capture any
-// initialization errors that happen synchronously at module-evaluation time.
-// Logs are stored here and rendered in the ErrorBoundary fallback UI.
+// ─── Build 28: console.error log accumulator (dev-only) ──────────────────────
+// Captures console.error calls for the ErrorBoundary debug panel.
+// Guarded by __DEV__ so it is completely absent from production/review builds.
 
 const _capturedLogs: string[] = [];
-const _origConsoleError = console.error.bind(console);
-console.error = (...args: unknown[]) => {
-  _origConsoleError(...args);
-  try {
-    const line = args
-      .map((a) =>
-        a instanceof Error
-          ? `${a.message}\n${a.stack ?? ''}`
-          : typeof a === 'object'
-          ? JSON.stringify(a)
-          : String(a)
-      )
-      .join(' ');
-    _capturedLogs.push(`[${new Date().toISOString()}] ${line}`);
-    // Keep at most 60 entries to avoid unlimited growth
-    if (_capturedLogs.length > 60) _capturedLogs.shift();
-  } catch {
-    // ignore stringify errors
-  }
-};
+
+if (__DEV__) {
+  const _origConsoleError = console.error.bind(console);
+  console.error = (...args: unknown[]) => {
+    _origConsoleError(...args);
+    try {
+      const line = args
+        .map((a) =>
+          a instanceof Error
+            ? `${a.message}\n${a.stack ?? ''}`
+            : typeof a === 'object'
+            ? JSON.stringify(a)
+            : String(a)
+        )
+        .join(' ');
+      _capturedLogs.push(`[${new Date().toISOString()}] ${line}`);
+      // Keep at most 60 entries to avoid unlimited growth
+      if (_capturedLogs.length > 60) _capturedLogs.shift();
+    } catch {
+      // ignore stringify errors
+    }
+  };
+}
 
 // ─── Global Error Boundary ────────────────────────────────────────────────────
 // React のレンダリングフェーズで発生した未処理の例外を補足し、
 // ネイティブ側の SIGABRT（ExceptionsManagerQueue クラッシュ）を防ぐ。
-// Build 26: エラー詳細（message + stack + console.error ログ）を常時表示。
-//           __DEV__ ガードを外して本番ビルドでも診断情報を読めるようにする。
+// Build 28: デバッグパネルを __DEV__ 専用に戻す（本番審査ビルドでは表示しない）。
 
 interface ErrorBoundaryState {
   hasError: boolean;
@@ -76,27 +77,29 @@ class AppErrorBoundary extends React.Component<
             アプリを再起動してください。{'\n'}Please restart the app.
           </Text>
 
-          {/* ── Debug section (Build 26) ─────────────────────────── */}
-          <ScrollView style={styles.debugScroll} contentContainerStyle={styles.debugContent}>
-            <Text style={styles.debugHeader}>── Error Message ──</Text>
-            <Text style={styles.debugText} selectable>{errorMessage || '(empty)'}</Text>
+          {/* ── Debug section: dev builds only (Build 28) ──────────── */}
+          {__DEV__ && (
+            <ScrollView style={styles.debugScroll} contentContainerStyle={styles.debugContent}>
+              <Text style={styles.debugHeader}>── Error Message ──</Text>
+              <Text style={styles.debugText} selectable>{errorMessage || '(empty)'}</Text>
 
-            {!!errorStack && (
-              <>
-                <Text style={styles.debugHeader}>── Stack Trace ──</Text>
-                <Text style={styles.debugText} selectable>{errorStack}</Text>
-              </>
-            )}
+              {!!errorStack && (
+                <>
+                  <Text style={styles.debugHeader}>── Stack Trace ──</Text>
+                  <Text style={styles.debugText} selectable>{errorStack}</Text>
+                </>
+              )}
 
-            {logs.length > 0 && (
-              <>
-                <Text style={styles.debugHeader}>── console.error logs ({logs.length}) ──</Text>
-                {logs.map((line, i) => (
-                  <Text key={i} style={styles.debugText} selectable>{line}</Text>
-                ))}
-              </>
-            )}
-          </ScrollView>
+              {logs.length > 0 && (
+                <>
+                  <Text style={styles.debugHeader}>── console.error logs ({logs.length}) ──</Text>
+                  {logs.map((line, i) => (
+                    <Text key={i} style={styles.debugText} selectable>{line}</Text>
+                  ))}
+                </>
+              )}
+            </ScrollView>
+          )}
         </View>
       );
     }
@@ -132,7 +135,7 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     marginBottom: 20,
   },
-  // ── Debug UI ────────────────────────────────────────────────
+  // ── Debug UI (dev builds only) ───────────────────────────────
   debugScroll: {
     flex: 1,
     width: '100%',

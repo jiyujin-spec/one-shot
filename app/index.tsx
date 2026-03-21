@@ -1728,19 +1728,6 @@ export default function Page() {
     const annualPrice = annualPkg?.product.priceString ?? annualFallback;
     const monthlyPrice = monthlyPkg?.product.priceString ?? null;
 
-    // ── [DEBUG] PaywallScreen がレンダリングされた時点の価格を確認 ──────────
-    console.log('[RC Debug] PaywallScreen render:', {
-      annualProductId:   annualPkg?.product.identifier   ?? 'null',
-      annualPrice:       annualPkg?.product.price        ?? 'null',
-      annualPriceString: annualPkg?.product.priceString  ?? 'null',
-      annualCurrency:    annualPkg?.product.currencyCode ?? 'null',
-      monthlyProductId:   monthlyPkg?.product.identifier   ?? 'null',
-      monthlyPrice:       monthlyPkg?.product.price        ?? 'null',
-      monthlyPriceString: monthlyPkg?.product.priceString  ?? 'null',
-      monthlyCurrency:    monthlyPkg?.product.currencyCode ?? 'null',
-    });
-    // ────────────────────────────────────────────────────────────────────────
-
     return (
       <ScrollView style={styles.screen} contentContainerStyle={styles.paywallContent}>
         <Text style={styles.appTitle}>ONE SHOT</Text>
@@ -1821,13 +1808,7 @@ export default function Page() {
           </TouchableOpacity>
         )}
 
-        <Text style={styles.subscriptionNote}>{t('paywall_iap_note')}</Text>
-
-        <Text style={styles.paywallPassNote}>{t('paywall_pass_note')}</Text>
-
-        <TouchableOpacity onPress={restorePurchase}>
-          <Text style={styles.linkText}>{t('paywall_restore_btn')}</Text>
-        </TouchableOpacity>
+        {/* ── 利用規約・プライバシー（購入ボタン直下・Apple 3.1.2(c) 必須） ── */}
         <View style={styles.paywallLinks}>
           <TouchableOpacity onPress={() => Linking.openURL('https://ivory-green-d0a.notion.site/One-shot-Term-of-Service-3285c8dc66068011bacad02879f4ddc2?pvs=73')}>
             <Text style={[styles.linkSmall, styles.linkSmallTappable]}>{t('paywall_terms')}</Text>
@@ -1837,6 +1818,14 @@ export default function Page() {
             <Text style={[styles.linkSmall, styles.linkSmallTappable]}>{t('paywall_privacy')}</Text>
           </TouchableOpacity>
         </View>
+
+        <Text style={styles.subscriptionNote}>{t('paywall_iap_note')}</Text>
+
+        <Text style={styles.paywallPassNote}>{t('paywall_pass_note')}</Text>
+
+        <TouchableOpacity onPress={restorePurchase}>
+          <Text style={styles.linkText}>{t('paywall_restore_btn')}</Text>
+        </TouchableOpacity>
       </ScrollView>
     );
   };
@@ -3502,14 +3491,15 @@ const styles = StyleSheet.create({
   },
   paywallLinks: {
     flexDirection: 'row',
-    marginTop: 8,
+    marginTop: 12,
+    marginBottom: 4,
   },
   linkSmall: {
-    color: '#444',
-    fontSize: 11,
+    color: '#666',
+    fontSize: 12,
   },
   linkSmallTappable: {
-    color: '#666',
+    color: '#999',
     textDecorationLine: 'underline',
   },
 
