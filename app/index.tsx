@@ -40,7 +40,9 @@ import { captureRef } from 'react-native-view-shot';
 import * as FileSystem from 'expo-file-system';
 import * as Notifications from 'expo-notifications';
 import * as StoreReview from 'expo-store-review';
-import * as WebBrowser from 'expo-web-browser';
+// Build 27: expo-web-browser (v55) は expo 51 のネイティブ層に存在しないため
+// Linking.openURL に置き換えて ExpoWebBrowser ネイティブモジュール依存を排除する。
+// expo-web-browser import removed
 // Build 22: video-overlay は起動時にロードしない（iOS 18 クラッシュ対策）
 // 実際の呼び出し直前に require() で遅延ロードする。
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1827,11 +1829,11 @@ export default function Page() {
           <Text style={styles.linkText}>{t('paywall_restore_btn')}</Text>
         </TouchableOpacity>
         <View style={styles.paywallLinks}>
-          <TouchableOpacity onPress={() => WebBrowser.openBrowserAsync('https://ivory-green-d0a.notion.site/One-shot-Term-of-Service-3285c8dc66068011bacad02879f4ddc2?pvs=73')}>
+          <TouchableOpacity onPress={() => Linking.openURL('https://ivory-green-d0a.notion.site/One-shot-Term-of-Service-3285c8dc66068011bacad02879f4ddc2?pvs=73')}>
             <Text style={[styles.linkSmall, styles.linkSmallTappable]}>{t('paywall_terms')}</Text>
           </TouchableOpacity>
           <Text style={styles.linkSmall}>  ·  </Text>
-          <TouchableOpacity onPress={() => WebBrowser.openBrowserAsync('https://ivory-green-d0a.notion.site/One-shot-Privacy-policy-3285c8dc660680d7ac1fe514d6690703')}>
+          <TouchableOpacity onPress={() => Linking.openURL('https://ivory-green-d0a.notion.site/One-shot-Privacy-policy-3285c8dc660680d7ac1fe514d6690703')}>
             <Text style={[styles.linkSmall, styles.linkSmallTappable]}>{t('paywall_privacy')}</Text>
           </TouchableOpacity>
         </View>
