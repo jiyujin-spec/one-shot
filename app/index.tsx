@@ -1755,6 +1755,11 @@ export default function Page() {
       <ScrollView style={styles.screen} contentContainerStyle={styles.paywallContent}>
         <Text style={styles.appTitle}>ONE SHOT</Text>
 
+        {/* ── 7日間無料トライアルバッジ ── */}
+        <Text style={styles.trialBadgeText}>
+          {lang === 'ja' ? '🎁 7日間 無料体験' : '🎁 7-Day Free Trial'}
+        </Text>
+
         {/* ── Early Supporter バッジ ── */}
         <View style={styles.paywallBadge}>
           <Text style={styles.paywallBadgeText}>
@@ -1810,11 +1815,14 @@ export default function Page() {
             </View>
           </View>
           <Text style={styles.planCardPrice}>{annualPrice ?? '—'}</Text>
+          <Text style={styles.planCardSubtext}>
+            {lang === 'ja' ? '最初の7日間は無料' : 'First 7 days free'}
+          </Text>
           <Text style={styles.planCardPeriod}>
             {lang === 'ja' ? '/ 年（1日あたり約8円）' : '/ YEAR  ·  BILLED ANNUALLY'}
           </Text>
           <Text style={styles.planCardCta}>
-            {lang === 'ja' ? 'このプランで始める →' : 'GET ACCESS  →'}
+            {lang === 'ja' ? '無料で始める →' : 'Start Free Trial →'}
           </Text>
         </TouchableOpacity>
 
@@ -1825,11 +1833,21 @@ export default function Page() {
             onPress={() => subscribePremium(monthlyPkg)}
           >
             <Text style={styles.planCardSecondaryPrice}>{monthlyPrice ?? '—'}</Text>
+            <Text style={styles.planCardSubtext}>
+              {lang === 'ja' ? '最初の7日間は無料' : 'First 7 days free'}
+            </Text>
             <Text style={styles.planCardSecondaryPeriod}>
               {lang === 'ja' ? '/ 月' : '/ MONTH  ·  BILLED MONTHLY'}
             </Text>
           </TouchableOpacity>
         )}
+
+        {/* ── 無料トライアル注意書き ── */}
+        <Text style={styles.trialNote}>
+          {lang === 'ja'
+            ? '7日間の無料体験終了後、自動的に課金が開始されます。\n無料期間終了の24時間前までにキャンセルしない限り、\nサブスクリプションは自動更新されます。\n解約はiPhone設定 → Apple ID → サブスクリプションから\nいつでも可能です。'
+            : 'After the 7-day free trial, you will be charged\n¥500/month or ¥5,000/year automatically.\nCancel anytime in Settings before the trial ends\nto avoid being charged.\nNo refunds for partial subscription periods.'}
+        </Text>
 
         {/* ── 利用規約・プライバシー（購入ボタン直下・Apple 3.1.2(c) 必須） ── */}
         <View style={styles.paywallLinks}>
@@ -3481,6 +3499,28 @@ const styles = StyleSheet.create({
     color: '#CC3333',
     letterSpacing: 1,
     textTransform: 'uppercase',
+  },
+  trialBadgeText: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#CC0000',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  planCardSubtext: {
+    fontSize: 12,
+    color: '#CC0000',
+    fontWeight: '600',
+    marginBottom: 6,
+  },
+  trialNote: {
+    fontSize: 12,
+    color: '#888888',
+    textAlign: 'center',
+    lineHeight: 18,
+    marginTop: 12,
+    marginBottom: 8,
+    paddingHorizontal: 8,
   },
   planCardSecondary: {
     alignSelf: 'stretch',
