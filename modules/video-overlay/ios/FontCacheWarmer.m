@@ -77,6 +77,7 @@
         @"CourierNewPS-BoldMT",  // Courier New Bold バリアント
         @"Menlo",                // Build 25 で StyleSheet から削除済み（念のため）
         @"Menlo-Regular",        // Menlo バリアント
+        @"BebasNeue-Regular",    // DAY表示フォント
     ];
     for (NSString *fontName in namedFonts) {
         for (NSUInteger i = 0; i < sizeCount; i++) {
