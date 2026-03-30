@@ -3570,11 +3570,11 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
   streakNum: {
-    fontSize: 120,         // 1.5倍（80→120）
+    fontSize: 156,         // 1.3倍（120→156）
     fontWeight: '900',
     color: '#fff',
     letterSpacing: -6,
-    lineHeight: 120,
+    lineHeight: 156,
     includeFontPadding: false,
   } as any,
   streakLabel: {
@@ -3593,10 +3593,15 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   goalCard: {
-    backgroundColor: '#111',
-    borderRadius: 16,
-    padding: 16,
+    backgroundColor: 'transparent',
+    borderRadius: 0,
+    padding: 4,
     marginBottom: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#222222',
+    borderBottomWidth: 1,
+    borderBottomColor: '#222222',
+    paddingVertical: 12,
   },
   goalTitle: {
     fontSize: 18,
@@ -3615,8 +3620,8 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 9,
     paddingHorizontal: 10,
-    borderRadius: 10,
-    backgroundColor: '#1a1a1a',
+    borderRadius: 0,
+    backgroundColor: 'transparent',
     alignItems: 'center',
   },
   statusVal: {
@@ -4130,22 +4135,22 @@ const styles = StyleSheet.create({
   },
   calDayCellToday: {
     borderWidth: 1,
-    borderColor: '#8B0000',
+    borderColor: '#FF3333',
   },
   calDayNum: {
     fontSize: 13,
-    color: '#777',
+    color: '#444444',
     fontWeight: '600',
   },
   calDayNumRecorded: {
-    color: '#fff',
+    color: '#FFFFFF',
   },
   calCheck: {
     position: 'absolute',
     top: 2,
     right: 3,
-    fontSize: 9,
-    color: '#CC0000',
+    fontSize: 14,
+    color: '#FF3333',
     fontWeight: '900',
   },
   calPassMark: {
@@ -4533,10 +4538,13 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   settingGroup: {
-    backgroundColor: '#111',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
+    backgroundColor: 'transparent',
+    borderRadius: 0,
+    padding: 4,
+    paddingVertical: 12,
+    marginBottom: 0,
+    borderBottomWidth: 1,
+    borderBottomColor: '#222222',
   },
   premiumCard: {
     borderWidth: 1.5,
