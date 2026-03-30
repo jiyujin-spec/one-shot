@@ -142,6 +142,7 @@ public class VideoOverlayModule: Module {
       }
 
       let outputPath = options["outputPath"] as? String
+      let colorFilterEnabled = (options["colorFilterEnabled"] as? Bool) ?? true
 
       let timestampStr: String
       if let ct = options["captureTime"] as? String, !ct.isEmpty {
@@ -266,12 +267,14 @@ public class VideoOverlayModule: Module {
         parentLayer.addSublayer(videoLayer)
 
         // ── Dark / cold-tone filter ─────────────────────────────────────────────
-        let darkOverlay = CALayer()
-        darkOverlay.frame = CGRect(origin: .zero, size: renderSize)
-        darkOverlay.backgroundColor = UIColor(
-          red: 0, green: 0.04, blue: 0.12, alpha: 0.38
-        ).cgColor
-        parentLayer.addSublayer(darkOverlay)
+        if colorFilterEnabled {
+          let darkOverlay = CALayer()
+          darkOverlay.frame = CGRect(origin: .zero, size: renderSize)
+          darkOverlay.backgroundColor = UIColor(
+            red: 0, green: 0.04, blue: 0.12, alpha: 0.38
+          ).cgColor
+          parentLayer.addSublayer(darkOverlay)
+        }
 
         // ── Layout constants ────────────────────────────────────────────────────
         let S        = squareSize
@@ -341,11 +344,24 @@ public class VideoOverlayModule: Module {
         let neShotY = dotY - (layerH - dotSize) / 2
         parentLayer.addSublayer(makeTextLayer("ne shot", x: neShotX, y: neShotY))
 
-        // ── TR: "DAY{n}" (or custom dayLabel if provided) ──────────────────────
+        // ── TR: "DAY{n}" (or custom dayLabel if provided) — Bebas Neue font ────
         let dayStr = (options["dayLabel"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "DAY\(currentDay)"
-        let dayX   = S - pad - tw(dayStr) - 4
+        let dayBebasFont: UIFont = UIFont(name: "BebasNeue-Regular", size: fontSize) ?? UIFont.boldSystemFont(ofSize: fontSize)
+        let dayAttrs: [NSAttributedString.Key: Any] = [.font: dayBebasFont]
+        let dayTW: CGFloat = dayStr.size(withAttributes: dayAttrs).width
+        let dayX   = S - pad - dayTW - 4
         let dayY   = pad + armLen * 0.25
-        parentLayer.addSublayer(makeTextLayer(dayStr, x: dayX, y: dayY))
+        let dayLayer = CATextLayer()
+        dayLayer.string          = dayStr
+        dayLayer.fontSize        = fontSize
+        dayLayer.foregroundColor = white
+        dayLayer.alignmentMode   = .left
+        dayLayer.contentsScale   = 2.0
+        dayLayer.isWrapped       = false
+        dayLayer.font            = CTFontCreateWithName("BebasNeue-Regular" as CFString, fontSize, nil)
+        addShadow(dayLayer)
+        dayLayer.frame = CGRect(x: dayX, y: dayY, width: dayTW + 8, height: layerH)
+        parentLayer.addSublayer(dayLayer)
 
         // ── BL: timestamp + "HABIT:{name}" ────────────────────────────────────
         let habitStr = "HABIT:\(habitName.uppercased())"

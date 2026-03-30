@@ -21,7 +21,8 @@
         "NSMicrophoneUsageDescription": "One Shot uses the microphone for video recording.",
         "NSPhotoLibraryUsageDescription": "Reads recorded videos and photos from your photo library.",
         "NSPhotoLibraryAddUsageDescription": "Saves recorded videos and photos to your photo library.",
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "UIAppFonts": ["BebasNeue-Regular.ttf"]
       }
     },
     "android": {

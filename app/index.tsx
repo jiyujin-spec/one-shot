@@ -40,6 +40,7 @@ import { captureRef } from 'react-native-view-shot';
 import * as FileSystem from 'expo-file-system';
 import * as Notifications from 'expo-notifications';
 import * as StoreReview from 'expo-store-review';
+import * as Font from 'expo-font';
 // Build 27: expo-web-browser (v55) は expo 51 のネイティブ層に存在しないため
 // Linking.openURL に置き換えて ExpoWebBrowser ネイティブモジュール依存を排除する。
 // expo-web-browser import removed
@@ -85,6 +86,7 @@ interface AppState {
   notifyTime: string;
   subscribed: boolean;
   showRecordingCountdown: boolean;
+  colorFilterEnabled: boolean;
   rcUserID: string;
   reviewRequested: boolean;
   userId: string;              // "OS-YYYY-NNN" generated once
@@ -255,6 +257,8 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     cam_permission_back: '戻る',
     settings_countdown_label: '録画中カウントダウン',
     settings_countdown_hint: '録画中に残り時間を表示',
+    settings_color_filter_label: 'Color Filter',
+    settings_color_filter_hint: '色調補正（暗めのグレーディング）',
     settings_restore_btn: '購入の復元',
     settings_contact_btn: 'お問い合わせ',
     confirm_use_pass_ok: 'はい',
@@ -383,6 +387,8 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     cam_permission_back: 'Go Back',
     settings_countdown_label: 'Recording Countdown',
     settings_countdown_hint: 'Display timer during recording',
+    settings_color_filter_label: 'Color Filter',
+    settings_color_filter_hint: 'Dark cold-tone color grading',
     settings_restore_btn: 'Restore Purchases',
     settings_contact_btn: 'Contact',
     confirm_use_pass_ok: 'Confirm',
@@ -500,6 +506,7 @@ const defaultState: AppState = {
   notifyTime: '21:00',
   subscribed: false,
   showRecordingCountdown: true,
+  colorFilterEnabled: true,
   rcUserID: '',
   reviewRequested: false,
   userId: '',
@@ -605,7 +612,7 @@ export default function Page() {
   const [mediaPermission, requestMediaPermission] = MediaLibrary.usePermissions();
   const [facing, setFacing] = useState<CameraType>('front');
   const [camMode, setCamMode] = useState<'video' | 'photo'>('video');
-  const [recSecs, setRecSecs] = useState<3 | 5 | 7>(5);
+  const [recSecs, setRecSecs] = useState<5 | 10>(5);
   const [isRecording, setIsRecording] = useState(false);
   const [countdown, setCountdown] = useState<number | null>(null);       // 撮影前 3-2-1
   const [recordingCountdown, setRecordingCountdown] = useState<number | null>(null); // 録画中残り秒数
@@ -649,6 +656,14 @@ export default function Page() {
   const [reviewReady, setReviewReady] = useState(false);
 
   const toastTimer = useRef<any>(null);
+
+  // ── BebasNeue-Regular font loading ──────────────────────────────────────────
+
+  useEffect(() => {
+    Font.loadAsync({
+      'BebasNeue-Regular': require('../assets/fonts/BebasNeue-Regular.ttf'),
+    }).catch(() => { /* font load failure is non-fatal */ });
+  }, []);
 
   // ── Notification handler (inside useEffect to avoid top-level crash) ─────────
 
@@ -1433,6 +1448,7 @@ export default function Page() {
         currentDay: filterCurrentDay,
         captureTime: format(captureTime, "yyyy.MM/dd HH:mm"),
         dayLabel: currentPhase > 1 ? `P${currentPhase} DAY${filterCurrentDay}` : undefined,
+        colorFilterEnabled: appState.colorFilterEnabled,
       });
       setCapturedUri(processed);  // transition to preview with processed video
     } catch (vErr) {
@@ -1476,18 +1492,25 @@ export default function Page() {
       const asset = await MediaLibrary.createAssetAsync(capturedUri);
       const assetInfo = await MediaLibrary.getAssetInfoAsync(asset);
 
-      // ── Build 9: 永続 URI の決定と相対パス変換 ──────────────────────────────
-      // 優先順位:
-      //   1. assetInfo.localUri   → Photos ライブラリの安定 file:// パス（絶対 URI のまま保存）
-      //   2. capturedUri fallback → documentDirectory 内のファイル → 相対パスに変換
+      // ── Build 29: 永続 URI の決定と相対パス変換 ──────────────────────────────
+      // 動画の場合: Photos ライブラリの localUri（/var/mobile/Media/...）は
+      // expo-av の AVPlayer から直接アクセスできず黒画面になるため、
+      // documentDirectory へコピーして相対パスを保存する。
+      // これにより expo-av が常にファイルを読み込める状態を保証する。
       //
-      // ※ `??` ではなく `||` を使用: localUri が空文字列の場合にも capturedUri へ fallback する
-      //    （`??` は null/undefined のみ fallback、`||` は falsy 値すべてで fallback）
-      //
-      // toRelativeUri は:
-      //   - documentDirectory 配下のパス → 相対パスに変換 (UUID 変化に強い)
-      //   - Photos ライブラリ URI (file:// / ph://)  → そのまま（変換対象外）
-      const rawPersistentUri = assetInfo.localUri || capturedUri;
+      // 写真の場合: Photos ライブラリの localUri を従来通り使用（Image コンポーネントは
+      // Photos ライブラリのパスを問題なく読み込める）。
+      let rawPersistentUri: string;
+      if (capturedType === 'video') {
+        // Build 29: ビデオは documentDirectory にコピーして保存
+        const destFilename = 'oneshot_v_' + Date.now() + '.mp4';
+        const destUri = (FileSystem.documentDirectory ?? '') + destFilename;
+        await FileSystem.copyAsync({ from: capturedUri, to: destUri });
+        rawPersistentUri = destUri;
+      } else {
+        // 写真: Photos ライブラリの安定 file:// パスを使用（Build 9 従来ロジック）
+        rawPersistentUri = assetInfo.localUri || capturedUri;
+      }
       const persistentUri = toRelativeUri(rawPersistentUri);
 
       recordToday(persistentUri);
@@ -1499,7 +1522,7 @@ export default function Page() {
       console.error('[saveCapture] error:', e);
       showToast(t('toast_save_error'), true);
     }
-  }, [capturedUri, mediaPermission, requestMediaPermission, recordToday, showToast, t]);
+  }, [capturedUri, capturedType, mediaPermission, requestMediaPermission, recordToday, showToast, t]);
 
   // ── 履歴レコード削除 ────────────────────────────────────────────────────────
   // ・当日分のみ削除可（過去のデータはガードで保護）
@@ -1724,7 +1747,7 @@ export default function Page() {
   const PaywallScreen = () => {
     const annualPkg   = findRCPackage('annual');
     const monthlyPkg  = findRCPackage('monthly');
-    const annualFallback  = lang === 'ja' ? '¥6,000' : '$39.99';
+    const annualFallback  = lang === 'ja' ? '¥5,000' : '$39.99';
     const annualPrice = annualPkg?.product.priceString ?? annualFallback;
     const monthlyPrice = monthlyPkg?.product.priceString ?? null;
 
@@ -2148,7 +2171,7 @@ export default function Page() {
             {/* 右: 録画秒数トグル（3s → 5s → 7s → 3s）*/}
             <TouchableOpacity
               style={styles.camTimerBtn}
-              onPress={() => setRecSecs(s => s === 3 ? 5 : s === 5 ? 7 : 3)}
+              onPress={() => setRecSecs(s => s === 5 ? 10 : 5)}
               disabled={isRecording}
             >
               <Text style={[styles.camDurLabel, isRecording && { opacity: 0.25 }]}>
@@ -2551,6 +2574,17 @@ export default function Page() {
           <Switch
             value={appState.showRecordingCountdown}
             onValueChange={v => updateState({ showRecordingCountdown: v })}
+            thumbColor="#fff"
+            trackColor={{ false: '#333', true: '#8B0000' }}
+          />
+        </View>
+
+        <View style={styles.settingGroup}>
+          <Text style={styles.settingLabel}>{t('settings_color_filter_label')}</Text>
+          <Text style={styles.settingHint}>{t('settings_color_filter_hint')}</Text>
+          <Switch
+            value={appState.colorFilterEnabled}
+            onValueChange={v => updateState({ colorFilterEnabled: v })}
             thumbColor="#fff"
             trackColor={{ false: '#333', true: '#8B0000' }}
           />
@@ -3161,11 +3195,13 @@ Email: ristu.japan@gmail.com`;
               resizeMode="cover"
               onLoadEnd={() => processPhotoFromRef(uri)}
             />
-            {/* Dark / cold tone overlay */}
-            <View style={{
-              position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-              backgroundColor: 'rgba(0,10,31,0.38)',
-            }} />
+            {/* Dark / cold tone overlay (conditional on colorFilterEnabled) */}
+            {appState.colorFilterEnabled && (
+              <View style={{
+                position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+                backgroundColor: 'rgba(0,10,31,0.38)',
+              }} />
+            )}
             {/* TL corner bracket ┌ */}
             <View style={{
               position: 'absolute', top: pad, left: pad,
@@ -3183,8 +3219,8 @@ Email: ristu.japan@gmail.com`;
             }} />
             {/* "ne shot" */}
             <Text style={{ ...baseText, top: textTop, left: neShotX }}>ne shot</Text>
-            {/* DAYn (right side, same row) */}
-            <Text style={{ ...baseText, top: textTop, right: pad }}>{dayStr}</Text>
+            {/* DAYn (right side, same row) — Bebas Neue font */}
+            <Text style={{ ...baseText, top: textTop, right: pad, fontFamily: 'BebasNeue-Regular' }}>{dayStr}</Text>
             {/* Timestamp line */}
             <Text style={{ ...baseText, bottom: pad + lineGap, left: pad }}>{tsStr}</Text>
             {/* HABIT line */}

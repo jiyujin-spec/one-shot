@@ -63,9 +63,10 @@ class VideoOverlayModule : Module() {
         return@AsyncFunction
       }
 
-      val outputPath   = options["outputPath"] as? String
-      val captureTime  = options["captureTime"] as? String
-      val dayLabel     = (options["dayLabel"] as? String)?.takeIf { it.isNotEmpty() }
+      val outputPath         = options["outputPath"] as? String
+      val captureTime        = options["captureTime"] as? String
+      val dayLabel           = (options["dayLabel"] as? String)?.takeIf { it.isNotEmpty() }
+      val colorFilterEnabled = (options["colorFilterEnabled"] as? Boolean) ?: true
 
       // Use provided captureTime or format current time
       val timestampStr = if (!captureTime.isNullOrEmpty()) {
@@ -85,7 +86,7 @@ class VideoOverlayModule : Module() {
             File(context.cacheDir, "${System.currentTimeMillis()}.mp4")
           }
 
-          processOneShotVideo(srcPath, outFile.absolutePath, timestampStr, habitName, currentDay, dayLabel)
+          processOneShotVideo(srcPath, outFile.absolutePath, timestampStr, habitName, currentDay, dayLabel, colorFilterEnabled)
           promise.resolve("file://${outFile.absolutePath}")
         } catch (e: Exception) {
           promise.reject("ERR_PROCESS", e.message ?: "Unknown error", e)
@@ -116,7 +117,8 @@ class VideoOverlayModule : Module() {
   private fun processOneShotVideo(
     srcPath: String, dstPath: String,
     timestampStr: String, habitName: String, currentDay: Int,
-    dayLabel: String? = null
+    dayLabel: String? = null,
+    colorFilterEnabled: Boolean = true
   ) {
     val FPS      = 30
     val FRAME_US = 1_000_000L / FPS
@@ -175,11 +177,27 @@ class VideoOverlayModule : Module() {
     val dayStr   = dayLabel ?: "DAY$currentDay"
     val habitStr = "HABIT:$habitName"
 
+    // Load BebasNeue-Regular typeface for DAY display; fall back to bold system font
+    val bebasTypeface: Typeface = try {
+      Typeface.createFromAsset(context.assets, "fonts/BebasNeue-Regular.ttf")
+    } catch (e: Exception) {
+      Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+    }
+
+    val dayPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+      textSize = fontSize
+      color    = Color.WHITE
+      typeface = bebasTypeface
+      setShadowLayer(3f, 1f, 1f, Color.argb(140, 0, 0, 0))
+    }
+
     fun drawOverlays(bmp: Bitmap) {
       val canvas = Canvas(bmp)
 
-      // 1. Dark/cold overlay
-      canvas.drawRect(0f, 0f, S, S, darkPaint)
+      // 1. Dark/cold overlay (conditional)
+      if (colorFilterEnabled) {
+        canvas.drawRect(0f, 0f, S, S, darkPaint)
+      }
 
       // 2. TL corner bracket ┌
       val tlPath = Path().apply {
@@ -204,11 +222,11 @@ class VideoOverlayModule : Module() {
       val neShotBaseline = dotY + dotSize * 0.5f + fontSize * 0.35f
       canvas.drawText("ne shot", neShotX, neShotBaseline, textPaint)
 
-      // 5. TR: "DAYn"
-      val dayW = textPaint.measureText(dayStr)
+      // 5. TR: "DAYn" — Bebas Neue font
+      val dayW = dayPaint.measureText(dayStr)
       val dayX = S - pad - dayW
       val dayY = pad + armLen * 0.25f + dotSize * 0.5f + fontSize * 0.35f
-      canvas.drawText(dayStr, dayX, dayY, textPaint)
+      canvas.drawText(dayStr, dayX, dayY, dayPaint)
 
       // 6. BL: timestamp (line 1) + "HABIT:xxx" (line 2)
       val line2Baseline = S - pad
