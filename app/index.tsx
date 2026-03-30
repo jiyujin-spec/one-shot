@@ -2137,14 +2137,14 @@ export default function Page() {
 
         {/* トップバー: 左=×（閉じる）、右=フリップ */}
         <View style={styles.camTopBar}>
-          <TouchableOpacity style={styles.camTopBtn} onPress={() => setScreen('home')}>
-            <Feather name="x" size={22} color="#fff" />
+          <TouchableOpacity style={styles.camTopBtnFlat} onPress={() => setScreen('home')}>
+            <Ionicons name="close" size={28} color="#fff" />
           </TouchableOpacity>
           <TouchableOpacity
-            style={styles.camTopBtn}
+            style={styles.camTopBtnFlat}
             onPress={() => setFacing(f => f === 'front' ? 'back' : 'front')}
           >
-            <Feather name="refresh-cw" size={20} color="#fff" />
+            <Ionicons name="camera-reverse-outline" size={26} color="#fff" />
           </TouchableOpacity>
         </View>
 
@@ -2173,7 +2173,7 @@ export default function Page() {
               style={[styles.camTimerBtn, appState.showRecordingCountdown && styles.camTimerBtnOn]}
               onPress={() => updateState({ showRecordingCountdown: !appState.showRecordingCountdown })}
             >
-              <Feather name="clock" size={20} color={appState.showRecordingCountdown ? '#fff' : 'rgba(255,255,255,0.35)'} />
+              <Ionicons name="timer-outline" size={22} color={appState.showRecordingCountdown ? '#fff' : 'rgba(255,255,255,0.35)'} />
             </TouchableOpacity>
 
             {/* 中央: シャッターボタン（赤い内側）*/}
@@ -3127,7 +3127,7 @@ Email: ristu.japan@gmail.com`;
             style={[styles.navItem, screen === 'home' && styles.navItemActive]}
             onPress={() => setScreen('home')}
           >
-            <Feather name="home" size={20} color={screen === 'home' ? '#fff' : '#555'} />
+            <Ionicons name="home-outline" size={20} color={screen === 'home' ? '#FFFFFF' : '#555555'} />
             <Text style={[styles.navLabel, screen === 'home' && styles.navLabelActive]}>
               {t('nav_today')}
             </Text>
@@ -3136,7 +3136,7 @@ Email: ristu.japan@gmail.com`;
             style={[styles.navItem, screen === 'history' && styles.navItemActive]}
             onPress={() => setScreen('history')}
           >
-            <Feather name="calendar" size={20} color={screen === 'history' ? '#fff' : '#555'} />
+            <Ionicons name="calendar-outline" size={20} color={screen === 'history' ? '#FFFFFF' : '#555555'} />
             <Text style={[styles.navLabel, screen === 'history' && styles.navLabelActive]}>
               {t('nav_history')}
             </Text>
@@ -3145,7 +3145,7 @@ Email: ristu.japan@gmail.com`;
             style={[styles.navItem, screen === 'settings' && styles.navItemActive]}
             onPress={() => setScreen('settings')}
           >
-            <Feather name="settings" size={20} color={screen === 'settings' ? '#fff' : '#555'} />
+            <Ionicons name="settings-outline" size={20} color={screen === 'settings' ? '#FFFFFF' : '#555555'} />
             <Text style={[styles.navLabel, screen === 'settings' && styles.navLabelActive]}>
               {t('settings_title')}
             </Text>
@@ -3261,7 +3261,7 @@ Email: ristu.japan@gmail.com`;
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
 const { width } = Dimensions.get('window');
-const CELL_SIZE = Math.floor((width - 32) / 7);
+const CELL_SIZE = Math.floor((width - 16) / 7);
 
 const styles = StyleSheet.create({
   container: {
@@ -3838,6 +3838,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  camTopBtnFlat: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 
   // ボトムエリア
   camBottomArea: {
@@ -4131,8 +4137,9 @@ const styles = StyleSheet.create({
   // ── History ──
   historyContent: {
     flexGrow: 1,
-    padding: 16,
-    paddingTop: 40,
+    paddingHorizontal: 8,
+    paddingTop: 16,
+    paddingBottom: 16,
     justifyContent: 'center',
   },
   calHeader: {
@@ -4178,8 +4185,8 @@ const styles = StyleSheet.create({
     borderColor: '#FF3333',
   },
   calDayNum: {
-    fontSize: 13,
-    color: '#444444',
+    fontSize: 17,
+    color: '#333333',
     fontWeight: '600',
   },
   calDayNumRecorded: {
@@ -4187,9 +4194,9 @@ const styles = StyleSheet.create({
   },
   calCheck: {
     position: 'absolute',
-    top: 2,
-    right: 3,
-    fontSize: 14,
+    top: 1,
+    right: 2,
+    fontSize: 28,
     color: '#FF3333',
     fontWeight: '900',
   },
