@@ -657,11 +657,13 @@ export default function Page() {
 
   const toastTimer = useRef<any>(null);
 
-  // ── BebasNeue-Regular font loading ──────────────────────────────────────────
+  // ── Font loading ────────────────────────────────────────────────────────────
 
   useEffect(() => {
     Font.loadAsync({
       'BebasNeue-Regular': require('../assets/fonts/BebasNeue-Regular.ttf'),
+      'SpaceMono-Regular': require('../assets/fonts/SpaceMono-Regular.ttf'),
+      'SpaceMono-Bold':    require('../assets/fonts/SpaceMono-Bold.ttf'),
     }).catch(() => { /* font load failure is non-fatal */ });
   }, []);
 
@@ -1440,14 +1442,12 @@ export default function Page() {
         // eslint-disable-next-line @typescript-eslint/no-var-requires
         processVideo = (require('../modules/video-overlay') as { processVideo: (opts: any) => Promise<string> }).processVideo;
       }
-      const currentPhase = appState.phase ?? 1;
       // filterCurrentDay は上で計算済み（同日2本目以降はカウントアップしない）
       const processed = await processVideo({
         inputPath: rawUri,
         habitName: (appState.goal || 'HABIT').toUpperCase(),
         currentDay: filterCurrentDay,
-        captureTime: format(captureTime, "yyyy.MM/dd HH:mm"),
-        dayLabel: currentPhase > 1 ? `P${currentPhase} DAY${filterCurrentDay}` : undefined,
+        captureTimestamp: captureTime.getTime(),
         colorFilterEnabled: appState.colorFilterEnabled,
       });
       setCapturedUri(processed);  // transition to preview with processed video
@@ -3159,38 +3159,57 @@ Email: ristu.japan@gmail.com`;
       {toastMsg ? <Toast message={toastMsg} isError={toastError} /> : null}
 
       {/* ── Off-screen photo filter processor ──────────────────────────────── */}
-      {/* Renders the raw photo + all overlays off-screen; view-shot captures it
-          to produce a fully baked processedUri before showing preview.          */}
+      {/* ── Off-screen photo filter processor (9:16 layout) ────────────────── */}
+      {/* Renders the raw photo + overlays off-screen at 9:16 ratio;
+          view-shot captures it to produce a fully baked processedUri.         */}
       {photoProcessorData && (() => {
         const { uri, habitName, currentDay, captureTime } = photoProcessorData;
-        const sq = Dimensions.get('window').width;
-        const pad = sq * 0.045;
-        const textSize = sq * 0.038;
-        const armLen = sq * 0.07;
-        const bracketW = Math.max(sq * 0.003, 1.5);
-        const dotSize = textSize * 0.95;
-        const dotX = pad + armLen * 0.25;
-        const dotY = pad + armLen * 0.25;
-        const textTop = dotY + dotSize / 2 - textSize / 2;
-        const neShotX = dotX + dotSize + textSize * 0.22;
-        const lineGap = textSize * 1.35;
-        let tsStr = '';
-        try { tsStr = format(captureTime, "yyyy.MM/dd HH:mm"); } catch { tsStr = ''; }
-        const habitStr = `HABIT:${habitName}`;
-        const currentPhaseForPhoto = appState.phase ?? 1;
-        const dayStr = currentPhaseForPhoto > 1 ? `P${currentPhaseForPhoto} DAY${currentDay}` : `DAY${currentDay}`;
+
+        // Canvas: width = screen width, height = width × (16/9)
+        const canvasW = Dimensions.get('window').width;
+        const canvasH = Math.round(canvasW * (16 / 9));
+        const barH    = Math.round((canvasH - canvasW) / 2);  // upper/lower bar height
+
+        // Formatting timestamps
+        let upperTs = '';
+        let lowerTs = '';
+        try {
+          upperTs = format(captureTime, "yyyy.MM.dd_HH:mm");
+          lowerTs = format(captureTime, "yyyy.MM.dd HH:mm");
+        } catch { /* no-op */ }
+
+        // "DAY 015" — zero-padded 3 digits
+        const dayStr  = `DAY ${String(currentDay).padStart(3, '0')}`;
+        const habitStr = `HABIT: ${habitName}`;
+
+        // Font sizes (relative to canvas width, matching native pixel sizes ÷ 1080 × canvasW)
+        const hPad     = canvasW * (44 / 1080);
+        const logoFS   = canvasW * (72 / 1080);
+        const upperTsFS = canvasW * (46 / 1080);
+        const dayFS    = barH * 0.55;
+        const habitFS  = canvasW * (76 / 1080);
+        const lowerTsFS = canvasW * (52 / 1080);
+
+        const dotSize  = logoFS * 0.95;
+        const logoTopY = barH * 0.22;
+        const dotY     = logoTopY + (logoFS - dotSize) / 2;
+        const dotX     = hPad;
+        const neShotX  = dotX + dotSize + logoFS * 0.2;
+        const upperTsY = logoTopY + logoFS + 10;
+
+        const bPad    = barH * 0.20;
+        const habitY  = canvasH - bPad - habitFS - 10;
+        const lowerTsY = habitY - 14 - lowerTsFS - 8;
+
+        // Bracket (fixed px)
+        const bInset = canvasW * (8 / 1080);
+        const bArm   = canvasW * (28 / 1080);
+        const bStroke = canvasW * (2 / 1080);
 
         const textShadow = {
-          textShadowColor: 'rgba(0,0,0,0.6)' as any,
+          textShadowColor: 'rgba(0,0,0,0.65)' as const,
           textShadowOffset: { width: 1, height: 1 },
-          textShadowRadius: 3,
-        };
-        const baseText = {
-          color: '#fff' as const,
-          fontWeight: '700' as const,
-          fontSize: textSize,
-          position: 'absolute' as const,
-          ...textShadow,
+          textShadowRadius: 4,
         };
 
         return (
@@ -3198,36 +3217,50 @@ Email: ristu.japan@gmail.com`;
             ref={photoProcessorRef}
             style={{
               position: 'absolute',
-              left: -(sq * 3),
+              left: -(canvasW * 3),
               top: 0,
-              width: sq,
-              height: sq,
-              overflow: 'hidden',
+              width: canvasW,
+              height: canvasH,
               backgroundColor: '#000',
+              overflow: 'hidden',
             }}
           >
-            {/* Raw photo cropped to square */}
+            {/* ── Center video band ── */}
             <Image
               source={{ uri }}
-              style={{ width: sq, height: sq }}
+              style={{ position: 'absolute', top: barH, left: 0, width: canvasW, height: canvasW }}
               resizeMode="cover"
               onLoadEnd={() => processPhotoFromRef(uri)}
             />
-            {/* Dark / cold tone overlay (conditional on colorFilterEnabled) */}
+
+            {/* Color overlay on video (exposure approx) */}
             {appState.colorFilterEnabled && (
               <View style={{
-                position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-                backgroundColor: 'rgba(0,10,31,0.38)',
+                position: 'absolute', top: barH, left: 0,
+                width: canvasW, height: canvasW,
+                backgroundColor: 'rgba(0,0,0,0.38)',
               }} />
             )}
+
             {/* TL corner bracket ┌ */}
             <View style={{
-              position: 'absolute', top: pad, left: pad,
-              width: armLen, height: armLen,
-              borderTopWidth: bracketW, borderLeftWidth: bracketW,
+              position: 'absolute',
+              top: barH + bInset, left: bInset,
+              width: bArm, height: bArm,
+              borderTopWidth: bStroke, borderLeftWidth: bStroke,
               borderColor: '#fff',
             }} />
-            {/* Red dot ● */}
+            {/* BR corner bracket ┘ */}
+            <View style={{
+              position: 'absolute',
+              bottom: barH + bInset, right: bInset,
+              width: bArm, height: bArm,
+              borderBottomWidth: bStroke, borderRightWidth: bStroke,
+              borderColor: '#fff',
+            }} />
+
+            {/* ── Upper bar ── */}
+            {/* Red dot */}
             <View style={{
               position: 'absolute',
               top: dotY, left: dotX,
@@ -3236,20 +3269,45 @@ Email: ristu.japan@gmail.com`;
               backgroundColor: '#FF0D0D',
             }} />
             {/* "ne shot" */}
-            <Text style={{ ...baseText, top: textTop, left: neShotX }}>ne shot</Text>
-            {/* DAYn (right side, same row) — Bebas Neue font */}
-            <Text style={{ ...baseText, top: textTop, right: pad, fontFamily: 'BebasNeue-Regular' }}>{dayStr}</Text>
-            {/* Timestamp line */}
-            <Text style={{ ...baseText, bottom: pad + lineGap, left: pad }}>{tsStr}</Text>
-            {/* HABIT line */}
-            <Text style={{ ...baseText, bottom: pad, left: pad }}>{habitStr}</Text>
-            {/* BR corner bracket ┘ */}
-            <View style={{
-              position: 'absolute', bottom: pad, right: pad,
-              width: armLen, height: armLen,
-              borderBottomWidth: bracketW, borderRightWidth: bracketW,
-              borderColor: '#fff',
-            }} />
+            <Text style={{
+              position: 'absolute', top: logoTopY, left: neShotX,
+              fontSize: logoFS, color: '#fff',
+              fontFamily: 'SpaceMono-Bold', fontWeight: '700',
+              ...textShadow,
+            }}>ne shot</Text>
+            {/* Upper timestamp */}
+            <Text style={{
+              position: 'absolute', top: upperTsY, left: hPad,
+              fontSize: upperTsFS, color: '#fff',
+              fontFamily: 'SpaceMono-Regular',
+              ...textShadow,
+            }}>{upperTs}</Text>
+            {/* "DAY 015" — right-aligned, vertically centred in upper bar */}
+            <Text style={{
+              position: 'absolute',
+              top: (barH - dayFS * 1.1) / 2,
+              left: hPad, right: hPad,
+              fontSize: dayFS, color: '#fff',
+              fontFamily: 'BebasNeue-Regular',
+              textAlign: 'right',
+              ...textShadow,
+            }}>{dayStr}</Text>
+
+            {/* ── Lower bar ── */}
+            {/* Timestamp */}
+            <Text style={{
+              position: 'absolute', top: lowerTsY, left: hPad,
+              fontSize: lowerTsFS, color: '#fff',
+              fontFamily: 'SpaceMono-Regular',
+              ...textShadow,
+            }}>{lowerTs}</Text>
+            {/* "HABIT: NAME" */}
+            <Text style={{
+              position: 'absolute', top: habitY, left: hPad,
+              fontSize: habitFS, color: '#fff',
+              fontFamily: 'SpaceMono-Bold', fontWeight: '700',
+              ...textShadow,
+            }}>{habitStr}</Text>
           </View>
         );
       })()}

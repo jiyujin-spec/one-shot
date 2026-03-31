@@ -22,7 +22,7 @@
         "NSPhotoLibraryUsageDescription": "Reads recorded videos and photos from your photo library.",
         "NSPhotoLibraryAddUsageDescription": "Saves recorded videos and photos to your photo library.",
         "ITSAppUsesNonExemptEncryption": false,
-        "UIAppFonts": ["BebasNeue-Regular.ttf"]
+        "UIAppFonts": ["BebasNeue-Regular.ttf", "SpaceMono-Regular.ttf", "SpaceMono-Bold.ttf"]
       }
     },
     "android": {

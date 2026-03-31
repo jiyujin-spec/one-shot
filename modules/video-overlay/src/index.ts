@@ -10,13 +10,12 @@ export interface OverlayItem {
 }
 
 export interface ProcessVideoOptions {
-  inputPath: string;            // file:// URI of the source video
-  outputPath?: string;          // optional output file:// URI
-  habitName: string;            // e.g. "WORKOUT" → displayed as "HABIT:WORKOUT"
-  currentDay: number;           // e.g. 8 → displayed as "DAY8"
-  captureTime?: string;         // "YYYY.MM/DD HH:MM" formatted timestamp; defaults to current time if omitted
-  dayLabel?: string;            // optional override for the day text (e.g. "Phase 2 DAY 101"); if omitted, uses "DAY{currentDay}"
-  colorFilterEnabled?: boolean; // whether to apply dark/cold-tone color grading (default: true)
+  inputPath: string;              // file:// URI of the source video
+  outputPath?: string;            // optional output file:// URI
+  habitName: string;              // e.g. "WORKOUT" → displayed as "HABIT: WORKOUT"
+  currentDay: number;             // e.g. 15 → displayed as "DAY 015"
+  captureTimestamp?: number;      // ms since epoch; used to format upper/lower bar timestamps
+  colorFilterEnabled?: boolean;   // apply dark overlay (exposure -0.7 EV approx); default true
 }
 
 function getModule() {
@@ -31,13 +30,21 @@ function getModule() {
 }
 
 /**
- * Burns One Shot filter overlays into a video file.
- * Output is cropped to 1:1 square with dark/cold tone and the standard overlay design:
- *   - Top-left:    corner bracket + red dot + "ne shot"
- *   - Top-right:   "DAY{currentDay}"
- *   - Bottom-left: timestamp (line 1) + "HABIT:{habitName}" (line 2)
- *   - Bottom-right: corner bracket
- * @returns file:// URI of the processed square video
+ * Processes a video file through the One Shot 9:16 filter pipeline.
+ *
+ * Output: 1080 × 1920 (TikTok / Reels standard)
+ *   ┌──────────────────────────────┐
+ *   │  upper black bar  (420 px)   │  ● ne shot  |  DAY 015
+ *   │                              │  2026.03.31_14:00
+ *   ├──────────────────────────────┤
+ *   │   center video  1080×1080    │  1:1 center-crop + colour grade
+ *   │  ┌                       ┘  │  corner brackets on video
+ *   ├──────────────────────────────┤
+ *   │  lower black bar  (420 px)   │  2026.03.31 14:00
+ *   │                              │  HABIT: DISCIPLINE
+ *   └──────────────────────────────┘
+ *
+ * @returns file:// URI of the processed 9:16 video
  */
 export async function processVideo(options: ProcessVideoOptions): Promise<string> {
   return getModule().processVideo(options);
@@ -45,7 +52,6 @@ export async function processVideo(options: ProcessVideoOptions): Promise<string
 
 /**
  * @deprecated Use processVideo() instead.
- * Burns text overlays into a video file.
  */
 export async function burnTextOverlay(
   inputUri: string,
