@@ -16,7 +16,6 @@ public class VideoOverlayModule: Module {
       }
       let asset = AVURLAsset(url: url)
 
-      // iOS 18: load tracks asynchronously before accessing them
       asset.loadValuesAsynchronously(forKeys: ["tracks", "duration"]) {
         var error: NSError? = nil
         guard asset.statusOfValue(forKey: "tracks", error: &error) == .loaded else {
@@ -54,10 +53,6 @@ public class VideoOverlayModule: Module {
             of: audioTrack, at: .zero
           )
         }
-        // iOS 18: UIFont, NSAttributedString (text sizing), and UIColor.cgColor must
-        // be accessed on the main thread.  loadValuesAsynchronously delivers its
-        // callback on an arbitrary background queue, so we hop to main here before
-        // touching any UIKit / Core Text / NSTextStorage APIs.
         DispatchQueue.main.async {
         let videoSize = videoTrack.naturalSize.applying(videoTrack.preferredTransform)
         let renderSize = CGSize(width: abs(videoSize.width), height: abs(videoSize.height))
@@ -81,7 +76,7 @@ public class VideoOverlayModule: Module {
           textLayer.fontSize = CGFloat(fontSize)
           textLayer.foregroundColor = UIColor(hex: colorHex)?.cgColor ?? UIColor.white.cgColor
           textLayer.alignmentMode = .left
-          textLayer.contentsScale = 2.0  // hardcoded retina; avoids UIScreen.main on bg thread
+          textLayer.contentsScale = 2.0
           textLayer.isWrapped = false
           let font: UIFont = bold
             ? UIFont.boldSystemFont(ofSize: CGFloat(fontSize))
@@ -131,6 +126,16 @@ public class VideoOverlayModule: Module {
     }
 
     // ── One Shot filter overlay API ────────────────────────────────────────────
+    //
+    // Output: 1080 × 1920 (9:16 TikTok standard)
+    //   ┌──────────────────┐
+    //   │  upper black bar │  420 px  — logo left, DAY right
+    //   ├──────────────────┤
+    //   │   video  1:1     │  1080 px — center-cropped, color-graded
+    //   ├──────────────────┤
+    //   │  lower black bar │  420 px  — timestamp + HABIT label
+    //   └──────────────────┘
+    //
     AsyncFunction("processVideo") { (options: [String: Any], promise: Promise) in
       guard
         let inputPath = options["inputPath"] as? String,
@@ -141,17 +146,25 @@ public class VideoOverlayModule: Module {
         return
       }
 
-      let outputPath = options["outputPath"] as? String
+      let outputPath         = options["outputPath"] as? String
       let colorFilterEnabled = (options["colorFilterEnabled"] as? Bool) ?? true
 
-      let timestampStr: String
-      if let ct = options["captureTime"] as? String, !ct.isEmpty {
-        timestampStr = ct
+      // ── Timestamp: accept ms-since-epoch (captureTimestamp) or legacy string ─
+      let captureDate: Date
+      if let ms = options["captureTimestamp"] as? Double {
+        captureDate = Date(timeIntervalSince1970: ms / 1000.0)
       } else {
-        let df = DateFormatter()
-        df.dateFormat = "yyyy.MM/dd HH:mm"
-        timestampStr = df.string(from: Date())
+        captureDate = Date()
       }
+
+      let upperDf = DateFormatter()
+      upperDf.locale = Locale(identifier: "en_US_POSIX")
+      upperDf.dateFormat = "yyyy.MM.dd_HH:mm"
+      let lowerDf = DateFormatter()
+      lowerDf.locale = Locale(identifier: "en_US_POSIX")
+      lowerDf.dateFormat = "yyyy.MM.dd HH:mm"
+      let upperTimestamp = upperDf.string(from: captureDate)
+      let lowerTimestamp = lowerDf.string(from: captureDate)
 
       guard let inputURL = URL(string: inputPath) else {
         promise.reject("ERR_INVALID_URI", "Invalid inputPath URI: \(inputPath)")
@@ -160,7 +173,6 @@ public class VideoOverlayModule: Module {
 
       let asset = AVURLAsset(url: inputURL)
 
-      // iOS 18: load tracks asynchronously before accessing them
       asset.loadValuesAsynchronously(forKeys: ["tracks", "duration"]) {
         var error: NSError? = nil
         guard asset.statusOfValue(forKey: "tracks", error: &error) == .loaded else {
@@ -173,44 +185,42 @@ public class VideoOverlayModule: Module {
           return
         }
 
-        // ── Orientation & exact 1:1 center-crop ──────────────────────────────────
-        //
-        // naturalSize  : pixel dimensions as stored (e.g. 1920×1080 for landscape)
-        // preferredTransform: rotation + translation that maps natural → display
-        //
-        // To get the display width/height we apply the transform to the size
-        // (CGSize.applying uses only the 2×2 rotation part, ignoring translation).
-        // abs() is needed because rotations can produce negative extents.
-
-        let naturalSize = videoTrack.naturalSize        // stored w × h
-        let transform   = videoTrack.preferredTransform  // rotation applied by player
+        // ── Orientation & 1:1 center-crop ────────────────────────────────────
+        let naturalSize = videoTrack.naturalSize
+        let transform   = videoTrack.preferredTransform
 
         let dispSizeRaw = naturalSize.applying(transform)
-        let dispW = abs(dispSizeRaw.width)   // display width  (post-rotation)
-        let dispH = abs(dispSizeRaw.height)  // display height (post-rotation)
+        let dispW = abs(dispSizeRaw.width)
+        let dispH = abs(dispSizeRaw.height)
 
-        // Ensure even pixel dimensions for H.264 encoder
         let dispWE = dispW - (dispW.truncatingRemainder(dividingBy: 2))
         let dispHE = dispH - (dispH.truncatingRemainder(dividingBy: 2))
 
-        // Strict 1:1 square: shorter display side, even-aligned
         let squareSizeRaw = min(dispWE, dispHE)
         let squareSize    = squareSizeRaw - squareSizeRaw.truncatingRemainder(dividingBy: 2)
-        let renderSize    = CGSize(width: squareSize, height: squareSize)
 
-        // Center-crop offset in display space (can be negative = shift toward origin)
-        // We want to cut (dispW - squareSize)/2 from each horizontal side, etc.
-        let cropOffsetX = (squareSize - dispWE) / 2.0  // negative when dispWE > squareSize
-        let cropOffsetY = (squareSize - dispHE) / 2.0  // negative when dispHE > squareSize
+        // Center-crop offset in display space
+        let cropOffsetX = (squareSize - dispWE) / 2.0
+        let cropOffsetY = (squareSize - dispHE) / 2.0
 
-        // The layer instruction transform maps natural-coordinate frames into the
-        // render canvas.  We first apply the preferred rotation (transform), then
-        // shift so the crop window lands at the render origin.
-        let cropTransform = transform.concatenating(
-          CGAffineTransform(translationX: cropOffsetX, y: cropOffsetY)
-        )
+        // ── Output canvas dimensions ──────────────────────────────────────────
+        let OUT_W: CGFloat = 1080.0
+        let OUT_H: CGFloat = 1920.0
+        let BAR_H: CGFloat = (OUT_H - OUT_W) / 2.0  // 420.0
 
-        // ── Composition ────────────────────────────────────────────────────────
+        // Scale from squareSize to 1080
+        let videoScale = OUT_W / squareSize
+
+        // Full render canvas
+        let renderSize = CGSize(width: OUT_W, height: OUT_H)
+
+        // Layer instruction transform: rotate → crop → scale to 1080 → shift down by BAR_H
+        let cropTransform = transform
+          .concatenating(CGAffineTransform(translationX: cropOffsetX, y: cropOffsetY))
+          .concatenating(CGAffineTransform(scaleX: videoScale, y: videoScale))
+          .concatenating(CGAffineTransform(translationX: 0, y: BAR_H))
+
+        // ── Composition ───────────────────────────────────────────────────────
         let composition = AVMutableComposition()
 
         guard let compVideoTrack = composition.addMutableTrack(
@@ -248,139 +258,161 @@ public class VideoOverlayModule: Module {
           )
         }
 
-        // iOS 18: UIFont, NSAttributedString (text sizing), and UIColor.cgColor must
-        // be accessed on the main thread.  loadValuesAsynchronously delivers its
-        // callback on an arbitrary background queue, so we hop to main here before
-        // touching any UIKit / Core Text / NSTextStorage APIs.
+        // iOS 18: UIFont, NSAttributedString, UIColor.cgColor must be on main thread.
         DispatchQueue.main.async {
-        // ── Layer tree ──────────────────────────────────────────────────────────
-        //
-        // isGeometryFlipped = true so that y=0 is at the TOP of the render canvas,
-        // matching UIKit coordinates for our layout math below.
 
+        // ── Layer tree ────────────────────────────────────────────────────────
+        // isGeometryFlipped = true → y=0 is TOP (UIKit coordinate space)
         let parentLayer = CALayer()
         parentLayer.frame = CGRect(origin: .zero, size: renderSize)
         parentLayer.isGeometryFlipped = true
+        parentLayer.backgroundColor = UIColor.black.cgColor
 
+        // Video occupies the center band (y: BAR_H … BAR_H + OUT_W)
         let videoLayer = CALayer()
-        videoLayer.frame = CGRect(origin: .zero, size: renderSize)
+        videoLayer.frame = CGRect(x: 0, y: BAR_H, width: OUT_W, height: OUT_W)
         parentLayer.addSublayer(videoLayer)
 
-        // ── Dark / cold-tone filter ─────────────────────────────────────────────
+        // ── Color overlay on video (approximates exposure -0.7 EV) ───────────
+        // -0.7 EV ≈ output = original × 2^(-0.7) ≈ 0.615
+        // Overlay black at ~0.38 alpha achieves ~62% of original brightness.
         if colorFilterEnabled {
-          let darkOverlay = CALayer()
-          darkOverlay.frame = CGRect(origin: .zero, size: renderSize)
-          darkOverlay.backgroundColor = UIColor(
-            red: 0, green: 0.04, blue: 0.12, alpha: 0.38
-          ).cgColor
-          parentLayer.addSublayer(darkOverlay)
+          let colorOverlay = CALayer()
+          colorOverlay.frame           = videoLayer.frame
+          colorOverlay.backgroundColor = UIColor(white: 0, alpha: 0.38).cgColor
+          parentLayer.addSublayer(colorOverlay)
         }
 
-        // ── Layout constants ────────────────────────────────────────────────────
-        let S        = squareSize
-        let pad      = S * 0.045
-        let fontSize = S * 0.038
-        let lineGap  = fontSize * 1.35
-        let layerH   = fontSize + 6
+        // ── Corner brackets (fixed pixel size, inset from video edges) ────────
+        let bInset:  CGFloat = 8.0
+        let bArm:    CGFloat = 28.0
+        let bStroke: CGFloat = 2.0
+        let vX0 = CGFloat(0)
+        let vY0 = BAR_H
+        let vX1 = OUT_W
+        let vY1 = BAR_H + OUT_W
 
-        let fontName: String = UIFont.boldSystemFont(ofSize: fontSize).fontName
-        let uiFont   = UIFont.boldSystemFont(ofSize: fontSize)
-        let attrs: [NSAttributedString.Key: Any] = [.font: uiFont]
-        func tw(_ s: String) -> CGFloat { s.size(withAttributes: attrs).width }
+        // TL ┌
+        let tlPath = CGMutablePath()
+        tlPath.move(to:    CGPoint(x: vX0 + bInset + bArm, y: vY0 + bInset))
+        tlPath.addLine(to: CGPoint(x: vX0 + bInset,         y: vY0 + bInset))
+        tlPath.addLine(to: CGPoint(x: vX0 + bInset,         y: vY0 + bInset + bArm))
+        let tlBracket = CAShapeLayer()
+        tlBracket.path        = tlPath
+        tlBracket.strokeColor = UIColor.white.cgColor
+        tlBracket.fillColor   = UIColor.clear.cgColor
+        tlBracket.lineWidth   = bStroke
+        tlBracket.lineCap     = .square
+        parentLayer.addSublayer(tlBracket)
+
+        // BR ┘
+        let brPath = CGMutablePath()
+        brPath.move(to:    CGPoint(x: vX1 - bInset - bArm, y: vY1 - bInset))
+        brPath.addLine(to: CGPoint(x: vX1 - bInset,         y: vY1 - bInset))
+        brPath.addLine(to: CGPoint(x: vX1 - bInset,         y: vY1 - bInset - bArm))
+        let brBracket = CAShapeLayer()
+        brBracket.path        = brPath
+        brBracket.strokeColor = UIColor.white.cgColor
+        brBracket.fillColor   = UIColor.clear.cgColor
+        brBracket.lineWidth   = bStroke
+        brBracket.lineCap     = .square
+        parentLayer.addSublayer(brBracket)
+
+        // ── Fonts ──────────────────────────────────────────────────────────────
+        let smBold    = "SpaceMono-Bold"
+        let smRegular = "SpaceMono-Regular"
+        let bebas     = "BebasNeue-Regular"
+
+        // Font sizes (tuned for 1080×1920 canvas, 420px bars)
+        let logoFS:    CGFloat = 72    // "ne shot" label
+        let upperTsFS: CGFloat = 46    // upper bar timestamp
+        let dayFS:     CGFloat = floor(BAR_H * 0.55)  // ≈ 231 — the largest element
+        let habitFS:   CGFloat = 76    // "HABIT:" label (bold)
+        let lowerTsFS: CGFloat = 52    // lower bar timestamp
 
         let white = UIColor.white.cgColor
+        let hPad:  CGFloat = 44   // horizontal padding from canvas edge
 
-        func addShadow(_ layer: CALayer) {
-          layer.shadowColor   = UIColor.black.withAlphaComponent(0.55).cgColor
-          layer.shadowOpacity = 1.0
-          layer.shadowRadius  = 3.0
-          layer.shadowOffset  = CGSize(width: 1, height: 1)
+        // Helper: UIFont (for width measurement only)
+        func uiFont(_ name: String, _ size: CGFloat) -> UIFont {
+          UIFont(name: name, size: size) ?? UIFont.boldSystemFont(ofSize: size)
+        }
+        func textWidth(_ s: String, _ font: UIFont) -> CGFloat {
+          s.size(withAttributes: [.font: font]).width
         }
 
-        let armLen   = S * 0.07
-        let armWidth = max(S * 0.003, 1.5)
-
-        func makeTextLayer(_ text: String, x: CGFloat, y: CGFloat) -> CATextLayer {
+        // Helper: build a CATextLayer
+        func makeLayer(_ text: String, fontName: String, fontSize: CGFloat,
+                       x: CGFloat, y: CGFloat, width: CGFloat, align: CATextLayerAlignmentMode = .left) -> CATextLayer {
           let l = CATextLayer()
           l.string          = text
           l.fontSize        = fontSize
           l.foregroundColor = white
-          l.alignmentMode   = .left
+          l.alignmentMode   = align
           l.contentsScale   = 2.0
           l.isWrapped       = false
           l.font            = CTFontCreateWithName(fontName as CFString, fontSize, nil)
-          addShadow(l)
-          l.frame = CGRect(x: x, y: y, width: tw(text) + 8, height: layerH)
+          l.frame           = CGRect(x: x, y: y, width: width, height: fontSize + 10)
           return l
         }
 
-        // ── TL corner bracket ┌ ────────────────────────────────────────────────
-        let tlPath = CGMutablePath()
-        tlPath.move(to:    CGPoint(x: pad + armLen, y: pad))
-        tlPath.addLine(to: CGPoint(x: pad,          y: pad))
-        tlPath.addLine(to: CGPoint(x: pad,          y: pad + armLen))
-        let tlBracket = CAShapeLayer()
-        tlBracket.path        = tlPath
-        tlBracket.strokeColor = white
-        tlBracket.fillColor   = UIColor.clear.cgColor
-        tlBracket.lineWidth   = armWidth
-        tlBracket.lineCap     = .square
-        addShadow(tlBracket)
-        parentLayer.addSublayer(tlBracket)
+        // ── UPPER BAR ─────────────────────────────────────────────────────────
+        // Left column: red dot + "ne shot" (logo), timestamp below
+        // Right column: "DAY 015" in Bebas Neue (vertically centred)
 
-        // ── Red dot (●) — the "O" in "One shot" ───────────────────────────────
-        let dotSize  = fontSize * 0.95
-        let dotX     = pad + armLen * 0.25
-        let dotY     = pad + armLen * 0.25
+        let logoTopY: CGFloat = BAR_H * 0.22   // ≈ 92 px from top of canvas
+
+        // Red dot (acts as the "O" in "One Shot")
+        let dotSize: CGFloat = logoFS * 0.95
+        let dotX:    CGFloat = hPad
+        let dotY:    CGFloat = logoTopY + (logoFS - dotSize) / 2
         let dotLayer = CALayer()
         dotLayer.frame           = CGRect(x: dotX, y: dotY, width: dotSize, height: dotSize)
         dotLayer.backgroundColor = UIColor(red: 1.0, green: 0.05, blue: 0.05, alpha: 1.0).cgColor
         dotLayer.cornerRadius    = dotSize / 2
-        addShadow(dotLayer)
         parentLayer.addSublayer(dotLayer)
 
-        // "ne shot" — vertically centred on the dot
-        let neShotX = dotX + dotSize + fontSize * 0.22
-        let neShotY = dotY - (layerH - dotSize) / 2
-        parentLayer.addSublayer(makeTextLayer("ne shot", x: neShotX, y: neShotY))
+        // "ne shot" (right of dot)
+        let neShotFont = uiFont(smBold, logoFS)
+        let neShotW    = textWidth("ne shot", neShotFont) + 16
+        let neShotX    = dotX + dotSize + logoFS * 0.2
+        parentLayer.addSublayer(makeLayer("ne shot", fontName: smBold, fontSize: logoFS,
+                                          x: neShotX, y: logoTopY, width: neShotW))
 
-        // ── TR: "DAY{n}" (or custom dayLabel if provided) — Bebas Neue font ────
-        let dayStr = (options["dayLabel"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "DAY\(currentDay)"
-        let dayBebasFont: UIFont = UIFont(name: "BebasNeue-Regular", size: fontSize) ?? UIFont.boldSystemFont(ofSize: fontSize)
-        let dayAttrs: [NSAttributedString.Key: Any] = [.font: dayBebasFont]
-        let dayTW: CGFloat = dayStr.size(withAttributes: dayAttrs).width
-        let dayX   = S - pad - dayTW - 4
-        let dayY   = pad + armLen * 0.25
-        let dayLayer = CATextLayer()
-        dayLayer.string          = dayStr
-        dayLayer.fontSize        = fontSize
-        dayLayer.foregroundColor = white
-        dayLayer.alignmentMode   = .left
-        dayLayer.contentsScale   = 2.0
-        dayLayer.isWrapped       = false
-        dayLayer.font            = CTFontCreateWithName("BebasNeue-Regular" as CFString, fontSize, nil)
-        addShadow(dayLayer)
-        dayLayer.frame = CGRect(x: dayX, y: dayY, width: dayTW + 8, height: layerH)
-        parentLayer.addSublayer(dayLayer)
+        // Timestamp below logo
+        let upperTsY = logoTopY + logoFS + 10 + 4
+        let upperTsFont = uiFont(smRegular, upperTsFS)
+        let upperTsW    = textWidth(upperTimestamp, upperTsFont) + 12
+        parentLayer.addSublayer(makeLayer(upperTimestamp, fontName: smRegular, fontSize: upperTsFS,
+                                          x: hPad, y: upperTsY, width: upperTsW))
 
-        // ── BL: timestamp + "HABIT:{name}" ────────────────────────────────────
-        let habitStr = "HABIT:\(habitName.uppercased())"
-        parentLayer.addSublayer(makeTextLayer(timestampStr, x: pad, y: S - pad - lineGap - layerH))
-        parentLayer.addSublayer(makeTextLayer(habitStr,     x: pad, y: S - pad - layerH))
+        // "DAY 015" — right-aligned, vertically centred in upper bar
+        let dayStr  = String(format: "DAY %03d", currentDay)
+        let dayLayerH = dayFS + 10
+        let dayY      = (BAR_H - dayLayerH) / 2
+        parentLayer.addSublayer(makeLayer(dayStr, fontName: bebas, fontSize: dayFS,
+                                          x: hPad, y: dayY, width: OUT_W - 2 * hPad, align: .right))
 
-        // ── BR corner bracket ┘ ────────────────────────────────────────────────
-        let brPath = CGMutablePath()
-        brPath.move(to:    CGPoint(x: S - pad - armLen, y: S - pad))
-        brPath.addLine(to: CGPoint(x: S - pad,          y: S - pad))
-        brPath.addLine(to: CGPoint(x: S - pad,          y: S - pad - armLen))
-        let brBracket = CAShapeLayer()
-        brBracket.path        = brPath
-        brBracket.strokeColor = white
-        brBracket.fillColor   = UIColor.clear.cgColor
-        brBracket.lineWidth   = armWidth
-        brBracket.lineCap     = .square
-        addShadow(brBracket)
-        parentLayer.addSublayer(brBracket)
+        // ── LOWER BAR ─────────────────────────────────────────────────────────
+        // Left: line1 = timestamp (SpaceMono-Regular), line2 = "HABIT: NAME" (SpaceMono-Bold)
+        // The block is bottom-anchored inside the lower bar.
+
+        let barBottom: CGFloat = OUT_H
+        let bPad:      CGFloat = BAR_H * 0.20   // ≈ 84 px from bottom of canvas
+
+        let habitStr  = "HABIT: \(habitName.uppercased())"
+        let habitY    = barBottom - bPad - habitFS - 10
+        let lowerTsY  = habitY - 14 - lowerTsFS - 10
+
+        let habitFont   = uiFont(smBold, habitFS)
+        let lowerTsFont = uiFont(smRegular, lowerTsFS)
+        let habitW      = textWidth(habitStr, habitFont) + 16
+        let lowerTsW    = textWidth(lowerTimestamp, lowerTsFont) + 12
+
+        parentLayer.addSublayer(makeLayer(lowerTimestamp, fontName: smRegular, fontSize: lowerTsFS,
+                                          x: hPad, y: lowerTsY, width: lowerTsW))
+        parentLayer.addSublayer(makeLayer(habitStr, fontName: smBold, fontSize: habitFS,
+                                          x: hPad, y: habitY, width: habitW))
 
         // ── Video composition ──────────────────────────────────────────────────
         let videoComposition = AVMutableVideoComposition()
@@ -417,9 +449,9 @@ public class VideoOverlayModule: Module {
           return
         }
 
-        exportSession.outputURL                  = outputURL
-        exportSession.outputFileType             = .mp4
-        exportSession.videoComposition           = videoComposition
+        exportSession.outputURL                   = outputURL
+        exportSession.outputFileType              = .mp4
+        exportSession.videoComposition            = videoComposition
         exportSession.shouldOptimizeForNetworkUse = false
 
         exportSession.exportAsynchronously {

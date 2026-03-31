@@ -64,16 +64,15 @@ class VideoOverlayModule : Module() {
       }
 
       val outputPath         = options["outputPath"] as? String
-      val captureTime        = options["captureTime"] as? String
-      val dayLabel           = (options["dayLabel"] as? String)?.takeIf { it.isNotEmpty() }
       val colorFilterEnabled = (options["colorFilterEnabled"] as? Boolean) ?: true
 
-      // Use provided captureTime or format current time
-      val timestampStr = if (!captureTime.isNullOrEmpty()) {
-        captureTime
-      } else {
-        SimpleDateFormat("yyyy.MM/dd HH:mm", Locale.US).format(Date())
+      // Accept captureTimestamp (ms since epoch) as primary; fall back to current time
+      val captureDate: Date = run {
+        val ms = (options["captureTimestamp"] as? Number)?.toLong()
+        if (ms != null) Date(ms) else Date()
       }
+      val upperTimestamp = SimpleDateFormat("yyyy.MM.dd_HH:mm", Locale.US).format(captureDate)
+      val lowerTimestamp = SimpleDateFormat("yyyy.MM.dd HH:mm", Locale.US).format(captureDate)
 
       Thread {
         try {
@@ -86,7 +85,11 @@ class VideoOverlayModule : Module() {
             File(context.cacheDir, "${System.currentTimeMillis()}.mp4")
           }
 
-          processOneShotVideo(srcPath, outFile.absolutePath, timestampStr, habitName, currentDay, dayLabel, colorFilterEnabled)
+          processOneShotVideo(
+            srcPath, outFile.absolutePath,
+            upperTimestamp, lowerTimestamp,
+            habitName, currentDay, colorFilterEnabled
+          )
           promise.resolve("file://${outFile.absolutePath}")
         } catch (e: Exception) {
           promise.reject("ERR_PROCESS", e.message ?: "Unknown error", e)
@@ -112,17 +115,30 @@ class VideoOverlayModule : Module() {
   }
 
   // ---------------------------------------------------------------------------
-  // One Shot filter overlay: square crop + cold/dark tone + new design
+  // One Shot filter overlay: 9:16 output (1080×1920) with black bars
+  //
+  //  ┌─────────────────────┐
+  //  │   upper black bar   │  420 px  — logo left, DAY right
+  //  ├─────────────────────┤
+  //  │   video  1080×1080  │  1080 px — center-cropped, colour-graded
+  //  ├─────────────────────┤
+  //  │   lower black bar   │  420 px  — timestamp + HABIT label
+  //  └─────────────────────┘
   // ---------------------------------------------------------------------------
   private fun processOneShotVideo(
     srcPath: String, dstPath: String,
-    timestampStr: String, habitName: String, currentDay: Int,
-    dayLabel: String? = null,
+    upperTimestamp: String, lowerTimestamp: String,
+    habitName: String, currentDay: Int,
     colorFilterEnabled: Boolean = true
   ) {
     val FPS      = 30
     val FRAME_US = 1_000_000L / FPS
     val TIMEOUT  = 10_000L
+
+    // ── Output canvas dimensions ───────────────────────────────────────────
+    val OUT_W = 1080
+    val OUT_H = 1920
+    val BAR_H = (OUT_H - OUT_W) / 2   // 420
 
     // ── Source metadata ────────────────────────────────────────────────────
     val retriever = MediaMetadataRetriever()
@@ -132,121 +148,156 @@ class VideoOverlayModule : Module() {
     val rotation = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toInt() ?: 0
     retriever.release()
 
-    // Display dimensions (after rotation)
     val (dispW, dispH) = if (rotation == 90 || rotation == 270) srcH to srcW else srcW to srcH
     val dispWE = if (dispW % 2 == 0) dispW else dispW - 1
     val dispHE = if (dispH % 2 == 0) dispH else dispH - 1
 
-    // Square size (center-crop)
-    val sqRaw    = minOf(dispWE, dispHE)
+    val sqRaw      = minOf(dispWE, dispHE)
     val squareSize = if (sqRaw % 2 == 0) sqRaw else sqRaw - 1
+    val cropX      = (dispWE - squareSize) / 2
+    val cropY      = (dispHE - squareSize) / 2
 
-    val cropX    = (dispWE - squareSize) / 2
-    val cropY    = (dispHE - squareSize) / 2
-
-    val S = squareSize.toFloat()
-
-    // ── Overlay parameters ─────────────────────────────────────────────────
-    val pad      = S * 0.045f
-    val fontSize = S * 0.038f
-    val lineGap  = fontSize * 1.35f
-
-    val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-      textSize = fontSize
-      color    = Color.WHITE
-      typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-      setShadowLayer(3f, 1f, 1f, Color.argb(140, 0, 0, 0))
-    }
-
-    val bracketPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-      color       = Color.WHITE
-      strokeWidth = maxOf(S * 0.003f, 1.5f)
-      style       = Paint.Style.STROKE
-      strokeCap   = Paint.Cap.SQUARE
-      setShadowLayer(3f, 1f, 1f, Color.argb(140, 0, 0, 0))
-    }
-
-    val darkPaint = Paint().apply {
-      color = Color.argb(97, 0, 10, 31)  // ~38% opacity dark blue
-      style = Paint.Style.FILL
-    }
-
-    val dotSize  = fontSize * 0.95f
-    val armLen   = S * 0.07f
-
-    val dayStr   = dayLabel ?: "DAY$currentDay"
-    val habitStr = "HABIT:$habitName"
-
-    // Load BebasNeue-Regular typeface for DAY display; fall back to bold system font
+    // ── Load typefaces ─────────────────────────────────────────────────────
     val bebasTypeface: Typeface = try {
       Typeface.createFromAsset(context.assets, "fonts/BebasNeue-Regular.ttf")
     } catch (e: Exception) {
       Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
     }
-
-    val dayPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-      textSize = fontSize
-      color    = Color.WHITE
-      typeface = bebasTypeface
-      setShadowLayer(3f, 1f, 1f, Color.argb(140, 0, 0, 0))
+    val spaceMonoBold: Typeface = try {
+      Typeface.createFromAsset(context.assets, "fonts/SpaceMono-Bold.ttf")
+    } catch (e: Exception) {
+      Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+    }
+    val spaceMonoRegular: Typeface = try {
+      Typeface.createFromAsset(context.assets, "fonts/SpaceMono-Regular.ttf")
+    } catch (e: Exception) {
+      Typeface.DEFAULT
     }
 
-    fun drawOverlays(bmp: Bitmap) {
-      val canvas = Canvas(bmp)
+    // ── Overlay paint factories ────────────────────────────────────────────
+    fun textPaint(tf: Typeface, size: Float) = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+      textSize  = size
+      color     = Color.WHITE
+      typeface  = tf
+      setShadowLayer(4f, 1f, 1f, Color.argb(160, 0, 0, 0))
+    }
+    val bracketPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+      color       = Color.WHITE
+      strokeWidth = 2f
+      style       = Paint.Style.STROKE
+      strokeCap   = Paint.Cap.SQUARE
+      setShadowLayer(4f, 1f, 1f, Color.argb(160, 0, 0, 0))
+    }
+    val darkPaint = Paint().apply {
+      color = Color.argb(97, 0, 0, 0)   // ~38% black for exposure -0.7 EV
+      style = Paint.Style.FILL
+    }
+    val dotPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+      color = Color.rgb(255, 13, 13)
+      style = Paint.Style.FILL
+      setShadowLayer(4f, 1f, 1f, Color.argb(160, 0, 0, 0))
+    }
 
-      // 1. Dark/cold overlay (conditional)
+    // ── Font sizes (for 1080×1920, 420 px bars) ───────────────────────────
+    val logoFS    = 72f
+    val upperTsFS = 46f
+    val dayFS     = (BAR_H * 0.55f)    // ≈ 231
+    val habitFS   = 76f
+    val lowerTsFS = 52f
+    val hPad      = 44f
+
+    val dayStr   = String.format("DAY %03d", currentDay)
+    val habitStr = "HABIT: $habitName"
+
+    // ── Draw all overlays onto a 1080×1920 bitmap ──────────────────────────
+    fun drawFrame(videoBmp: Bitmap): Bitmap {
+      // Scale the 1:1 cropped bitmap to 1080×1080
+      val scaledVideo = Bitmap.createScaledBitmap(videoBmp, OUT_W, OUT_W, true)
+
+      // Create the full 1080×1920 output canvas (black background)
+      val canvas9x16 = Bitmap.createBitmap(OUT_W, OUT_H, Bitmap.Config.ARGB_8888)
+      val canvas     = Canvas(canvas9x16)
+      canvas.drawColor(Color.BLACK)
+
+      // Draw video into the centre band
+      canvas.drawBitmap(scaledVideo, 0f, BAR_H.toFloat(), null)
+      scaledVideo.recycle()
+
+      // Color overlay on video (exposure approximation)
       if (colorFilterEnabled) {
-        canvas.drawRect(0f, 0f, S, S, darkPaint)
+        canvas.drawRect(0f, BAR_H.toFloat(), OUT_W.toFloat(), (BAR_H + OUT_W).toFloat(), darkPaint)
       }
 
-      // 2. TL corner bracket ┌
+      // ── Corner brackets on video ───────────────────────────────────────
+      val bInset = 8f
+      val bArm   = 28f
+      val vTop   = BAR_H.toFloat()
+      val vBot   = (BAR_H + OUT_W).toFloat()
+
+      // TL ┌
       val tlPath = Path().apply {
-        moveTo(pad + armLen, pad)
-        lineTo(pad, pad)
-        lineTo(pad, pad + armLen)
+        moveTo(bInset + bArm, vTop + bInset)
+        lineTo(bInset,        vTop + bInset)
+        lineTo(bInset,        vTop + bInset + bArm)
       }
       canvas.drawPath(tlPath, bracketPaint)
 
-      // 3. Red dot (acts as the "O" in "One shot")
-      val dotX = pad + armLen * 0.25f
-      val dotY = pad + armLen * 0.25f
-      val dotPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.rgb(255, 13, 13)
-        style = Paint.Style.FILL
-        setShadowLayer(3f, 1f, 1f, Color.argb(140, 0, 0, 0))
-      }
-      canvas.drawCircle(dotX + dotSize / 2f, dotY + dotSize / 2f, dotSize / 2f, dotPaint)
-
-      // 4. "ne shot" text (to the right of the dot)
-      val neShotX = dotX + dotSize + fontSize * 0.22f
-      val neShotBaseline = dotY + dotSize * 0.5f + fontSize * 0.35f
-      canvas.drawText("ne shot", neShotX, neShotBaseline, textPaint)
-
-      // 5. TR: "DAYn" — Bebas Neue font
-      val dayW = dayPaint.measureText(dayStr)
-      val dayX = S - pad - dayW
-      val dayY = pad + armLen * 0.25f + dotSize * 0.5f + fontSize * 0.35f
-      canvas.drawText(dayStr, dayX, dayY, dayPaint)
-
-      // 6. BL: timestamp (line 1) + "HABIT:xxx" (line 2)
-      val line2Baseline = S - pad
-      val line1Baseline = line2Baseline - lineGap
-      canvas.drawText(timestampStr, pad, line1Baseline, textPaint)
-      canvas.drawText(habitStr,     pad, line2Baseline, textPaint)
-
-      // 7. BR corner bracket ┘
+      // BR ┘
       val brPath = Path().apply {
-        moveTo(S - pad - armLen, S - pad)
-        lineTo(S - pad,          S - pad)
-        lineTo(S - pad,          S - pad - armLen)
+        moveTo(OUT_W - bInset - bArm, vBot - bInset)
+        lineTo(OUT_W - bInset,        vBot - bInset)
+        lineTo(OUT_W - bInset,        vBot - bInset - bArm)
       }
       canvas.drawPath(brPath, bracketPaint)
+
+      // ── UPPER BAR ─────────────────────────────────────────────────────
+      val logoTopY = BAR_H * 0.22f   // ≈ 92 px from top
+      val dotSize  = logoFS * 0.95f
+
+      // Red dot
+      val dotCx = hPad + dotSize / 2f
+      val dotCy = logoTopY + logoFS / 2f
+      canvas.drawCircle(dotCx, dotCy, dotSize / 2f, dotPaint)
+
+      // "ne shot"
+      val neShotPaint = textPaint(spaceMonoBold, logoFS)
+      val neShotX     = hPad + dotSize + logoFS * 0.2f
+      val neShotBaseline = logoTopY + logoFS * 0.85f  // approx baseline
+      canvas.drawText("ne shot", neShotX, neShotBaseline, neShotPaint)
+
+      // Upper timestamp
+      val upperTsPaint    = textPaint(spaceMonoRegular, upperTsFS)
+      val upperTsBaseline = logoTopY + logoFS + 10f + upperTsFS * 0.85f
+      canvas.drawText(upperTimestamp, hPad, upperTsBaseline, upperTsPaint)
+
+      // "DAY 015" — right-aligned, vertically centred in upper bar
+      val dayPaint = textPaint(bebasTypeface, dayFS)
+      val dayW     = dayPaint.measureText(dayStr)
+      val dayX     = OUT_W - hPad - dayW
+      val dayBaseline = BAR_H / 2f + dayFS * 0.35f  // approx vertical centre
+      canvas.drawText(dayStr, dayX, dayBaseline, dayPaint)
+
+      // ── LOWER BAR ─────────────────────────────────────────────────────
+      val barBottom = OUT_H.toFloat()
+      val bPad      = BAR_H * 0.20f   // ≈ 84 px from bottom
+
+      // "HABIT: NAME" — second line (lower)
+      val habitPaint    = textPaint(spaceMonoBold, habitFS)
+      val habitBaseline = barBottom - bPad
+      canvas.drawText(habitStr, hPad, habitBaseline, habitPaint)
+
+      // Timestamp — first line (above HABIT)
+      val lowerTsPaint    = textPaint(spaceMonoRegular, lowerTsFS)
+      val lowerTsBaseline = habitBaseline - habitFS * 0.2f - lowerTsFS
+      canvas.drawText(lowerTimestamp, hPad, lowerTsBaseline, lowerTsPaint)
+
+      return canvas9x16
     }
 
-    // ── Encoder (square output) ────────────────────────────────────────────
+    // ── Encoder (1080×1920 output) ─────────────────────────────────────────
     val MIME   = "video/avc"
-    val encFmt = MediaFormat.createVideoFormat(MIME, squareSize, squareSize).apply {
-      setInteger(MediaFormat.KEY_BIT_RATE, 6_000_000)
+    val encFmt = MediaFormat.createVideoFormat(MIME, OUT_W, OUT_H).apply {
+      setInteger(MediaFormat.KEY_BIT_RATE, 8_000_000)
       setInteger(MediaFormat.KEY_FRAME_RATE, FPS)
       setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Flexible)
       setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1)
@@ -321,7 +372,7 @@ class VideoOverlayModule : Module() {
         }
       }
 
-      // 2. Drain decoder → crop → draw overlays → feed encoder
+      // 2. Drain decoder → crop → scale → draw overlays → feed encoder
       if (!decOutputDone) {
         val outIdx = decoder.dequeueOutputBuffer(bufInfo, 0)
         if (outIdx >= 0) {
@@ -330,7 +381,6 @@ class VideoOverlayModule : Module() {
           if (render) {
             val img = imageReader.acquireLatestImage()
             if (img != null) {
-              // Decode full frame (handles rotation)
               val fullBmp = yuvToBitmap(img, dispWE, dispHE, rotation)
               img.close()
 
@@ -338,18 +388,19 @@ class VideoOverlayModule : Module() {
               val croppedBmp = Bitmap.createBitmap(fullBmp, cropX, cropY, squareSize, squareSize)
               fullBmp.recycle()
 
-              // Draw overlays (dark tone + text + brackets)
-              drawOverlays(croppedBmp)
+              // Compose 9:16 frame with black bars + overlays
+              val frameBmp = drawFrame(croppedBmp)
+              croppedBmp.recycle()
 
               // Feed to encoder
               val encInIdx = encoder.dequeueInputBuffer(TIMEOUT)
               if (encInIdx >= 0) {
                 val encBuf = encoder.getInputBuffer(encInIdx)!!
-                bitmapToYuv420(croppedBmp, encBuf, squareSize, squareSize)
-                encoder.queueInputBuffer(encInIdx, 0, squareSize * squareSize * 3 / 2, outputPts, 0)
+                bitmapToYuv420(frameBmp, encBuf, OUT_W, OUT_H)
+                encoder.queueInputBuffer(encInIdx, 0, OUT_W * OUT_H * 3 / 2, outputPts, 0)
                 outputPts += FRAME_US
               }
-              croppedBmp.recycle()
+              frameBmp.recycle()
             }
           }
           if (bufInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) {
@@ -374,7 +425,6 @@ class VideoOverlayModule : Module() {
           muxVideo = muxer.addTrack(encoder.outputFormat)
           muxer.start()
           muxStarted = true
-          // Passthrough full audio
           if (audioExt != null && muxAudio >= 0) {
             while (true) {
               val sz = audioExt.readSampleData(audioBuf, 0)
