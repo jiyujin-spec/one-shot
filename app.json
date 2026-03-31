@@ -14,7 +14,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.jin.oneshot",
-      "buildNumber": "30",
+      "buildNumber": "32",
       "icon": "./assets/images/icon.png",
       "infoPlist": {
         "NSCameraUsageDescription": "One Shot uses the camera to record your habits as videos and photos.",
