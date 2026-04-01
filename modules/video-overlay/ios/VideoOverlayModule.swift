@@ -254,9 +254,14 @@ public class VideoOverlayModule: Module {
         parentLayer.isGeometryFlipped = true
         parentLayer.backgroundColor = UIColor.black.cgColor
 
-        // Video occupies the center band (y: BAR_H … BAR_H + OUT_W)
+        // Video layer must match renderSize so AVFoundation composites without scaling.
+        // A mask clips the visible area to the center 1:1 band (translation-only crop, no stretch).
         let videoLayer = CALayer()
-        videoLayer.frame = CGRect(x: 0, y: BAR_H, width: OUT_W, height: OUT_W)
+        videoLayer.frame = CGRect(origin: .zero, size: renderSize)
+        let videoClipMask = CALayer()
+        videoClipMask.frame = CGRect(x: 0, y: BAR_H, width: OUT_W, height: OUT_W)
+        videoClipMask.backgroundColor = UIColor.white.cgColor
+        videoLayer.mask = videoClipMask
         parentLayer.addSublayer(videoLayer)
 
         // ── Color overlay on video (approximates exposure -0.7 EV) ───────────
@@ -264,45 +269,58 @@ public class VideoOverlayModule: Module {
         // Overlay black at ~0.38 alpha achieves ~62% of original brightness.
         if colorFilterEnabled {
           let colorOverlay = CALayer()
-          colorOverlay.frame           = videoLayer.frame
+          colorOverlay.frame           = CGRect(x: 0, y: BAR_H, width: OUT_W, height: OUT_W)
           colorOverlay.backgroundColor = UIColor(white: 0, alpha: 0.38).cgColor
           parentLayer.addSublayer(colorOverlay)
         }
 
-        // ── Corner brackets (fixed pixel size, inset from video edges) ────────
-        let bInset:  CGFloat = 8.0
-        let bArm:    CGFloat = 36.0
-        let bStroke: CGFloat = 3.0
+        // ── Corner brackets: 4 corners, heavy arms, sharp edges ──────────────
+        let bInset:  CGFloat = 24.0   // 3× original inset (8 → 24)
+        let bArm:    CGFloat = 144.0  // 4× original arm length (36 → 144)
+        let bStroke: CGFloat = 9.0    // 3× original stroke (3 → 9)
         let vX0 = CGFloat(0)
         let vY0 = BAR_H
         let vX1 = OUT_W
         let vY1 = BAR_H + OUT_W
+
+        func makeBracket(_ path: CGMutablePath) -> CAShapeLayer {
+          let s = CAShapeLayer()
+          s.path        = path
+          s.strokeColor = UIColor.white.cgColor
+          s.fillColor   = UIColor.clear.cgColor
+          s.lineWidth   = bStroke
+          s.lineCap     = .butt
+          s.lineJoin    = .miter
+          return s
+        }
 
         // TL ┌
         let tlPath = CGMutablePath()
         tlPath.move(to:    CGPoint(x: vX0 + bInset + bArm, y: vY0 + bInset))
         tlPath.addLine(to: CGPoint(x: vX0 + bInset,         y: vY0 + bInset))
         tlPath.addLine(to: CGPoint(x: vX0 + bInset,         y: vY0 + bInset + bArm))
-        let tlBracket = CAShapeLayer()
-        tlBracket.path        = tlPath
-        tlBracket.strokeColor = UIColor.white.cgColor
-        tlBracket.fillColor   = UIColor.clear.cgColor
-        tlBracket.lineWidth   = bStroke
-        tlBracket.lineCap     = .square
-        parentLayer.addSublayer(tlBracket)
+        parentLayer.addSublayer(makeBracket(tlPath))
+
+        // TR ┐
+        let trPath = CGMutablePath()
+        trPath.move(to:    CGPoint(x: vX1 - bInset - bArm, y: vY0 + bInset))
+        trPath.addLine(to: CGPoint(x: vX1 - bInset,         y: vY0 + bInset))
+        trPath.addLine(to: CGPoint(x: vX1 - bInset,         y: vY0 + bInset + bArm))
+        parentLayer.addSublayer(makeBracket(trPath))
+
+        // BL └
+        let blPath = CGMutablePath()
+        blPath.move(to:    CGPoint(x: vX0 + bInset + bArm, y: vY1 - bInset))
+        blPath.addLine(to: CGPoint(x: vX0 + bInset,         y: vY1 - bInset))
+        blPath.addLine(to: CGPoint(x: vX0 + bInset,         y: vY1 - bInset - bArm))
+        parentLayer.addSublayer(makeBracket(blPath))
 
         // BR ┘
         let brPath = CGMutablePath()
         brPath.move(to:    CGPoint(x: vX1 - bInset - bArm, y: vY1 - bInset))
         brPath.addLine(to: CGPoint(x: vX1 - bInset,         y: vY1 - bInset))
         brPath.addLine(to: CGPoint(x: vX1 - bInset,         y: vY1 - bInset - bArm))
-        let brBracket = CAShapeLayer()
-        brBracket.path        = brPath
-        brBracket.strokeColor = UIColor.white.cgColor
-        brBracket.fillColor   = UIColor.clear.cgColor
-        brBracket.lineWidth   = bStroke
-        brBracket.lineCap     = .square
-        parentLayer.addSublayer(brBracket)
+        parentLayer.addSublayer(makeBracket(brPath))
 
         // ── Fonts ──────────────────────────────────────────────────────────────
         let bebas = "BebasNeue-Regular"
@@ -340,44 +358,56 @@ public class VideoOverlayModule: Module {
         }
 
         // ── UPPER BAR ─────────────────────────────────────────────────────────
-        // Left column: "ONE SHOT" logo (Bebas Neue)
-        // Right column: "DAY 015" in Bebas Neue (vertically centred)
+        // Left: "ONE SHOT" logo (Bebas Neue, wide kerning)
+        // Right: "DAY 015" in Bebas Neue — Y-center identical to logo
 
-        let logoTopY: CGFloat = BAR_H * 0.22   // ≈ 92 px from top of canvas
-
-        // "ONE SHOT" logo
-        let oneShotFont = uiFont(bebas, logoFS)
-        let oneShotW    = textWidth("ONE SHOT", oneShotFont) + 16
-        parentLayer.addSublayer(makeLayer("ONE SHOT", fontName: bebas, fontSize: logoFS,
-                                          x: hPad, y: logoTopY, width: oneShotW))
-
-        // "DAY 015" — right-aligned, vertically centred in upper bar
-        let dayStr  = String(format: "DAY %03d", currentDay)
+        // DAY — vertically centred in upper bar
+        let dayStr    = String(format: "DAY %03d", currentDay)
         let dayLayerH = dayFS + 10
-        let dayY      = (BAR_H - dayLayerH) / 2
+        let dayY      = (BAR_H - dayLayerH) / 2   // center = BAR_H/2
         parentLayer.addSublayer(makeLayer(dayStr, fontName: bebas, fontSize: dayFS,
                                           x: hPad, y: dayY, width: OUT_W - 2 * hPad, align: .right))
 
-        // ── LOWER BAR ─────────────────────────────────────────────────────────
-        // Left: line1 = timestamp (Bebas Neue), line2 = "HABIT: NAME" (Bebas Neue)
-        // The block is bottom-anchored inside the lower bar.
+        // "ONE SHOT" logo — Y-center aligned with DAY (both at BAR_H/2)
+        let logoLayerH: CGFloat = logoFS + 10
+        let logoTopY: CGFloat   = BAR_H / 2 - logoLayerH / 2
 
-        let barBottom: CGFloat = OUT_H
-        let bPad:      CGFloat = BAR_H * 0.20   // ≈ 84 px from bottom of canvas
+        let logoKern: CGFloat = 10.0
+        let oneShotFont = uiFont(bebas, logoFS)
+        let oneShotBaseW = textWidth("ONE SHOT", oneShotFont)
+        let oneShotW = oneShotBaseW + CGFloat("ONE SHOT".count - 1) * logoKern + 16
+
+        let oneShotAttr = NSAttributedString(string: "ONE SHOT", attributes: [
+          .font: CTFontCreateWithName(bebas as CFString, logoFS, nil) as Any,
+          .foregroundColor: UIColor.white,
+          .kern: logoKern
+        ])
+        let oneShotLayer = CATextLayer()
+        oneShotLayer.string        = oneShotAttr
+        oneShotLayer.contentsScale = 2.0
+        oneShotLayer.isWrapped     = false
+        oneShotLayer.frame         = CGRect(x: hPad, y: logoTopY, width: oneShotW, height: logoLayerH)
+        parentLayer.addSublayer(oneShotLayer)
+
+        // ── LOWER BAR ─────────────────────────────────────────────────────────
+        // Left: timestamp, Right: HABIT label — both Y-centred in lower bar
+
+        let barTop: CGFloat    = BAR_H + OUT_W          // 1500
+        let barCenterY: CGFloat = barTop + BAR_H / 2    // 1710
+
+        let lowerTsFont = uiFont(bebas, lowerTsFS)
+        let lowerTsW    = textWidth(lowerTimestamp, lowerTsFont) + 12
+        let lowerTsY    = barCenterY - (lowerTsFS + 10) / 2
 
         let habitStr  = "HABIT: \(habitName.uppercased())"
-        let habitY    = barBottom - bPad - habitFS - 10
-        let lowerTsY  = habitY - 14 - lowerTsFS - 10
-
-        let habitFont   = uiFont(bebas, habitFS)
-        let lowerTsFont = uiFont(bebas, lowerTsFS)
-        let habitW      = textWidth(habitStr, habitFont) + 16
-        let lowerTsW    = textWidth(lowerTimestamp, lowerTsFont) + 12
+        let habitFont = uiFont(bebas, habitFS)
+        let habitW    = textWidth(habitStr, habitFont) + 16
+        let habitY    = barCenterY - (habitFS + 10) / 2
 
         parentLayer.addSublayer(makeLayer(lowerTimestamp, fontName: bebas, fontSize: lowerTsFS,
                                           x: hPad, y: lowerTsY, width: lowerTsW))
         parentLayer.addSublayer(makeLayer(habitStr, fontName: bebas, fontSize: habitFS,
-                                          x: hPad, y: habitY, width: habitW))
+                                          x: hPad, y: habitY, width: OUT_W - 2 * hPad, align: .right))
 
         // ── Video composition ──────────────────────────────────────────────────
         let videoComposition = AVMutableVideoComposition()
