@@ -305,15 +305,13 @@ public class VideoOverlayModule: Module {
         parentLayer.addSublayer(brBracket)
 
         // ── Fonts ──────────────────────────────────────────────────────────────
-        let smBold    = "SpaceMono-Bold"
-        let smRegular = "SpaceMono-Regular"
-        let bebas     = "BebasNeue-Regular"
+        let bebas = "BebasNeue-Regular"
 
         // Font sizes (tuned for 1080×1920 canvas, 420px bars)
         let logoFS:    CGFloat = 72    // "ONE SHOT" label
         let dayFS:     CGFloat = floor(BAR_H * 0.55)  // ≈ 231 — the largest element
-        let habitFS:   CGFloat = 76    // "HABIT:" label (bold)
-        let lowerTsFS: CGFloat = 52    // lower bar timestamp
+        let habitFS:   CGFloat = 88    // "HABIT:" label
+        let lowerTsFS: CGFloat = 60    // lower bar timestamp
 
         let white = UIColor.white.cgColor
         let hPad:  CGFloat = 44   // horizontal padding from canvas edge
@@ -361,7 +359,7 @@ public class VideoOverlayModule: Module {
                                           x: hPad, y: dayY, width: OUT_W - 2 * hPad, align: .right))
 
         // ── LOWER BAR ─────────────────────────────────────────────────────────
-        // Left: line1 = timestamp (SpaceMono-Regular), line2 = "HABIT: NAME" (SpaceMono-Bold)
+        // Left: line1 = timestamp (Bebas Neue), line2 = "HABIT: NAME" (Bebas Neue)
         // The block is bottom-anchored inside the lower bar.
 
         let barBottom: CGFloat = OUT_H
@@ -371,14 +369,14 @@ public class VideoOverlayModule: Module {
         let habitY    = barBottom - bPad - habitFS - 10
         let lowerTsY  = habitY - 14 - lowerTsFS - 10
 
-        let habitFont   = uiFont(smBold, habitFS)
-        let lowerTsFont = uiFont(smRegular, lowerTsFS)
+        let habitFont   = uiFont(bebas, habitFS)
+        let lowerTsFont = uiFont(bebas, lowerTsFS)
         let habitW      = textWidth(habitStr, habitFont) + 16
         let lowerTsW    = textWidth(lowerTimestamp, lowerTsFont) + 12
 
-        parentLayer.addSublayer(makeLayer(lowerTimestamp, fontName: smRegular, fontSize: lowerTsFS,
+        parentLayer.addSublayer(makeLayer(lowerTimestamp, fontName: bebas, fontSize: lowerTsFS,
                                           x: hPad, y: lowerTsY, width: lowerTsW))
-        parentLayer.addSublayer(makeLayer(habitStr, fontName: smBold, fontSize: habitFS,
+        parentLayer.addSublayer(makeLayer(habitStr, fontName: bebas, fontSize: habitFS,
                                           x: hPad, y: habitY, width: habitW))
 
         // ── Video composition ──────────────────────────────────────────────────

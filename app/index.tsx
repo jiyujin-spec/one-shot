@@ -3201,8 +3201,8 @@ Email: ristu.japan@gmail.com`;
         const hPad     = canvasW * (44 / 1080);
         const logoFS   = canvasW * (72 / 1080);
         const dayFS    = barH * 0.55;
-        const habitFS  = canvasW * (76 / 1080);
-        const lowerTsFS = canvasW * (52 / 1080);
+        const habitFS  = canvasW * (88 / 1080);
+        const lowerTsFS = canvasW * (60 / 1080);
 
         const logoTopY = barH * 0.22;
 
@@ -3292,14 +3292,14 @@ Email: ristu.japan@gmail.com`;
             <Text style={{
               position: 'absolute', top: lowerTsY, left: hPad,
               fontSize: lowerTsFS, color: '#fff',
-              fontFamily: 'SpaceMono-Regular',
+              fontFamily: 'BebasNeue-Regular',
               ...textShadow,
             }}>{lowerTs}</Text>
             {/* "HABIT: NAME" */}
             <Text style={{
               position: 'absolute', top: habitY, left: hPad,
               fontSize: habitFS, color: '#fff',
-              fontFamily: 'SpaceMono-Bold', fontWeight: '700',
+              fontFamily: 'BebasNeue-Regular',
               ...textShadow,
             }}>{habitStr}</Text>
           </View>
