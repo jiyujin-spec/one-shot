@@ -522,14 +522,14 @@ const defaultState: AppState = {
 
 const NOTIFY_MESSAGES: Record<Lang, { title: string; body: (goal: string) => string }[]> = {
   ja: [
-    { title: '諦めますか？',                    body: (g) => `「${g || 'One Shot'}」— 記録は嘘をつきません。` },
-    { title: '記録は嘘をつきません。',           body: (g) => `「${g || 'One Shot'}」— 今日も積み上げてください。` },
-    { title: '今日の1秒が、未来のあなたを作ります。', body: (g) => `「${g || 'One Shot'}」— 今すぐ記録しましょう。` },
+    { title: '記録待機中',                       body: (g) => `「${g || 'ONE SHOT'}」— 今日のログが未完了です。` },
+    { title: 'ONE SHOT LOG',                    body: (g) => `「${g || 'ONE SHOT'}」— 1分でも良いので、始めましょう。` },
+    { title: 'ストリーク継続中',                  body: (g) => `「${g || 'ONE SHOT'}」— ストリーク有効期限まで残りわずか。` },
   ],
   en: [
-    { title: 'Are you giving up?',    body: (g) => `"${g || 'One Shot'}" — The record never lies.` },
-    { title: 'The record never lies.', body: (g) => `"${g || 'One Shot'}" — Log it. Now.` },
-    { title: 'Your future self is watching.', body: (g) => `"${g || 'One Shot'}" — One second. Every day.` },
+    { title: 'LOG PENDING',           body: (g) => `"${g || 'ONE SHOT'}" — Today's entry is waiting.` },
+    { title: 'ONE SHOT LOG',          body: (g) => `"${g || 'ONE SHOT'}" — One minute is enough. Begin.` },
+    { title: 'STREAK ACTIVE',         body: (g) => `"${g || 'ONE SHOT'}" — Record window closing soon.` },
   ],
 };
 
@@ -1919,19 +1919,21 @@ export default function Page() {
         </View>
       </View>
 
-      {/* ── カメラボタン（写真カメラアイコン・赤グロー） ── */}
-      <TouchableOpacity
-        style={[styles.recBtn, recordingFull && styles.recBtnDone]}
-        onPress={() => {
-          if (recordingFull) {
-            Alert.alert('', t('alert_already_recorded') ?? 'Already recorded today.');
-            return;
-          }
-          setScreen('camera');
-        }}
-      >
-        <Ionicons name="camera-outline" size={32} color={recordingFull ? '#555' : '#fff'} />
-      </TouchableOpacity>
+      {/* ── カメラボタン（ガラスプラットフォーム上に浮かぶ赤い丸） ── */}
+      <View style={styles.recBtnWrapper}>
+        <TouchableOpacity
+          style={[styles.recBtn, recordingFull && styles.recBtnDone]}
+          onPress={() => {
+            if (recordingFull) {
+              Alert.alert('', t('alert_already_recorded') ?? 'Already recorded today.');
+              return;
+            }
+            setScreen('camera');
+          }}
+        >
+          <Ionicons name="camera-outline" size={32} color={recordingFull ? '#555' : '#fff'} />
+        </TouchableOpacity>
+      </View>
 
       {/* ── 記録済みラベル（今日の記録件数を表示） ── */}
       {recordedToday && (
@@ -1940,9 +1942,9 @@ export default function Page() {
         </Text>
       )}
 
-      {/* ── パスを使うボタン（赤アウトライン） ── */}
+      {/* ── パスを使うボタン（ガラスパネル） ── */}
       <TouchableOpacity style={styles.passBtn} onPress={usePassToday}>
-        <Ionicons name="ticket-outline" size={14} color="#8B0000" />
+        <Ionicons name="ticket-outline" size={14} color="#fff" />
         <Text style={styles.passBtnText}>
           {t('use_pass_btn_prefix')}{totalPassCount()}{t('use_pass_btn_suffix')}
         </Text>
@@ -1951,7 +1953,7 @@ export default function Page() {
       {/* ── パス購入ボタン（パスが0枚の時のみ表示） ── */}
       {totalPassCount() === 0 && (
         <TouchableOpacity style={styles.passBuyBtn} onPress={purchasePass}>
-          <Ionicons name="card-outline" size={14} color="#8B0000" />
+          <Ionicons name="card-outline" size={14} color="#fff" />
           <Text style={styles.passBuyBtnText}>{t('pass_purchase_btn')}</Text>
         </TouchableOpacity>
       )}
@@ -2276,8 +2278,8 @@ export default function Page() {
               styles.calCell, styles.calDayCell,
               recorded && (isPass ? styles.calDayCellPass : styles.calDayCellRecorded),
               isToday && styles.calDayCellToday,
-              // 今日以外はグレーアウト
-              !isToday && { opacity: 0.3 },
+              // 今日以外は少し薄くする（視認性確保）
+              !isToday && { opacity: 0.78 },
             ];
             return isTappable ? (
               <TouchableOpacity
@@ -2593,7 +2595,7 @@ export default function Page() {
             value={appState.showRecordingCountdown}
             onValueChange={v => updateState({ showRecordingCountdown: v })}
             thumbColor="#fff"
-            trackColor={{ false: '#333', true: '#8B0000' }}
+            trackColor={{ false: '#333', true: '#666' }}
           />
         </View>
 
@@ -2604,7 +2606,7 @@ export default function Page() {
             value={appState.colorFilterEnabled}
             onValueChange={v => updateState({ colorFilterEnabled: v })}
             thumbColor="#fff"
-            trackColor={{ false: '#333', true: '#8B0000' }}
+            trackColor={{ false: '#333', true: '#666' }}
           />
         </View>
 
@@ -2635,9 +2637,18 @@ export default function Page() {
           </View>
         </View>
 
-        <TouchableOpacity style={styles.btnPrimary} onPress={handleSave}>
-          <Text style={styles.btnPrimaryText}>{t('settings_save_btn')}</Text>
-        </TouchableOpacity>
+        {/* ── 3ボタン横並び（保存 / 購入の復元 / アプリの使い方） ── */}
+        <View style={styles.btnRowThree}>
+          <TouchableOpacity style={styles.btnGhost} onPress={handleSave}>
+            <Text style={styles.btnGhostText}>{t('settings_save_btn')}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.btnGhost} onPress={restorePurchase}>
+            <Text style={styles.btnGhostText}>{t('settings_restore_btn')}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.btnGhost} onPress={() => setGuideVisible(true)}>
+            <Text style={styles.btnGhostText}>{t('settings_guide')}</Text>
+          </TouchableOpacity>
+        </View>
 
         {/* Phase 昇格ボタン: streak > 100 かつ前回昇格から 100 日以上経過した時のみ表示 */}
         {appState.streak > (appState.phasePromotedAt ?? 0) + 100 && (
@@ -2657,16 +2668,9 @@ export default function Page() {
           </TouchableOpacity>
         )}
 
-        <TouchableOpacity style={styles.btnOutline} onPress={restorePurchase}>
-          <Text style={styles.btnOutlineText}>{t('settings_restore_btn')}</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.btnOutline} onPress={() => setGuideVisible(true)}>
-          <Text style={styles.btnOutlineText}>{t('settings_guide')}</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.btnDanger} onPress={resetAll}>
-          <Text style={styles.btnDangerText}>{t('settings_reset_btn')}</Text>
+        {/* ── リセットボタン（白枠線、薄い赤テキスト） ── */}
+        <TouchableOpacity style={styles.btnDangerGhost} onPress={resetAll}>
+          <Text style={styles.btnDangerGhostText}>{t('settings_reset_btn')}</Text>
         </TouchableOpacity>
 
         {/* ── 利用規約 / プライバシーポリシー ── */}
@@ -3419,6 +3423,42 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontSize: 14,
   },
+  btnRowThree: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 12,
+    marginTop: 8,
+  },
+  btnGhost: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.5)',
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  btnGhostText: {
+    color: '#fff',
+    fontWeight: '600',
+    fontSize: 11,
+    letterSpacing: 0.5,
+  },
+  btnDangerGhost: {
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.5)',
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    alignItems: 'center',
+    marginBottom: 12,
+    width: '100%',
+  },
+  btnDangerGhostText: {
+    color: 'rgba(220,80,80,0.85)',
+    fontWeight: '600',
+    fontSize: 14,
+  },
   linkText: {
     color: '#888',
     fontSize: 13,
@@ -3651,7 +3691,14 @@ const styles = StyleSheet.create({
   },
   streakSection: {
     alignItems: 'center',
-    paddingBottom: 8,
+    paddingVertical: 20,
+    paddingHorizontal: 32,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.07)',
+    marginHorizontal: 16,
+    marginBottom: 10,
   },
   streakNum: {
     fontSize: 156,         // 1.3倍（120→156）
@@ -3693,7 +3740,7 @@ const styles = StyleSheet.create({
     color: '#fff',
   },
   goalHash: {
-    color: '#8B0000',
+    color: '#fff',
   },
   statusRow: {
     flexDirection: 'row',
@@ -3715,15 +3762,24 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   statusValDone: {
-    color: '#00FF88',
+    color: '#fff',
   },
   statusValPending: {
-    color: '#8B0000',
+    color: '#fff',
   },
   statusLabel: {
     fontSize: 11,
     fontWeight: '700',
     color: '#888',
+  },
+  recBtnWrapper: {
+    alignSelf: 'center',
+    padding: 20,
+    borderRadius: 28,
+    backgroundColor: 'rgba(15,15,15,0.65)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.07)',
+    marginVertical: 6,
   },
   recBtn: {
     width: 72,
@@ -3732,17 +3788,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#8B0000',
     justifyContent: 'center',
     alignItems: 'center',
-    alignSelf: 'center',
-    marginVertical: 14,
-    shadowColor: '#8B0000',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.65,
-    shadowRadius: 18,
-    elevation: 8,
+    elevation: 4,
   },
   recBtnDone: {
     backgroundColor: '#1a1a1a',
-    shadowOpacity: 0,
   },
   recDoneLabel: {
     textAlign: 'center',
@@ -3750,7 +3799,7 @@ const styles = StyleSheet.create({
     marginBottom: 6,
     fontSize: 11,
     fontWeight: '700',
-    color: '#00FF88',
+    color: '#fff',
     textTransform: 'uppercase',
     letterSpacing: 2,
   },
@@ -3762,12 +3811,12 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     paddingVertical: 13,
     borderRadius: 12,
-    borderWidth: 1.5,
-    borderColor: '#8B0000',
-    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.18)',
+    backgroundColor: 'rgba(255,255,255,0.05)',
   },
   passBtnText: {
-    color: '#8B0000',
+    color: '#fff',
     fontSize: 13,
     fontWeight: '700',
     textTransform: 'uppercase',
@@ -3780,12 +3829,12 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingVertical: 13,
     borderRadius: 12,
-    borderWidth: 1.5,
-    borderColor: '#8B0000',
-    backgroundColor: '#111',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.18)',
+    backgroundColor: 'rgba(255,255,255,0.05)',
   },
   passBuyBtnText: {
-    color: '#8B0000',
+    color: '#fff',
     fontSize: 13,
     fontWeight: '700',
     textTransform: 'uppercase',
@@ -4208,7 +4257,7 @@ const styles = StyleSheet.create({
   },
   calDayLabel: {
     fontSize: 11,
-    color: '#555',
+    color: '#888',
     fontWeight: '700',
   },
   calDayCell: {
@@ -4227,7 +4276,7 @@ const styles = StyleSheet.create({
   },
   calDayNum: {
     fontSize: 17,
-    color: '#333333',
+    color: '#aaa',
     fontWeight: '600',
   },
   calDayNumRecorded: {
@@ -4626,10 +4675,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
     borderRadius: 0,
     padding: 4,
-    paddingVertical: 12,
+    paddingVertical: 14,
     marginBottom: 0,
-    borderBottomWidth: 1,
-    borderBottomColor: '#222222',
   },
   premiumCard: {
     borderWidth: 1.5,
