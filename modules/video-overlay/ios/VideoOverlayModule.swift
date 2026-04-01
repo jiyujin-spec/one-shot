@@ -157,13 +157,9 @@ public class VideoOverlayModule: Module {
         captureDate = Date()
       }
 
-      let upperDf = DateFormatter()
-      upperDf.locale = Locale(identifier: "en_US_POSIX")
-      upperDf.dateFormat = "yyyy.MM.dd_HH:mm"
       let lowerDf = DateFormatter()
       lowerDf.locale = Locale(identifier: "en_US_POSIX")
       lowerDf.dateFormat = "yyyy.MM.dd HH:mm"
-      let upperTimestamp = upperDf.string(from: captureDate)
       let lowerTimestamp = lowerDf.string(from: captureDate)
 
       guard let inputURL = URL(string: inputPath) else {
@@ -185,7 +181,7 @@ public class VideoOverlayModule: Module {
           return
         }
 
-        // ── Orientation & 1:1 center-crop ────────────────────────────────────
+        // ── Orientation & 1:1 center-crop (no scale) ─────────────────────────
         let naturalSize = videoTrack.naturalSize
         let transform   = videoTrack.preferredTransform
 
@@ -193,31 +189,21 @@ public class VideoOverlayModule: Module {
         let dispW = abs(dispSizeRaw.width)
         let dispH = abs(dispSizeRaw.height)
 
-        let dispWE = dispW - (dispW.truncatingRemainder(dividingBy: 2))
-        let dispHE = dispH - (dispH.truncatingRemainder(dividingBy: 2))
-
-        let squareSizeRaw = min(dispWE, dispHE)
-        let squareSize    = squareSizeRaw - squareSizeRaw.truncatingRemainder(dividingBy: 2)
-
-        // Center-crop offset in display space
-        let cropOffsetX = (squareSize - dispWE) / 2.0
-        let cropOffsetY = (squareSize - dispHE) / 2.0
-
         // ── Output canvas dimensions ──────────────────────────────────────────
         let OUT_W: CGFloat = 1080.0
         let OUT_H: CGFloat = 1920.0
         let BAR_H: CGFloat = (OUT_H - OUT_W) / 2.0  // 420.0
 
-        // Scale from squareSize to 1080
-        let videoScale = OUT_W / squareSize
+        // Center-crop offset: extract OUT_W × OUT_W from center of display frame (no scale)
+        let cropOffsetX = (OUT_W - dispW) / 2.0
+        let cropOffsetY = (OUT_W - dispH) / 2.0
 
         // Full render canvas
         let renderSize = CGSize(width: OUT_W, height: OUT_H)
 
-        // Layer instruction transform: rotate → crop → scale to 1080 → shift down by BAR_H
+        // Layer instruction transform: rotate → center-crop to 1080×1080 → shift down by BAR_H
         let cropTransform = transform
           .concatenating(CGAffineTransform(translationX: cropOffsetX, y: cropOffsetY))
-          .concatenating(CGAffineTransform(scaleX: videoScale, y: videoScale))
           .concatenating(CGAffineTransform(translationX: 0, y: BAR_H))
 
         // ── Composition ───────────────────────────────────────────────────────
@@ -285,8 +271,8 @@ public class VideoOverlayModule: Module {
 
         // ── Corner brackets (fixed pixel size, inset from video edges) ────────
         let bInset:  CGFloat = 8.0
-        let bArm:    CGFloat = 28.0
-        let bStroke: CGFloat = 2.0
+        let bArm:    CGFloat = 36.0
+        let bStroke: CGFloat = 3.0
         let vX0 = CGFloat(0)
         let vY0 = BAR_H
         let vX1 = OUT_W
@@ -319,16 +305,13 @@ public class VideoOverlayModule: Module {
         parentLayer.addSublayer(brBracket)
 
         // ── Fonts ──────────────────────────────────────────────────────────────
-        let smBold    = "SpaceMono-Bold"
-        let smRegular = "SpaceMono-Regular"
-        let bebas     = "BebasNeue-Regular"
+        let bebas = "BebasNeue-Regular"
 
         // Font sizes (tuned for 1080×1920 canvas, 420px bars)
-        let logoFS:    CGFloat = 72    // "ne shot" label
-        let upperTsFS: CGFloat = 46    // upper bar timestamp
+        let logoFS:    CGFloat = 72    // "ONE SHOT" label
         let dayFS:     CGFloat = floor(BAR_H * 0.55)  // ≈ 231 — the largest element
-        let habitFS:   CGFloat = 76    // "HABIT:" label (bold)
-        let lowerTsFS: CGFloat = 52    // lower bar timestamp
+        let habitFS:   CGFloat = 88    // "HABIT:" label
+        let lowerTsFS: CGFloat = 60    // lower bar timestamp
 
         let white = UIColor.white.cgColor
         let hPad:  CGFloat = 44   // horizontal padding from canvas edge
@@ -357,34 +340,16 @@ public class VideoOverlayModule: Module {
         }
 
         // ── UPPER BAR ─────────────────────────────────────────────────────────
-        // Left column: red dot + "ne shot" (logo), timestamp below
+        // Left column: "ONE SHOT" logo (Bebas Neue)
         // Right column: "DAY 015" in Bebas Neue (vertically centred)
 
         let logoTopY: CGFloat = BAR_H * 0.22   // ≈ 92 px from top of canvas
 
-        // Red dot (acts as the "O" in "One Shot")
-        let dotSize: CGFloat = logoFS * 0.95
-        let dotX:    CGFloat = hPad
-        let dotY:    CGFloat = logoTopY + (logoFS - dotSize) / 2
-        let dotLayer = CALayer()
-        dotLayer.frame           = CGRect(x: dotX, y: dotY, width: dotSize, height: dotSize)
-        dotLayer.backgroundColor = UIColor(red: 1.0, green: 0.05, blue: 0.05, alpha: 1.0).cgColor
-        dotLayer.cornerRadius    = dotSize / 2
-        parentLayer.addSublayer(dotLayer)
-
-        // "ne shot" (right of dot)
-        let neShotFont = uiFont(smBold, logoFS)
-        let neShotW    = textWidth("ne shot", neShotFont) + 16
-        let neShotX    = dotX + dotSize + logoFS * 0.2
-        parentLayer.addSublayer(makeLayer("ne shot", fontName: smBold, fontSize: logoFS,
-                                          x: neShotX, y: logoTopY, width: neShotW))
-
-        // Timestamp below logo
-        let upperTsY = logoTopY + logoFS + 10 + 4
-        let upperTsFont = uiFont(smRegular, upperTsFS)
-        let upperTsW    = textWidth(upperTimestamp, upperTsFont) + 12
-        parentLayer.addSublayer(makeLayer(upperTimestamp, fontName: smRegular, fontSize: upperTsFS,
-                                          x: hPad, y: upperTsY, width: upperTsW))
+        // "ONE SHOT" logo
+        let oneShotFont = uiFont(bebas, logoFS)
+        let oneShotW    = textWidth("ONE SHOT", oneShotFont) + 16
+        parentLayer.addSublayer(makeLayer("ONE SHOT", fontName: bebas, fontSize: logoFS,
+                                          x: hPad, y: logoTopY, width: oneShotW))
 
         // "DAY 015" — right-aligned, vertically centred in upper bar
         let dayStr  = String(format: "DAY %03d", currentDay)
@@ -394,7 +359,7 @@ public class VideoOverlayModule: Module {
                                           x: hPad, y: dayY, width: OUT_W - 2 * hPad, align: .right))
 
         // ── LOWER BAR ─────────────────────────────────────────────────────────
-        // Left: line1 = timestamp (SpaceMono-Regular), line2 = "HABIT: NAME" (SpaceMono-Bold)
+        // Left: line1 = timestamp (Bebas Neue), line2 = "HABIT: NAME" (Bebas Neue)
         // The block is bottom-anchored inside the lower bar.
 
         let barBottom: CGFloat = OUT_H
@@ -404,14 +369,14 @@ public class VideoOverlayModule: Module {
         let habitY    = barBottom - bPad - habitFS - 10
         let lowerTsY  = habitY - 14 - lowerTsFS - 10
 
-        let habitFont   = uiFont(smBold, habitFS)
-        let lowerTsFont = uiFont(smRegular, lowerTsFS)
+        let habitFont   = uiFont(bebas, habitFS)
+        let lowerTsFont = uiFont(bebas, lowerTsFS)
         let habitW      = textWidth(habitStr, habitFont) + 16
         let lowerTsW    = textWidth(lowerTimestamp, lowerTsFont) + 12
 
-        parentLayer.addSublayer(makeLayer(lowerTimestamp, fontName: smRegular, fontSize: lowerTsFS,
+        parentLayer.addSublayer(makeLayer(lowerTimestamp, fontName: bebas, fontSize: lowerTsFS,
                                           x: hPad, y: lowerTsY, width: lowerTsW))
-        parentLayer.addSublayer(makeLayer(habitStr, fontName: smBold, fontSize: habitFS,
+        parentLayer.addSublayer(makeLayer(habitStr, fontName: bebas, fontSize: habitFS,
                                           x: hPad, y: habitY, width: habitW))
 
         // ── Video composition ──────────────────────────────────────────────────

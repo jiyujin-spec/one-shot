@@ -27,6 +27,7 @@ import { CameraView, CameraType, useCameraPermissions } from 'expo-camera';
 import * as MediaLibrary from 'expo-media-library';
 import * as Sharing from 'expo-sharing';
 import { Feather, Ionicons } from '@expo/vector-icons';
+import Svg, { Polyline } from 'react-native-svg';
 import { Video, ResizeMode } from 'expo-av';
 import { LinearGradient } from 'expo-linear-gradient';
 import MaskedView from '@react-native-masked-view/masked-view';
@@ -613,6 +614,7 @@ export default function Page() {
   const [facing, setFacing] = useState<CameraType>('front');
   const [camMode, setCamMode] = useState<'video' | 'photo'>('video');
   const [recSecs, setRecSecs] = useState<5 | 10>(5);
+  const recSecsRef = useRef<5 | 10>(5);
   const [isRecording, setIsRecording] = useState(false);
   const [countdown, setCountdown] = useState<number | null>(null);       // 撮影前 3-2-1
   const [recordingCountdown, setRecordingCountdown] = useState<number | null>(null); // 録画中残り秒数
@@ -1383,7 +1385,7 @@ export default function Page() {
 
     // ── 動画モード（recSecs 秒録画 → ネイティブでオーバーレイ焼き込み）──
     setIsRecording(true);
-    const RECORD_SECS = recSecs; // 3 | 5 | 7 (user-selected)
+    const RECORD_SECS = recSecsRef.current; // always reflects latest toggle value
 
     // 録画中カウントダウン
     setRecordingCountdown(RECORD_SECS);
@@ -2189,7 +2191,11 @@ export default function Page() {
             {/* 右: 録画秒数トグル（3s → 5s → 7s → 3s）*/}
             <TouchableOpacity
               style={styles.camTimerBtn}
-              onPress={() => setRecSecs(s => s === 5 ? 10 : 5)}
+              onPress={() => {
+                const next: 5 | 10 = recSecs === 5 ? 10 : 5;
+                recSecsRef.current = next;
+                setRecSecs(next);
+              }}
               disabled={isRecording}
             >
               <Text style={[styles.camDurLabel, isRecording && { opacity: 0.25 }]}>
@@ -2265,7 +2271,18 @@ export default function Page() {
                 <Text style={[styles.calDayNum, recorded && styles.calDayNumRecorded]}>
                   {day}
                 </Text>
-                {recorded && !isPass && <Text style={styles.calCheck}>✓</Text>}
+                {recorded && !isPass && (
+                  <Svg width={42} height={42} style={styles.calCheck} viewBox="0 0 42 42">
+                    <Polyline
+                      points="8,21 17,30 34,12"
+                      stroke="#FF3333"
+                      strokeWidth={1.5}
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      fill="none"
+                    />
+                  </Svg>
+                )}
                 {isPass && <Text style={styles.calPassMark}>○</Text>}
                 {slotCount > 1 && (
                   <Text style={styles.calSlotBadge}>{slotCount}</Text>
@@ -3171,10 +3188,8 @@ Email: ristu.japan@gmail.com`;
         const barH    = Math.round((canvasH - canvasW) / 2);  // upper/lower bar height
 
         // Formatting timestamps
-        let upperTs = '';
         let lowerTs = '';
         try {
-          upperTs = format(captureTime, "yyyy.MM.dd_HH:mm");
           lowerTs = format(captureTime, "yyyy.MM.dd HH:mm");
         } catch { /* no-op */ }
 
@@ -3185,17 +3200,11 @@ Email: ristu.japan@gmail.com`;
         // Font sizes (relative to canvas width, matching native pixel sizes ÷ 1080 × canvasW)
         const hPad     = canvasW * (44 / 1080);
         const logoFS   = canvasW * (72 / 1080);
-        const upperTsFS = canvasW * (46 / 1080);
         const dayFS    = barH * 0.55;
-        const habitFS  = canvasW * (76 / 1080);
-        const lowerTsFS = canvasW * (52 / 1080);
+        const habitFS  = canvasW * (88 / 1080);
+        const lowerTsFS = canvasW * (60 / 1080);
 
-        const dotSize  = logoFS * 0.95;
         const logoTopY = barH * 0.22;
-        const dotY     = logoTopY + (logoFS - dotSize) / 2;
-        const dotX     = hPad;
-        const neShotX  = dotX + dotSize + logoFS * 0.2;
-        const upperTsY = logoTopY + logoFS + 10;
 
         const bPad    = barH * 0.20;
         const habitY  = canvasH - bPad - habitFS - 10;
@@ -3203,8 +3212,8 @@ Email: ristu.japan@gmail.com`;
 
         // Bracket (fixed px)
         const bInset = canvasW * (8 / 1080);
-        const bArm   = canvasW * (28 / 1080);
-        const bStroke = canvasW * (2 / 1080);
+        const bArm   = canvasW * (36 / 1080);
+        const bStroke = canvasW * (3 / 1080);
 
         const textShadow = {
           textShadowColor: 'rgba(0,0,0,0.65)' as const,
@@ -3260,28 +3269,13 @@ Email: ristu.japan@gmail.com`;
             }} />
 
             {/* ── Upper bar ── */}
-            {/* Red dot */}
-            <View style={{
-              position: 'absolute',
-              top: dotY, left: dotX,
-              width: dotSize, height: dotSize,
-              borderRadius: dotSize / 2,
-              backgroundColor: '#FF0D0D',
-            }} />
-            {/* "ne shot" */}
+            {/* "ONE SHOT" logo */}
             <Text style={{
-              position: 'absolute', top: logoTopY, left: neShotX,
+              position: 'absolute', top: logoTopY, left: hPad,
               fontSize: logoFS, color: '#fff',
-              fontFamily: 'SpaceMono-Bold', fontWeight: '700',
+              fontFamily: 'BebasNeue-Regular',
               ...textShadow,
-            }}>ne shot</Text>
-            {/* Upper timestamp */}
-            <Text style={{
-              position: 'absolute', top: upperTsY, left: hPad,
-              fontSize: upperTsFS, color: '#fff',
-              fontFamily: 'SpaceMono-Regular',
-              ...textShadow,
-            }}>{upperTs}</Text>
+            }}>ONE SHOT</Text>
             {/* "DAY 015" — right-aligned, vertically centred in upper bar */}
             <Text style={{
               position: 'absolute',
@@ -3298,14 +3292,14 @@ Email: ristu.japan@gmail.com`;
             <Text style={{
               position: 'absolute', top: lowerTsY, left: hPad,
               fontSize: lowerTsFS, color: '#fff',
-              fontFamily: 'SpaceMono-Regular',
+              fontFamily: 'BebasNeue-Regular',
               ...textShadow,
             }}>{lowerTs}</Text>
             {/* "HABIT: NAME" */}
             <Text style={{
               position: 'absolute', top: habitY, left: hPad,
               fontSize: habitFS, color: '#fff',
-              fontFamily: 'SpaceMono-Bold', fontWeight: '700',
+              fontFamily: 'BebasNeue-Regular',
               ...textShadow,
             }}>{habitStr}</Text>
           </View>
@@ -4036,36 +4030,36 @@ const styles = StyleSheet.create({
   // 角ブラケット（viewfinder 風コーナー装飾）
   bracket: {
     position: 'absolute',
-    width: 22,
-    height: 22,
+    width: 36,
+    height: 36,
     borderColor: '#fff',
   },
   bracketTL: {
-    top: 12,
-    left: 12,
-    borderTopWidth: 2,
-    borderLeftWidth: 2,
+    top: 8,
+    left: 8,
+    borderTopWidth: 3,
+    borderLeftWidth: 3,
     borderTopLeftRadius: 3,
   },
   bracketTR: {
-    top: 12,
-    right: 12,
-    borderTopWidth: 2,
-    borderRightWidth: 2,
+    top: 8,
+    right: 8,
+    borderTopWidth: 3,
+    borderRightWidth: 3,
     borderTopRightRadius: 3,
   },
   bracketBL: {
-    bottom: 12,
-    left: 12,
-    borderBottomWidth: 2,
-    borderLeftWidth: 2,
+    bottom: 8,
+    left: 8,
+    borderBottomWidth: 3,
+    borderLeftWidth: 3,
     borderBottomLeftRadius: 3,
   },
   bracketBR: {
-    bottom: 12,
-    right: 12,
-    borderBottomWidth: 2,
-    borderRightWidth: 2,
+    bottom: 8,
+    right: 8,
+    borderBottomWidth: 3,
+    borderRightWidth: 3,
     borderBottomRightRadius: 3,
   },
 
@@ -4252,11 +4246,8 @@ const styles = StyleSheet.create({
   },
   calCheck: {
     position: 'absolute',
-    top: 1,
-    right: 2,
-    fontSize: 28,
-    color: '#FF3333',
-    fontWeight: '900',
+    top: 0,
+    right: 0,
   },
   calPassMark: {
     position: 'absolute',
