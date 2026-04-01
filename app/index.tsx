@@ -1779,30 +1779,6 @@ export default function Page() {
           </View>
         ))}
 
-        {/* ── サブスクリプション情報（Apple審査必須） ── */}
-        <View style={styles.subscriptionInfoBox}>
-          <Text style={styles.subscriptionInfoTitle}>
-            {lang === 'ja' ? 'One Shot Premium' : 'One Shot Premium'}
-          </Text>
-          <Text style={styles.subscriptionInfoDetail}>
-            {lang === 'ja'
-              ? `年額プラン（1年間・自動更新）  ${annualPrice ?? '—'}`
-              : `Annual Plan (1 year · auto-renews)  ${annualPrice ?? '—'}`}
-          </Text>
-          {monthlyPkg && (
-            <Text style={styles.subscriptionInfoDetail}>
-              {lang === 'ja'
-                ? `月額プラン（1ヶ月・自動更新）  ${monthlyPrice ?? '—'}`
-                : `Monthly Plan (1 month · auto-renews)  ${monthlyPrice ?? '—'}`}
-            </Text>
-          )}
-          <Text style={styles.subscriptionInfoDetail}>
-            {lang === 'ja'
-              ? 'Apple IDのアカウント設定でキャンセルできます'
-              : 'Cancel anytime in Apple ID Account Settings'}
-          </Text>
-        </View>
-
         {/* ── 年額プランカード（メイン） ── */}
         <TouchableOpacity
           style={styles.planCardActive}
@@ -1843,6 +1819,13 @@ export default function Page() {
             </Text>
           </TouchableOpacity>
         )}
+
+        {/* ── サブスクリプション開示（Apple 3.1.2(c) 必須） ── */}
+        <Text style={styles.subscriptionInfoDetail}>
+          {lang === 'ja'
+            ? `年額 ${annualPrice ?? '—'}（自動更新）${monthlyPkg ? `　月額 ${monthlyPrice ?? '—'}（自動更新）` : ''}　Apple IDで課金・管理`
+            : `Annual ${annualPrice ?? '—'} · auto-renews${monthlyPkg ? `   Monthly ${monthlyPrice ?? '—'} · auto-renews` : ''}   Managed via Apple ID`}
+        </Text>
 
         {/* ── 無料トライアル注意書き ── */}
         <Text style={styles.trialNote}>
@@ -3340,11 +3323,12 @@ const styles = StyleSheet.create({
 
   // ── Typography ──
   appTitle: {
-    fontSize: 28,
+    fontSize: 36,
     fontWeight: '900',
     color: '#fff',
-    letterSpacing: 6,
+    letterSpacing: 10,
     marginBottom: 8,
+    fontFamily: 'BebasNeue-Regular',
   },
   subtitle: {
     fontSize: 14,
@@ -3464,10 +3448,12 @@ const styles = StyleSheet.create({
   // ── Paywall ──
   paywallContent: {
     flexGrow: 1,
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
     padding: 24,
-    paddingVertical: 40,
+    paddingTop: 56,
+    paddingBottom: 48,
     alignItems: 'center',
+    backgroundColor: '#000',
   },
   paywallBadge: {
     backgroundColor: '#1a0000',
@@ -3486,12 +3472,13 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   paywallSub: {
-    fontSize: 13,
+    fontSize: 16,
     fontWeight: '700',
     color: '#888',
     marginBottom: 12,
-    letterSpacing: 3,
+    letterSpacing: 4,
     textTransform: 'uppercase',
+    fontFamily: 'BebasNeue-Regular',
   },
   paywallPriceBlock: {
     alignItems: 'center',
@@ -3532,11 +3519,12 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   planCardPrice: {
-    fontSize: 34,
+    fontSize: 52,
     fontWeight: '900',
     color: '#fff',
-    letterSpacing: -1,
+    letterSpacing: 0,
     marginBottom: 4,
+    fontFamily: 'BebasNeue-Regular',
   },
   planCardPeriod: {
     fontSize: 11,
@@ -3546,18 +3534,21 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   planCardCta: {
-    fontSize: 13,
+    fontSize: 15,
     fontWeight: '800',
     color: '#CC3333',
-    letterSpacing: 1,
+    letterSpacing: 2,
     textTransform: 'uppercase',
+    fontFamily: 'BebasNeue-Regular',
   },
   trialBadgeText: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: '800',
     color: '#CC0000',
     marginBottom: 16,
     textAlign: 'center',
+    fontFamily: 'BebasNeue-Regular',
+    letterSpacing: 2,
   },
   planCardSubtext: {
     fontSize: 12,
@@ -3580,24 +3571,25 @@ const styles = StyleSheet.create({
     borderColor: '#333',
     borderRadius: 12,
     backgroundColor: '#0d0d0d',
-    paddingVertical: 14,
+    paddingVertical: 18,
     paddingHorizontal: 20,
     marginBottom: 20,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: 'column',
   },
   planCardSecondaryPrice: {
-    fontSize: 20,
+    fontSize: 36,
     fontWeight: '700',
     color: '#aaa',
-    letterSpacing: -0.5,
+    letterSpacing: 0,
+    marginBottom: 4,
+    fontFamily: 'BebasNeue-Regular',
   },
   planCardSecondaryPeriod: {
     fontSize: 11,
     color: '#555',
     letterSpacing: 0.5,
     textTransform: 'uppercase',
+    marginTop: 2,
   },
   featureRow: {
     flexDirection: 'row',
@@ -4004,16 +3996,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#000',
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 20,
     paddingBottom: 24,
   },
   previewCard: {
     width: '100%',
-    flex: 1,
-    maxHeight: '78%',
-    borderRadius: 16,
+    aspectRatio: 9 / 16,
     overflow: 'hidden',
-    backgroundColor: '#111',
+    backgroundColor: '#000000',
     marginBottom: 16,
     position: 'relative',
   },
