@@ -428,38 +428,41 @@ public class VideoOverlayModule: Module {
         let gcMaxV  = gcVals.last  ?? 3.0
         let gcRange = max(gcMaxV - gcMinV, 0.001)
 
-        // L-shaped axis
+        // X-axis extends slightly beyond current day to hint at future growth
+        let xMax = Double(currentDay + 7)
+
+        // L-shaped axis — brighter for visibility
         let axisPath = CGMutablePath()
         axisPath.move(to:    CGPoint(x: gcX + gcML, y: gcY + gcMT))
         axisPath.addLine(to: CGPoint(x: gcX + gcML, y: gcY + gcMT + gcPlotH))
         axisPath.addLine(to: CGPoint(x: gcX + gcML + gcPlotW, y: gcY + gcMT + gcPlotH))
         let axisLayer = CAShapeLayer()
         axisLayer.path        = axisPath
-        axisLayer.strokeColor = UIColor(white: 1, alpha: 0.35).cgColor
+        axisLayer.strokeColor = UIColor(white: 1, alpha: 0.6).cgColor
         axisLayer.fillColor   = UIColor.clear.cgColor
-        axisLayer.lineWidth   = 0.5
+        axisLayer.lineWidth   = 0.8
         parentLayer.addSublayer(axisLayer)
 
-        // Curve line
+        // Curve line — scaled to extended X-axis (currentDay not at right edge)
         if currentDay > 1 {
           let curvePath = CGMutablePath()
           for (i, v) in gcVals.enumerated() {
-            let px = gcX + gcML + CGFloat(i) / CGFloat(gcVals.count - 1) * gcPlotW
+            let px = gcX + gcML + CGFloat(Double(i + 1) / xMax) * gcPlotW
             let py = gcY + gcMT + gcPlotH - CGFloat((v - gcMinV) / gcRange) * gcPlotH
             if i == 0 { curvePath.move(to: CGPoint(x: px, y: py)) }
             else       { curvePath.addLine(to: CGPoint(x: px, y: py)) }
           }
           let curveLayer = CAShapeLayer()
           curveLayer.path        = curvePath
-          curveLayer.strokeColor = UIColor(white: 1, alpha: 0.7).cgColor
+          curveLayer.strokeColor = UIColor(white: 1, alpha: 0.9).cgColor
           curveLayer.fillColor   = UIColor.clear.cgColor
-          curveLayer.lineWidth   = 1.0
+          curveLayer.lineWidth   = 1.5
           parentLayer.addSublayer(curveLayer)
         }
 
-        // Latest data point — red dot
+        // Latest data point — red dot (positioned using extended X scale)
         let lastVal = gcVals.last ?? gcMinV
-        let dotX    = gcX + gcML + (currentDay > 1 ? gcPlotW : gcPlotW / 2)
+        let dotX    = gcX + gcML + CGFloat(Double(currentDay) / xMax) * gcPlotW
         let dotY    = gcY + gcMT + gcPlotH - CGFloat((lastVal - gcMinV) / gcRange) * gcPlotH
         let dotR: CGFloat = gcW * 0.03
         let dotLayer = CAShapeLayer()

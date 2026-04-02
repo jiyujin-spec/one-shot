@@ -27,7 +27,7 @@ import { CameraView, CameraType, useCameraPermissions } from 'expo-camera';
 import * as MediaLibrary from 'expo-media-library';
 import * as Sharing from 'expo-sharing';
 import { Feather, Ionicons } from '@expo/vector-icons';
-import Svg, { Polyline, Line, Circle } from 'react-native-svg';
+import Svg, { Polyline, Line, Circle, Text as SvgText } from 'react-native-svg';
 import { Video, ResizeMode } from 'expo-av';
 import { LinearGradient } from 'expo-linear-gradient';
 import MaskedView from '@react-native-masked-view/masked-view';
@@ -2301,52 +2301,115 @@ export default function Page() {
           })}
         </View>
 
-        {/* ── Growth Curve Chart ── */}
+        {/* ── Growth Index Chart ── */}
         {appState.streak > 0 && (() => {
           const streak   = appState.streak;
           const chartW   = Dimensions.get('window').width - 32;
-          const chartH   = 180;
+          const chartH   = 200;
           const gcVals   = Array.from({ length: streak }, (_, i) => 3 * Math.pow(1.01, i + 1));
           const curVal   = gcVals[gcVals.length - 1];
-          const gcMinV   = gcVals[0];
-          const gcMaxV   = curVal;
-          const gcRange  = Math.max(gcMaxV - gcMinV, 0.01);
 
-          const mL = 28, mB = 20, mR = 10, mT = 12;
+          // X-axis extends beyond current streak to show future growth space
+          const milestones = [30, 60, 90, 180, 365];
+          const xMax = milestones.find(m => m > streak) ?? Math.ceil(streak * 1.5 / 30) * 30;
+
+          // Y-axis: round min/max to nearest 0.5 for clean labels
+          const gcMinV  = 3.0;  // formula always starts near 3.0
+          const gcMaxV  = Math.ceil(curVal / 0.5) * 0.5;
+          const gcRange = Math.max(gcMaxV - gcMinV, 0.1);
+
+          // Margins: extra left for Y-axis labels
+          const mL = 40, mB = 22, mR = 12, mT = 10;
           const plotW = chartW - mL - mR;
           const plotH = chartH - mT - mB;
 
+          // Data points scaled to extended X-axis range
           const pts = gcVals.map((v, i) => ({
-            x: mL + (streak > 1 ? (i / (streak - 1)) * plotW : plotW / 2),
+            x: mL + ((i + 1) / xMax) * plotW,
             y: mT + plotH - ((v - gcMinV) / gcRange) * plotH,
           }));
           const lastPt = pts[pts.length - 1];
 
+          // Y-axis label values (0.5 steps within visible range)
+          const yStep = 0.5;
+          const yLabels: number[] = [];
+          for (let yv = gcMinV; yv <= gcMaxV + 0.001; yv += yStep) {
+            yLabels.push(parseFloat(yv.toFixed(1)));
+          }
+
+          // X-axis label positions: DAY 1, intermediate milestones, current day
+          const xLabelDays: number[] = [1];
+          // Add intermediate labels every 10 days (up to xMax)
+          for (let d = 10; d < xMax; d += 10) {
+            if (d < streak) xLabelDays.push(d);
+          }
+          if (!xLabelDays.includes(streak)) xLabelDays.push(streak);
+          const xLabelX = (day: number) => mL + (day / xMax) * plotW;
+          const yLabelY = (yv: number) => mT + plotH - ((yv - gcMinV) / gcRange) * plotH;
+
           return (
             <View style={{ paddingHorizontal: 16, marginTop: 24, marginBottom: 16 }}>
               <Text style={{ fontFamily: 'BebasNeue-Regular', color: '#555', fontSize: 11, letterSpacing: 2, marginBottom: 4 }}>
-                GROWTH CURVE
+                GROWTH INDEX
               </Text>
               <Text style={{ fontFamily: 'BebasNeue-Regular', color: '#FF3333', fontSize: 40, lineHeight: 44, marginBottom: 10 }}>
-                {curVal.toFixed(2)}x
+                {curVal.toFixed(2)}
               </Text>
               <Svg width={chartW} height={chartH}>
+                {/* Y-axis guide lines (dotted) and labels */}
+                {yLabels.map(yv => {
+                  const ly = yLabelY(yv);
+                  return (
+                    <React.Fragment key={`yg-${yv}`}>
+                      {/* Dotted grid line */}
+                      <Line
+                        x1={mL} y1={ly} x2={mL + plotW} y2={ly}
+                        stroke="rgba(255,255,255,0.1)"
+                        strokeWidth={0.5}
+                        strokeDasharray="3,4"
+                      />
+                      {/* Y-axis label */}
+                      <SvgText
+                        x={mL - 4} y={ly + 3}
+                        fontSize={7} fill="rgba(255,255,255,0.45)"
+                        fontFamily="Courier" textAnchor="end"
+                      >{yv.toFixed(1)}</SvgText>
+                    </React.Fragment>
+                  );
+                })}
                 {/* Y axis */}
                 <Line x1={mL} y1={mT} x2={mL} y2={mT + plotH}
-                  stroke="rgba(255,255,255,0.2)" strokeWidth={0.5} />
+                  stroke="rgba(255,255,255,0.35)" strokeWidth={0.8} />
                 {/* X axis */}
                 <Line x1={mL} y1={mT + plotH} x2={mL + plotW} y2={mT + plotH}
-                  stroke="rgba(255,255,255,0.2)" strokeWidth={0.5} />
+                  stroke="rgba(255,255,255,0.35)" strokeWidth={0.8} />
+                {/* X-axis labels */}
+                {xLabelDays.map(d => {
+                  const lx = xLabelX(d);
+                  const isCurrentDay = d === streak;
+                  return (
+                    <React.Fragment key={`xl-${d}`}>
+                      <Line x1={lx} y1={mT + plotH} x2={lx} y2={mT + plotH + 3}
+                        stroke="rgba(255,255,255,0.4)" strokeWidth={0.5} />
+                      <SvgText
+                        x={lx} y={mT + plotH + 11}
+                        fontSize={7}
+                        fill={isCurrentDay ? 'rgba(255,51,51,0.8)' : 'rgba(255,255,255,0.4)'}
+                        fontFamily="Courier" textAnchor="middle"
+                      >{`DAY ${d}`}</SvgText>
+                    </React.Fragment>
+                  );
+                })}
                 {/* Growth line */}
                 {streak > 1 && (
                   <Polyline
                     points={pts.map(p => `${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(' ')}
                     fill="none"
-                    stroke="rgba(255,255,255,0.85)"
-                    strokeWidth={1.5}
+                    stroke="rgba(255,255,255,0.9)"
+                    strokeWidth={1.8}
                   />
                 )}
-                {/* Latest point — red */}
+                {/* Latest point — red dot (current position, not at right edge) */}
                 <Circle cx={lastPt.x} cy={lastPt.y} r={4} fill="#FF3333" />
               </Svg>
             </View>
@@ -3243,7 +3306,7 @@ Email: ristu.japan@gmail.com`;
         const habitFS  = canvasW * (88 / 1080);
         const lowerTsFS = canvasW * (60 / 1080);
 
-        // Logo Y: center aligned with DAY text (both vertically centered in upper bar)
+        // Logo Y: vertically centered in upper bar, same formula as DAY
         const logoTopY = (barH - logoFS) / 2;
 
         // Lower bar: two lines stacked on left, centered together vertically in bar
@@ -3253,10 +3316,10 @@ Email: ristu.japan@gmail.com`;
         const lowerTsY       = lowerBarTopY + (barH - twoLineH) / 2;
         const habitY         = lowerTsY + lowerTsFS + lowerLineGap;
 
-        // Bracket (fixed px)
-        const bInset = canvasW * (8 / 1080);
-        const bArm   = canvasW * (36 / 1080);
-        const bStroke = canvasW * (3 / 1080);
+        // Bracket: 3× inset, 4× arm, 3× stroke — matches iOS native video side
+        const bInset = canvasW * (24 / 1080);
+        const bArm   = canvasW * (144 / 1080);
+        const bStroke = canvasW * (9 / 1080);
 
         const textShadow = {
           textShadowColor: 'rgba(0,0,0,0.65)' as const,
@@ -3294,21 +3357,41 @@ Email: ristu.japan@gmail.com`;
               }} />
             )}
 
-            {/* TL corner bracket ┌ — opacity 70% for lens-finder feel */}
+            {/* TL corner bracket ┌ — 70% opacity, sharp corners, 3× stroke */}
             <View style={{
               position: 'absolute',
               top: barH + bInset, left: bInset,
               width: bArm, height: bArm,
               borderTopWidth: bStroke, borderLeftWidth: bStroke,
               borderColor: 'rgba(255,255,255,0.7)',
+              borderRadius: 0,
             }} />
-            {/* BR corner bracket ┘ — opacity 70% */}
+            {/* TR corner bracket ┐ — 70% opacity, sharp corners */}
+            <View style={{
+              position: 'absolute',
+              top: barH + bInset, right: bInset,
+              width: bArm, height: bArm,
+              borderTopWidth: bStroke, borderRightWidth: bStroke,
+              borderColor: 'rgba(255,255,255,0.7)',
+              borderRadius: 0,
+            }} />
+            {/* BL corner bracket └ — 70% opacity, sharp corners */}
+            <View style={{
+              position: 'absolute',
+              bottom: barH + bInset, left: bInset,
+              width: bArm, height: bArm,
+              borderBottomWidth: bStroke, borderLeftWidth: bStroke,
+              borderColor: 'rgba(255,255,255,0.7)',
+              borderRadius: 0,
+            }} />
+            {/* BR corner bracket ┘ — 70% opacity, sharp corners */}
             <View style={{
               position: 'absolute',
               bottom: barH + bInset, right: bInset,
               width: bArm, height: bArm,
               borderBottomWidth: bStroke, borderRightWidth: bStroke,
               borderColor: 'rgba(255,255,255,0.7)',
+              borderRadius: 0,
             }} />
 
             {/* ── Upper bar ── */}
@@ -3323,7 +3406,7 @@ Email: ristu.japan@gmail.com`;
             {/* "DAY 015" — right-aligned, vertically centred in upper bar */}
             <Text style={{
               position: 'absolute',
-              top: (barH - dayFS * 1.1) / 2,
+              top: (barH - dayFS) / 2,
               left: hPad, right: hPad,
               fontSize: dayFS, color: '#fff',
               fontFamily: 'BebasNeue-Regular',
@@ -3358,13 +3441,15 @@ Email: ristu.japan@gmail.com`;
               const plotW = gcW - mL - mR;
               const plotH = gcH - mT - mB;
 
+              // X-axis extends slightly past current day to hint at future growth
+              const xMax = currentDay + 7;
               const gcVals = Array.from({ length: currentDay }, (_, i) => 3 * Math.pow(1.01, i + 1));
-              const gcMinV = gcVals[0];
-              const gcMaxV = gcVals[gcVals.length - 1];
+              const gcMinV = gcVals[0] ?? 3.0;
+              const gcMaxV = gcVals[gcVals.length - 1] ?? 3.0;
               const gcRange = Math.max(gcMaxV - gcMinV, 0.01);
 
               const pts = gcVals.map((v, i) => ({
-                x: mL + (gcVals.length > 1 ? (i / (gcVals.length - 1)) * plotW : plotW / 2),
+                x: mL + ((i + 1) / xMax) * plotW,
                 y: mT + plotH - ((v - gcMinV) / gcRange) * plotH,
               }));
               const lastPt = pts[pts.length - 1];
@@ -3376,21 +3461,21 @@ Email: ristu.japan@gmail.com`;
                   height={gcH}
                   style={{ position: 'absolute', top: gcTop, left: gcLeft }}
                 >
-                  {/* L-shaped axis */}
+                  {/* L-shaped axis — brighter for visibility */}
                   <Line x1={mL} y1={mT} x2={mL} y2={mT + plotH}
-                    stroke="rgba(255,255,255,0.35)" strokeWidth={0.5} />
+                    stroke="rgba(255,255,255,0.6)" strokeWidth={0.8} />
                   <Line x1={mL} y1={mT + plotH} x2={mL + plotW} y2={mT + plotH}
-                    stroke="rgba(255,255,255,0.35)" strokeWidth={0.5} />
-                  {/* Growth curve line */}
+                    stroke="rgba(255,255,255,0.6)" strokeWidth={0.8} />
+                  {/* Growth curve line — thicker and brighter */}
                   {gcVals.length > 1 && (
                     <Polyline
                       points={pts.map(p => `${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(' ')}
                       fill="none"
-                      stroke="rgba(255,255,255,0.7)"
-                      strokeWidth={0.8}
+                      stroke="rgba(255,255,255,0.9)"
+                      strokeWidth={1.2}
                     />
                   )}
-                  {/* Latest point — red */}
+                  {/* Latest point — red dot (current position, not at right edge) */}
                   <Circle cx={lastPt.x} cy={lastPt.y} r={gcW * 0.03} fill="#FF3333" />
                 </Svg>
               );
