@@ -396,7 +396,7 @@ public class VideoOverlayModule: Module {
         let barTop: CGFloat     = BAR_H + OUT_W          // 1500
         let barCenterY: CGFloat = barTop + BAR_H / 2    // 1710
 
-        let habitStr  = "HABIT: \(habitName.uppercased())"
+        let habitStr  = habitName.uppercased()
         let habitFont = uiFont(bebas, habitFS)
         let habitW    = textWidth(habitStr, habitFont) + 16
         let lowerTsFont = uiFont(bebas, lowerTsFS)
@@ -412,13 +412,15 @@ public class VideoOverlayModule: Module {
         parentLayer.addSublayer(makeLayer(habitStr, fontName: bebas, fontSize: habitFS,
                                           x: hPad, y: habitY, width: habitW))
 
-        // ── GROWTH CURVE — Full HISTORY-style graph (lower center-right) ──────
-        let gcW: CGFloat  = OUT_W * 0.56
+        // ── GROWTH CURVE — Full HISTORY-style graph (lower bar, Y-axis at screen center) ──
+        // Graph container: Y-axis pinned exactly at OUT_W/2 (540px), extends to right edge
+        let gcML_fixed: CGFloat = 50.0             // fixed left margin for Y labels
+        let gcX: CGFloat  = OUT_W / 2.0 - gcML_fixed  // Y-axis at center line
+        let gcW: CGFloat  = OUT_W - gcX - hPad         // from gcX to right edge - padding
         let gcH: CGFloat  = BAR_H * 0.80
-        let gcX: CGFloat  = OUT_W * 0.40
         let gcY: CGFloat  = barTop + (BAR_H - gcH) / 2
 
-        let gcML: CGFloat = gcW * 0.068
+        let gcML: CGFloat = gcML_fixed
         let gcMB: CGFloat = gcH * 0.17
         let gcMR: CGFloat = gcW * 0.025
         let gcMT: CGFloat = gcH * 0.06
@@ -426,24 +428,29 @@ public class VideoOverlayModule: Module {
         let gcPlotH = gcH - gcMT - gcMB
 
         let gcVals  = (1...max(currentDay, 1)).map { d in 3.0 * pow(1.01, Double(d)) }
-        let curVal  = gcVals.last ?? 3.0
 
-        // X range: extend to next milestone for future whitespace
-        var xMaxInt = max(currentDay * 2, 30)
-        for m in [30, 60, 90, 180, 365] where m > currentDay { xMaxInt = m; break }
-        let xMax = Double(xMaxInt)
+        // xMax: ~1x future buffer so future section equals past section
+        let xMax = Double(max(currentDay * 2, 10))
 
-        // Y range: snap to 0.5 steps
+        // Y range: scale to predicted value at xMax (so future dashed line fits)
         let gcMinV  = 3.0
-        let gcMaxV  = (curVal / 0.5).rounded(.up) * 0.5
+        let gcMaxV  = ceil(3.0 * pow(1.01, xMax) / 0.5) * 0.5
         let gcRange = max(gcMaxV - gcMinV, 0.1)
 
         let labelFS: CGFloat = gcW * 0.028
 
+        // Coordinate mapping helpers
+        func xToCanvas(_ day: Double) -> CGFloat {
+          gcX + gcML + CGFloat(day / xMax) * gcPlotW
+        }
+        func yToCanvas(_ v: Double) -> CGFloat {
+          gcY + gcMT + gcPlotH - CGFloat((v - gcMinV) / gcRange) * gcPlotH
+        }
+
         // Y labels: dotted guide lines + text
         var yvLabel = gcMinV
         while yvLabel <= gcMaxV + 0.001 {
-          let ly = gcY + gcMT + gcPlotH - CGFloat((yvLabel - gcMinV) / gcRange) * gcPlotH
+          let ly = yToCanvas(yvLabel)
 
           // Dotted guide line
           let guidePath = CGMutablePath()
@@ -472,7 +479,7 @@ public class VideoOverlayModule: Module {
           yvLabel += 0.5
         }
 
-        // L-shaped axes (brighter, thicker)
+        // L-shaped axes
         let axisPath = CGMutablePath()
         axisPath.move(to:    CGPoint(x: gcX + gcML,           y: gcY + gcMT))
         axisPath.addLine(to: CGPoint(x: gcX + gcML,           y: gcY + gcMT + gcPlotH))
@@ -484,17 +491,17 @@ public class VideoOverlayModule: Module {
         axisLayer.lineWidth   = 1.2
         parentLayer.addSublayer(axisLayer)
 
-        // X-axis labels: DAY 1, DAY 10, ..., current day
+        // X-axis labels: DAY 1, every 10 days (past only), current day (red)
         var xLabelDays: [Int] = [1]
         var xd = 10
-        while xd < xMaxInt {
-          if xd < currentDay { xLabelDays.append(xd) }
+        while xd < currentDay {
+          xLabelDays.append(xd)
           xd += 10
         }
         if !xLabelDays.contains(currentDay) { xLabelDays.append(currentDay) }
 
         for day in xLabelDays {
-          let lx = gcX + gcML + CGFloat(Double(day) / xMax) * gcPlotW
+          let lx = xToCanvas(Double(day))
           let isCurrentDay = day == currentDay
 
           // Tick mark
@@ -525,12 +532,12 @@ public class VideoOverlayModule: Module {
           parentLayer.addSublayer(xLabel)
         }
 
-        // Growth curve
+        // Solid growth line: DAY 1 → current (white solid)
         if currentDay > 1 {
           let curvePath = CGMutablePath()
           for (i, v) in gcVals.enumerated() {
-            let px = gcX + gcML + CGFloat(Double(i + 1) / xMax) * gcPlotW
-            let py = gcY + gcMT + gcPlotH - CGFloat((v - gcMinV) / gcRange) * gcPlotH
+            let px = xToCanvas(Double(i + 1))
+            let py = yToCanvas(v)
             if i == 0 { curvePath.move(to:    CGPoint(x: px, y: py)) }
             else       { curvePath.addLine(to: CGPoint(x: px, y: py)) }
           }
@@ -542,10 +549,37 @@ public class VideoOverlayModule: Module {
           parentLayer.addSublayer(curveLayer)
         }
 
+        // Dashed future prediction: current day → xMax (white dashed)
+        let futureStep = max(1, Int((xMax - Double(currentDay)) / 80.0))
+        let futurePath = CGMutablePath()
+        var futureStarted = false
+        var fd = currentDay
+        while fd <= Int(xMax) {
+          let fv = 3.0 * pow(1.01, Double(fd))
+          let px = xToCanvas(Double(fd))
+          let py = yToCanvas(fv)
+          if !futureStarted {
+            futurePath.move(to: CGPoint(x: px, y: py))
+            futureStarted = true
+          } else {
+            futurePath.addLine(to: CGPoint(x: px, y: py))
+          }
+          fd += futureStep
+        }
+        if futureStarted {
+          let futureLayer = CAShapeLayer()
+          futureLayer.path            = futurePath
+          futureLayer.strokeColor     = UIColor(white: 1, alpha: 0.9).cgColor
+          futureLayer.fillColor       = UIColor.clear.cgColor
+          futureLayer.lineWidth       = 2.0
+          futureLayer.lineDashPattern = [8, 6]
+          parentLayer.addSublayer(futureLayer)
+        }
+
         // Latest data point — red dot
         let lastVal = gcVals.last ?? gcMinV
-        let dotX    = gcX + gcML + CGFloat(Double(currentDay) / xMax) * gcPlotW
-        let dotY    = gcY + gcMT + gcPlotH - CGFloat((lastVal - gcMinV) / gcRange) * gcPlotH
+        let dotX    = xToCanvas(Double(currentDay))
+        let dotY    = yToCanvas(lastVal)
         let dotR: CGFloat = gcW * 0.014
         let dotLayer = CAShapeLayer()
         dotLayer.path      = CGPath(ellipseIn: CGRect(x: dotX - dotR, y: dotY - dotR,
