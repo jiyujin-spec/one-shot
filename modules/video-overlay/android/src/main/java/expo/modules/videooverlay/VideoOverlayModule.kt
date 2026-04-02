@@ -189,7 +189,7 @@ class VideoOverlayModule : Module() {
     val hPad      = 44f
 
     val dayStr   = String.format("DAY %03d", currentDay)
-    val habitStr = "HABIT: $habitName"
+    val habitStr = habitName
 
     // ── Draw all overlays onto a 1080×1920 bitmap ──────────────────────────
     fun drawFrame(videoBmp: Bitmap): Bitmap {
@@ -263,30 +263,69 @@ class VideoOverlayModule : Module() {
       canvas.drawText(lowerTimestamp, hPad, lowerTsBaseline, lowerTsPaint)
       canvas.drawText(habitStr,       hPad, habitBaseline,   habitPaint)
 
-      // ── GROWTH CURVE (lower-right) ──────────────────────────────────────
-      val gcW   = BAR_H * 0.55f
-      val gcH   = BAR_H * 0.48f
-      val gcX   = OUT_W - hPad - gcW
+      // ── GROWTH CURVE — Full-spec graph (Y-axis pinned at screen center) ──────
+      // Graph container: Y-axis at OUT_W/2 (540px), extends to right edge
+      val gcML_fixed = 50f
+      val gcX   = OUT_W / 2f - gcML_fixed   // Y-axis exactly at center line
+      val gcW   = OUT_W - gcX - hPad         // from gcX to right edge - padding
+      val gcH   = BAR_H * 0.80f
       val gcTop2 = barTop + (BAR_H - gcH) / 2f
 
-      val gcML = gcW * 0.12f; val gcMB = gcH * 0.12f
-      val gcMR = gcW * 0.06f; val gcMT = gcH * 0.08f
+      val gcML = gcML_fixed
+      val gcMB = gcH * 0.17f
+      val gcMR = gcW * 0.025f
+      val gcMT = gcH * 0.06f
       val gcPlotW = gcW - gcML - gcMR
       val gcPlotH = gcH - gcMT - gcMB
 
-      val gcVals  = (1..currentDay).map { d -> 3.0 * Math.pow(1.01, d.toDouble()) }
-      val gcMinV  = gcVals.first()
-      val gcMaxV  = gcVals.last()
-      val gcRange = maxOf(gcMaxV - gcMinV, 0.001)
+      val gcVals  = (1..maxOf(currentDay, 1)).map { d -> 3.0 * Math.pow(1.01, d.toDouble()) }
 
-      // Axis paint
-      val axisPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color       = Color.argb(90, 255, 255, 255)
+      // xMax: ~1x future buffer so future section equals past section
+      val xMax = maxOf(currentDay * 2, 10).toDouble()
+
+      // Y range: scale to predicted value at xMax (future dashed line fits in frame)
+      val gcMinV  = 3.0
+      val gcMaxV  = Math.ceil(3.0 * Math.pow(1.01, xMax) / 0.5) * 0.5
+      val gcRange = maxOf(gcMaxV - gcMinV, 0.1)
+
+      val labelFS = gcW * 0.028f
+
+      // Coordinate helpers
+      val xToCanvas = { day: Double -> gcX + gcML + (day / xMax).toFloat() * gcPlotW }
+      val yToCanvas = { v: Double -> gcTop2 + gcMT + gcPlotH - ((v - gcMinV) / gcRange).toFloat() * gcPlotH }
+
+      // Load monospace font for graph labels
+      val monoTypeface: Typeface = try {
+        Typeface.createFromAsset(context.assets, "fonts/SpaceMono-Regular.ttf")
+      } catch (e: Exception) { Typeface.MONOSPACE }
+
+      // Y guide lines + labels
+      val guidePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color       = Color.argb(25, 255, 255, 255)
         strokeWidth = 0.5f
         style       = Paint.Style.STROKE
+        pathEffect  = DashPathEffect(floatArrayOf(3f, 4f), 0f)
+      }
+      val yLabelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        textSize  = labelFS
+        color     = Color.argb(128, 255, 255, 255)
+        typeface  = monoTypeface
+        textAlign = Paint.Align.RIGHT
+      }
+      var yvLabel = gcMinV
+      while (yvLabel <= gcMaxV + 0.001) {
+        val ly = yToCanvas(yvLabel)
+        canvas.drawLine(gcX + gcML, ly, gcX + gcML + gcPlotW, ly, guidePaint)
+        canvas.drawText(String.format("%.1f", yvLabel), gcX + gcML - 4f, ly + labelFS * 0.4f, yLabelPaint)
+        yvLabel += 0.5
       }
 
-      // L-shaped axis
+      // L-shaped axes
+      val axisPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color       = Color.argb(128, 255, 255, 255)
+        strokeWidth = 1.2f
+        style       = Paint.Style.STROKE
+      }
       val axisPath = Path().apply {
         moveTo(gcX + gcML, gcTop2 + gcMT)
         lineTo(gcX + gcML, gcTop2 + gcMT + gcPlotH)
@@ -294,10 +333,34 @@ class VideoOverlayModule : Module() {
       }
       canvas.drawPath(axisPath, axisPaint)
 
-      // Curve line
+      // X-axis labels: DAY 1, every 10 days (past only), current day (red)
+      val xLabelDays = mutableListOf(1)
+      var xd2 = 10
+      while (xd2 < currentDay) { xLabelDays.add(xd2); xd2 += 10 }
+      if (!xLabelDays.contains(currentDay)) xLabelDays.add(currentDay)
+
+      val tickPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color       = Color.argb(102, 255, 255, 255)
+        strokeWidth = 0.5f
+        style       = Paint.Style.STROKE
+      }
+      for (day in xLabelDays) {
+        val lx = xToCanvas(day.toDouble())
+        val isCurrentDay = day == currentDay
+        canvas.drawLine(lx, gcTop2 + gcMT + gcPlotH, lx, gcTop2 + gcMT + gcPlotH + 4f, tickPaint)
+        val xLabelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+          textSize  = labelFS
+          color     = if (isCurrentDay) Color.argb(230, 255, 51, 51) else Color.argb(115, 255, 255, 255)
+          typeface  = monoTypeface
+          textAlign = Paint.Align.CENTER
+        }
+        canvas.drawText("DAY $day", lx, gcTop2 + gcMT + gcPlotH + labelFS + 6f, xLabelPaint)
+      }
+
+      // Solid growth line: DAY 1 → current (white solid)
       val curvePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color       = Color.argb(179, 255, 255, 255)  // 70% white
-        strokeWidth = 1.0f
+        color       = Color.argb(230, 255, 255, 255)
+        strokeWidth = 2.5f
         style       = Paint.Style.STROKE
         strokeCap   = Paint.Cap.ROUND
         strokeJoin  = Paint.Join.ROUND
@@ -305,21 +368,43 @@ class VideoOverlayModule : Module() {
       if (currentDay > 1) {
         val curvePath = Path()
         gcVals.forEachIndexed { i, v ->
-          val px = gcX + gcML + (i.toFloat() / (gcVals.size - 1)) * gcPlotW
-          val py = gcTop2 + gcMT + gcPlotH - ((v - gcMinV) / gcRange).toFloat() * gcPlotH
+          val px = xToCanvas((i + 1).toDouble())
+          val py = yToCanvas(v)
           if (i == 0) curvePath.moveTo(px, py) else curvePath.lineTo(px, py)
         }
         canvas.drawPath(curvePath, curvePaint)
       }
 
-      // Latest point — red dot
+      // Dashed future prediction: current day → xMax (white dashed)
+      val futurePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color       = Color.argb(230, 255, 255, 255)
+        strokeWidth = 2.0f
+        style       = Paint.Style.STROKE
+        strokeCap   = Paint.Cap.ROUND
+        pathEffect  = DashPathEffect(floatArrayOf(8f, 6f), 0f)
+      }
+      val futurePath = Path()
+      val futureStep = maxOf(1, ((xMax - currentDay) / 80.0).toInt())
+      var fd = currentDay
+      var futureStarted = false
+      while (fd <= xMax.toInt()) {
+        val fv = 3.0 * Math.pow(1.01, fd.toDouble())
+        val px = xToCanvas(fd.toDouble())
+        val py = yToCanvas(fv)
+        if (!futureStarted) { futurePath.moveTo(px, py); futureStarted = true }
+        else futurePath.lineTo(px, py)
+        fd += futureStep
+      }
+      if (futureStarted) canvas.drawPath(futurePath, futurePaint)
+
+      // Latest data point — red dot
       val lastDotPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.rgb(255, 51, 51)
         style = Paint.Style.FILL
       }
-      val dotX2 = gcX + gcML + (if (currentDay > 1) gcPlotW else gcPlotW / 2f)
-      val dotY2 = gcTop2 + gcMT + gcPlotH - ((gcMaxV - gcMinV) / gcRange).toFloat() * gcPlotH
-      canvas.drawCircle(dotX2, dotY2, gcW * 0.03f, lastDotPaint)
+      val dotX2 = xToCanvas(currentDay.toDouble())
+      val dotY2 = yToCanvas(gcVals.last())
+      canvas.drawCircle(dotX2, dotY2, gcW * 0.014f, lastDotPaint)
 
       return canvas9x16
     }

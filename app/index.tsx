@@ -2309,9 +2309,8 @@ export default function Page() {
           const gcVals   = Array.from({ length: streak }, (_, i) => 3 * Math.pow(1.01, i + 1));
           const curVal   = gcVals[gcVals.length - 1];
 
-          // X-axis: 1.5× future buffer — current day at ~40%, future fills remaining 60%
-          const futureBuffer = Math.max(Math.ceil(streak * 1.5 / 5) * 5, 10);
-          const xMax = streak + futureBuffer;
+          // xMax: ~1x future buffer so future section equals past section
+          const xMax = Math.max(streak * 2, 10);
 
           // Y-axis: scale to predicted value at xMax so current position stays near center
           const gcMinV  = 3.0;
@@ -3311,7 +3310,7 @@ Email: ristu.japan@gmail.com`;
 
         // "DAY 015" — zero-padded 3 digits
         const dayStr  = `DAY ${String(currentDay).padStart(3, '0')}`;
-        const habitStr = `HABIT: ${habitName}`;
+        const habitStr = habitName;
 
         // Font sizes (relative to canvas width, matching native pixel sizes ÷ 1080 × canvasW)
         const hPad     = canvasW * (44 / 1080);
@@ -3442,7 +3441,7 @@ Email: ristu.japan@gmail.com`;
                 fontFamily: 'BebasNeue-Regular',
                 ...textShadow,
               }}>{lowerTs}</Text>
-            {/* "HABIT: NAME" — constrained to left text area */}
+            {/* Habit name (no prefix) — constrained to left text area */}
             <Text
               numberOfLines={1}
               style={{
@@ -3453,15 +3452,16 @@ Email: ristu.japan@gmail.com`;
                 ...textShadow,
               }}>{habitStr}</Text>
 
-            {/* ── Growth curve full graph (lower right, starts after left text area) ── */}
+            {/* ── Growth curve full graph (right half: Y-axis pinned at screen center) ── */}
             {currentDay > 0 && (() => {
-              // Graph starts immediately right of text area (leftTextW + hPad gap)
-              const gcLeft = hPad + leftTextW + hPad * 0.5;
+              // Y-axis pinned at canvasW/2: left half = text area, right half = graph area
+              const gcML_fixed = canvasW * (50 / 1080);
+              const gcLeft = canvasW / 2 - gcML_fixed;  // Y-axis at exactly canvasW/2
               const gcW    = canvasW - gcLeft - hPad * 0.5;
               const gcH    = barH * 0.80;
               const gcTop  = lowerBarTopY + (barH - gcH) / 2;
 
-              const mL = gcW * 0.068;
+              const mL = gcML_fixed;  // fixed, not percentage — ensures Y-axis stays at center
               const mB = gcH * 0.17;
               const mR = gcW * 0.025;
               const mT = gcH * 0.06;
@@ -3471,9 +3471,8 @@ Email: ristu.japan@gmail.com`;
               const gcVals = Array.from({ length: currentDay }, (_, i) => 3 * Math.pow(1.01, i + 1));
               const curVal = gcVals[gcVals.length - 1] ?? 3.0;
 
-              // X-axis: 1.5× future buffer — current day at ~40%, future fills remaining 60%
-              const futureBuffer = Math.max(Math.ceil(currentDay * 1.5 / 5) * 5, 10);
-              const xMax = currentDay + futureBuffer;
+              // xMax: ~1x future buffer so future section equals past section
+              const xMax = Math.max(currentDay * 2, 10);
 
               // Y-axis: scale to predicted value at xMax so current position stays near center
               const gcMinV = 3.0;
