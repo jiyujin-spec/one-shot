@@ -412,59 +412,141 @@ public class VideoOverlayModule: Module {
         parentLayer.addSublayer(makeLayer(habitStr, fontName: bebas, fontSize: habitFS,
                                           x: hPad, y: habitY, width: habitW))
 
-        // ── GROWTH CURVE (lower-right) ─────────────────────────────────────────
-        let gcW: CGFloat  = BAR_H * 0.55
-        let gcH: CGFloat  = BAR_H * 0.48
-        let gcX: CGFloat  = OUT_W - hPad - gcW
+        // ── GROWTH CURVE — Full HISTORY-style graph (lower center-right) ──────
+        let gcW: CGFloat  = OUT_W * 0.56
+        let gcH: CGFloat  = BAR_H * 0.80
+        let gcX: CGFloat  = OUT_W * 0.40
         let gcY: CGFloat  = barTop + (BAR_H - gcH) / 2
 
-        let gcML: CGFloat = gcW * 0.12, gcMB: CGFloat = gcH * 0.12
-        let gcMR: CGFloat = gcW * 0.06, gcMT: CGFloat = gcH * 0.08
+        let gcML: CGFloat = gcW * 0.068
+        let gcMB: CGFloat = gcH * 0.17
+        let gcMR: CGFloat = gcW * 0.025
+        let gcMT: CGFloat = gcH * 0.06
         let gcPlotW = gcW - gcML - gcMR
         let gcPlotH = gcH - gcMT - gcMB
 
-        let gcVals  = (1...currentDay).map { d in 3.0 * pow(1.01, Double(d)) }
-        let gcMinV  = gcVals.first ?? 3.0
-        let gcMaxV  = gcVals.last  ?? 3.0
-        let gcRange = max(gcMaxV - gcMinV, 0.001)
+        let gcVals  = (1...max(currentDay, 1)).map { d in 3.0 * pow(1.01, Double(d)) }
+        let curVal  = gcVals.last ?? 3.0
 
-        // X-axis extends slightly beyond current day to hint at future growth
-        let xMax = Double(currentDay + 7)
+        // X range: extend to next milestone for future whitespace
+        var xMaxInt = max(currentDay * 2, 30)
+        for m in [30, 60, 90, 180, 365] where m > currentDay { xMaxInt = m; break }
+        let xMax = Double(xMaxInt)
 
-        // L-shaped axis — brighter for visibility
+        // Y range: snap to 0.5 steps
+        let gcMinV  = 3.0
+        let gcMaxV  = (curVal / 0.5).rounded(.up) * 0.5
+        let gcRange = max(gcMaxV - gcMinV, 0.1)
+
+        let labelFS: CGFloat = gcW * 0.028
+
+        // Y labels: dotted guide lines + text
+        var yvLabel = gcMinV
+        while yvLabel <= gcMaxV + 0.001 {
+          let ly = gcY + gcMT + gcPlotH - CGFloat((yvLabel - gcMinV) / gcRange) * gcPlotH
+
+          // Dotted guide line
+          let guidePath = CGMutablePath()
+          guidePath.move(to:    CGPoint(x: gcX + gcML,           y: ly))
+          guidePath.addLine(to: CGPoint(x: gcX + gcML + gcPlotW, y: ly))
+          let guideLayer = CAShapeLayer()
+          guideLayer.path            = guidePath
+          guideLayer.strokeColor     = UIColor(white: 1, alpha: 0.1).cgColor
+          guideLayer.fillColor       = UIColor.clear.cgColor
+          guideLayer.lineWidth       = 0.5
+          guideLayer.lineDashPattern = [3, 4]
+          parentLayer.addSublayer(guideLayer)
+
+          // Y label
+          let yLabel = CATextLayer()
+          yLabel.string          = String(format: "%.1f", yvLabel)
+          yLabel.fontSize        = labelFS
+          yLabel.foregroundColor = UIColor(white: 1, alpha: 0.5).cgColor
+          yLabel.alignmentMode   = .right
+          yLabel.contentsScale   = 2.0
+          yLabel.font            = CTFontCreateWithName("Courier" as CFString, labelFS, nil)
+          yLabel.frame = CGRect(x: gcX, y: ly - labelFS * 0.6,
+                                width: gcML - 4, height: labelFS + 4)
+          parentLayer.addSublayer(yLabel)
+
+          yvLabel += 0.5
+        }
+
+        // L-shaped axes (brighter, thicker)
         let axisPath = CGMutablePath()
-        axisPath.move(to:    CGPoint(x: gcX + gcML, y: gcY + gcMT))
-        axisPath.addLine(to: CGPoint(x: gcX + gcML, y: gcY + gcMT + gcPlotH))
+        axisPath.move(to:    CGPoint(x: gcX + gcML,           y: gcY + gcMT))
+        axisPath.addLine(to: CGPoint(x: gcX + gcML,           y: gcY + gcMT + gcPlotH))
         axisPath.addLine(to: CGPoint(x: gcX + gcML + gcPlotW, y: gcY + gcMT + gcPlotH))
         let axisLayer = CAShapeLayer()
         axisLayer.path        = axisPath
-        axisLayer.strokeColor = UIColor(white: 1, alpha: 0.6).cgColor
+        axisLayer.strokeColor = UIColor(white: 1, alpha: 0.5).cgColor
         axisLayer.fillColor   = UIColor.clear.cgColor
-        axisLayer.lineWidth   = 0.8
+        axisLayer.lineWidth   = 1.2
         parentLayer.addSublayer(axisLayer)
 
-        // Curve line — scaled to extended X-axis (currentDay not at right edge)
+        // X-axis labels: DAY 1, DAY 10, ..., current day
+        var xLabelDays: [Int] = [1]
+        var xd = 10
+        while xd < xMaxInt {
+          if xd < currentDay { xLabelDays.append(xd) }
+          xd += 10
+        }
+        if !xLabelDays.contains(currentDay) { xLabelDays.append(currentDay) }
+
+        for day in xLabelDays {
+          let lx = gcX + gcML + CGFloat(Double(day) / xMax) * gcPlotW
+          let isCurrentDay = day == currentDay
+
+          // Tick mark
+          let tickPath = CGMutablePath()
+          tickPath.move(to:    CGPoint(x: lx, y: gcY + gcMT + gcPlotH))
+          tickPath.addLine(to: CGPoint(x: lx, y: gcY + gcMT + gcPlotH + 4))
+          let tickLayer = CAShapeLayer()
+          tickLayer.path        = tickPath
+          tickLayer.strokeColor = UIColor(white: 1, alpha: 0.4).cgColor
+          tickLayer.fillColor   = UIColor.clear.cgColor
+          tickLayer.lineWidth   = 0.5
+          parentLayer.addSublayer(tickLayer)
+
+          // X label
+          let xLabel = CATextLayer()
+          xLabel.string = "DAY \(day)"
+          xLabel.fontSize = labelFS
+          xLabel.foregroundColor = isCurrentDay
+            ? UIColor(red: 1, green: 0.2, blue: 0.2, alpha: 0.9).cgColor
+            : UIColor(white: 1, alpha: 0.45).cgColor
+          xLabel.alignmentMode  = .center
+          xLabel.contentsScale  = 2.0
+          xLabel.font           = CTFontCreateWithName("Courier" as CFString, labelFS, nil)
+          let xLabelW: CGFloat  = labelFS * 5.5
+          xLabel.frame = CGRect(x: lx - xLabelW / 2,
+                                y: gcY + gcMT + gcPlotH + 6,
+                                width: xLabelW, height: labelFS + 4)
+          parentLayer.addSublayer(xLabel)
+        }
+
+        // Growth curve
         if currentDay > 1 {
           let curvePath = CGMutablePath()
           for (i, v) in gcVals.enumerated() {
             let px = gcX + gcML + CGFloat(Double(i + 1) / xMax) * gcPlotW
             let py = gcY + gcMT + gcPlotH - CGFloat((v - gcMinV) / gcRange) * gcPlotH
-            if i == 0 { curvePath.move(to: CGPoint(x: px, y: py)) }
+            if i == 0 { curvePath.move(to:    CGPoint(x: px, y: py)) }
             else       { curvePath.addLine(to: CGPoint(x: px, y: py)) }
           }
           let curveLayer = CAShapeLayer()
           curveLayer.path        = curvePath
           curveLayer.strokeColor = UIColor(white: 1, alpha: 0.9).cgColor
           curveLayer.fillColor   = UIColor.clear.cgColor
-          curveLayer.lineWidth   = 1.5
+          curveLayer.lineWidth   = 2.5
           parentLayer.addSublayer(curveLayer)
         }
 
-        // Latest data point — red dot (positioned using extended X scale)
+        // Latest data point — red dot
         let lastVal = gcVals.last ?? gcMinV
         let dotX    = gcX + gcML + CGFloat(Double(currentDay) / xMax) * gcPlotW
         let dotY    = gcY + gcMT + gcPlotH - CGFloat((lastVal - gcMinV) / gcRange) * gcPlotH
-        let dotR: CGFloat = gcW * 0.03
+        let dotR: CGFloat = gcW * 0.014
         let dotLayer = CAShapeLayer()
         dotLayer.path      = CGPath(ellipseIn: CGRect(x: dotX - dotR, y: dotY - dotR,
                                                        width: dotR * 2, height: dotR * 2), transform: nil)
