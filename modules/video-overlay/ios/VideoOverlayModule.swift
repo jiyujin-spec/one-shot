@@ -286,7 +286,7 @@ public class VideoOverlayModule: Module {
         func makeBracket(_ path: CGMutablePath) -> CAShapeLayer {
           let s = CAShapeLayer()
           s.path        = path
-          s.strokeColor = UIColor.white.cgColor
+          s.strokeColor = UIColor(white: 1, alpha: 0.7).cgColor  // 70% opacity
           s.fillColor   = UIColor.clear.cgColor
           s.lineWidth   = bStroke
           s.lineCap     = .butt
@@ -390,24 +390,83 @@ public class VideoOverlayModule: Module {
         parentLayer.addSublayer(oneShotLayer)
 
         // ── LOWER BAR ─────────────────────────────────────────────────────────
-        // Left: timestamp, Right: HABIT label — both Y-centred in lower bar
+        // Both lines LEFT-aligned, stacked vertically, centred together in bar.
+        // Right side is free for the growth curve graph.
 
-        let barTop: CGFloat    = BAR_H + OUT_W          // 1500
+        let barTop: CGFloat     = BAR_H + OUT_W          // 1500
         let barCenterY: CGFloat = barTop + BAR_H / 2    // 1710
-
-        let lowerTsFont = uiFont(bebas, lowerTsFS)
-        let lowerTsW    = textWidth(lowerTimestamp, lowerTsFont) + 12
-        let lowerTsY    = barCenterY - (lowerTsFS + 10) / 2
 
         let habitStr  = "HABIT: \(habitName.uppercased())"
         let habitFont = uiFont(bebas, habitFS)
         let habitW    = textWidth(habitStr, habitFont) + 16
-        let habitY    = barCenterY - (habitFS + 10) / 2
+        let lowerTsFont = uiFont(bebas, lowerTsFS)
+        let lowerTsW    = textWidth(lowerTimestamp, lowerTsFont) + 12
+
+        let lineGap: CGFloat  = 10.0
+        let twoLineH: CGFloat = (lowerTsFS + 10) + lineGap + (habitFS + 10)
+        let lowerTsY          = barCenterY - twoLineH / 2
+        let habitY            = lowerTsY + (lowerTsFS + 10) + lineGap
 
         parentLayer.addSublayer(makeLayer(lowerTimestamp, fontName: bebas, fontSize: lowerTsFS,
                                           x: hPad, y: lowerTsY, width: lowerTsW))
         parentLayer.addSublayer(makeLayer(habitStr, fontName: bebas, fontSize: habitFS,
-                                          x: hPad, y: habitY, width: OUT_W - 2 * hPad, align: .right))
+                                          x: hPad, y: habitY, width: habitW))
+
+        // ── GROWTH CURVE (lower-right) ─────────────────────────────────────────
+        let gcW: CGFloat  = BAR_H * 0.55
+        let gcH: CGFloat  = BAR_H * 0.48
+        let gcX: CGFloat  = OUT_W - hPad - gcW
+        let gcY: CGFloat  = barTop + (BAR_H - gcH) / 2
+
+        let gcML: CGFloat = gcW * 0.12, gcMB: CGFloat = gcH * 0.12
+        let gcMR: CGFloat = gcW * 0.06, gcMT: CGFloat = gcH * 0.08
+        let gcPlotW = gcW - gcML - gcMR
+        let gcPlotH = gcH - gcMT - gcMB
+
+        let gcVals  = (1...currentDay).map { d in 3.0 * pow(1.01, Double(d)) }
+        let gcMinV  = gcVals.first ?? 3.0
+        let gcMaxV  = gcVals.last  ?? 3.0
+        let gcRange = max(gcMaxV - gcMinV, 0.001)
+
+        // L-shaped axis
+        let axisPath = CGMutablePath()
+        axisPath.move(to:    CGPoint(x: gcX + gcML, y: gcY + gcMT))
+        axisPath.addLine(to: CGPoint(x: gcX + gcML, y: gcY + gcMT + gcPlotH))
+        axisPath.addLine(to: CGPoint(x: gcX + gcML + gcPlotW, y: gcY + gcMT + gcPlotH))
+        let axisLayer = CAShapeLayer()
+        axisLayer.path        = axisPath
+        axisLayer.strokeColor = UIColor(white: 1, alpha: 0.35).cgColor
+        axisLayer.fillColor   = UIColor.clear.cgColor
+        axisLayer.lineWidth   = 0.5
+        parentLayer.addSublayer(axisLayer)
+
+        // Curve line
+        if currentDay > 1 {
+          let curvePath = CGMutablePath()
+          for (i, v) in gcVals.enumerated() {
+            let px = gcX + gcML + CGFloat(i) / CGFloat(gcVals.count - 1) * gcPlotW
+            let py = gcY + gcMT + gcPlotH - CGFloat((v - gcMinV) / gcRange) * gcPlotH
+            if i == 0 { curvePath.move(to: CGPoint(x: px, y: py)) }
+            else       { curvePath.addLine(to: CGPoint(x: px, y: py)) }
+          }
+          let curveLayer = CAShapeLayer()
+          curveLayer.path        = curvePath
+          curveLayer.strokeColor = UIColor(white: 1, alpha: 0.7).cgColor
+          curveLayer.fillColor   = UIColor.clear.cgColor
+          curveLayer.lineWidth   = 1.0
+          parentLayer.addSublayer(curveLayer)
+        }
+
+        // Latest data point — red dot
+        let lastVal = gcVals.last ?? gcMinV
+        let dotX    = gcX + gcML + (currentDay > 1 ? gcPlotW : gcPlotW / 2)
+        let dotY    = gcY + gcMT + gcPlotH - CGFloat((lastVal - gcMinV) / gcRange) * gcPlotH
+        let dotR: CGFloat = gcW * 0.03
+        let dotLayer = CAShapeLayer()
+        dotLayer.path      = CGPath(ellipseIn: CGRect(x: dotX - dotR, y: dotY - dotR,
+                                                       width: dotR * 2, height: dotR * 2), transform: nil)
+        dotLayer.fillColor = UIColor(red: 1, green: 0.2, blue: 0.2, alpha: 1).cgColor
+        parentLayer.addSublayer(dotLayer)
 
         // ── Video composition ──────────────────────────────────────────────────
         let videoComposition = AVMutableVideoComposition()

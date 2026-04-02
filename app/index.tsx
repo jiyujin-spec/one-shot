@@ -27,7 +27,7 @@ import { CameraView, CameraType, useCameraPermissions } from 'expo-camera';
 import * as MediaLibrary from 'expo-media-library';
 import * as Sharing from 'expo-sharing';
 import { Feather, Ionicons } from '@expo/vector-icons';
-import Svg, { Polyline } from 'react-native-svg';
+import Svg, { Polyline, Line, Circle } from 'react-native-svg';
 import { Video, ResizeMode } from 'expo-av';
 import { LinearGradient } from 'expo-linear-gradient';
 import MaskedView from '@react-native-masked-view/masked-view';
@@ -2301,6 +2301,58 @@ export default function Page() {
           })}
         </View>
 
+        {/* ── Growth Curve Chart ── */}
+        {appState.streak > 0 && (() => {
+          const streak   = appState.streak;
+          const chartW   = Dimensions.get('window').width - 32;
+          const chartH   = 180;
+          const gcVals   = Array.from({ length: streak }, (_, i) => 3 * Math.pow(1.01, i + 1));
+          const curVal   = gcVals[gcVals.length - 1];
+          const gcMinV   = gcVals[0];
+          const gcMaxV   = curVal;
+          const gcRange  = Math.max(gcMaxV - gcMinV, 0.01);
+
+          const mL = 28, mB = 20, mR = 10, mT = 12;
+          const plotW = chartW - mL - mR;
+          const plotH = chartH - mT - mB;
+
+          const pts = gcVals.map((v, i) => ({
+            x: mL + (streak > 1 ? (i / (streak - 1)) * plotW : plotW / 2),
+            y: mT + plotH - ((v - gcMinV) / gcRange) * plotH,
+          }));
+          const lastPt = pts[pts.length - 1];
+
+          return (
+            <View style={{ paddingHorizontal: 16, marginTop: 24, marginBottom: 16 }}>
+              <Text style={{ fontFamily: 'BebasNeue-Regular', color: '#555', fontSize: 11, letterSpacing: 2, marginBottom: 4 }}>
+                GROWTH CURVE
+              </Text>
+              <Text style={{ fontFamily: 'BebasNeue-Regular', color: '#FF3333', fontSize: 40, lineHeight: 44, marginBottom: 10 }}>
+                {curVal.toFixed(2)}x
+              </Text>
+              <Svg width={chartW} height={chartH}>
+                {/* Y axis */}
+                <Line x1={mL} y1={mT} x2={mL} y2={mT + plotH}
+                  stroke="rgba(255,255,255,0.2)" strokeWidth={0.5} />
+                {/* X axis */}
+                <Line x1={mL} y1={mT + plotH} x2={mL + plotW} y2={mT + plotH}
+                  stroke="rgba(255,255,255,0.2)" strokeWidth={0.5} />
+                {/* Growth line */}
+                {streak > 1 && (
+                  <Polyline
+                    points={pts.map(p => `${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(' ')}
+                    fill="none"
+                    stroke="rgba(255,255,255,0.85)"
+                    strokeWidth={1.5}
+                  />
+                )}
+                {/* Latest point — red */}
+                <Circle cx={lastPt.x} cy={lastPt.y} r={4} fill="#FF3333" />
+              </Svg>
+            </View>
+          );
+        })()}
+
         {/* ── デイリー詳細シート（今日のみ表示・過去日は開かないガード）── */}
         <Modal
           visible={!!selectedDate && selectedDate === todayStr}
@@ -3191,11 +3243,15 @@ Email: ristu.japan@gmail.com`;
         const habitFS  = canvasW * (88 / 1080);
         const lowerTsFS = canvasW * (60 / 1080);
 
-        const logoTopY = barH * 0.22;
+        // Logo Y: center aligned with DAY text (both vertically centered in upper bar)
+        const logoTopY = (barH - logoFS) / 2;
 
-        const bPad    = barH * 0.20;
-        const habitY  = canvasH - bPad - habitFS - 10;
-        const lowerTsY = habitY - 14 - lowerTsFS - 8;
+        // Lower bar: two lines stacked on left, centered together vertically in bar
+        const lowerBarTopY   = canvasH - barH;
+        const lowerLineGap   = canvasW * (12 / 1080);
+        const twoLineH       = lowerTsFS + lowerLineGap + habitFS;
+        const lowerTsY       = lowerBarTopY + (barH - twoLineH) / 2;
+        const habitY         = lowerTsY + lowerTsFS + lowerLineGap;
 
         // Bracket (fixed px)
         const bInset = canvasW * (8 / 1080);
@@ -3238,29 +3294,30 @@ Email: ristu.japan@gmail.com`;
               }} />
             )}
 
-            {/* TL corner bracket ┌ */}
+            {/* TL corner bracket ┌ — opacity 70% for lens-finder feel */}
             <View style={{
               position: 'absolute',
               top: barH + bInset, left: bInset,
               width: bArm, height: bArm,
               borderTopWidth: bStroke, borderLeftWidth: bStroke,
-              borderColor: '#fff',
+              borderColor: 'rgba(255,255,255,0.7)',
             }} />
-            {/* BR corner bracket ┘ */}
+            {/* BR corner bracket ┘ — opacity 70% */}
             <View style={{
               position: 'absolute',
               bottom: barH + bInset, right: bInset,
               width: bArm, height: bArm,
               borderBottomWidth: bStroke, borderRightWidth: bStroke,
-              borderColor: '#fff',
+              borderColor: 'rgba(255,255,255,0.7)',
             }} />
 
             {/* ── Upper bar ── */}
-            {/* "ONE SHOT" logo */}
+            {/* "ONE SHOT" logo — wide kerning 0.15em, Y-center aligned with DAY */}
             <Text style={{
               position: 'absolute', top: logoTopY, left: hPad,
               fontSize: logoFS, color: '#fff',
               fontFamily: 'BebasNeue-Regular',
+              letterSpacing: logoFS * 0.15,
               ...textShadow,
             }}>ONE SHOT</Text>
             {/* "DAY 015" — right-aligned, vertically centred in upper bar */}
@@ -3289,6 +3346,55 @@ Email: ristu.japan@gmail.com`;
               fontFamily: 'BebasNeue-Regular',
               ...textShadow,
             }}>{habitStr}</Text>
+
+            {/* ── Growth curve mini-graph (lower-right) ── */}
+            {currentDay > 0 && (() => {
+              const gcW    = barH * 0.55;
+              const gcH    = barH * 0.48;
+              const gcLeft = canvasW - hPad - gcW;
+              const gcTop  = (canvasH - barH) + (barH - gcH) / 2;
+
+              const mL = gcW * 0.12, mB = gcH * 0.12, mR = gcW * 0.06, mT = gcH * 0.08;
+              const plotW = gcW - mL - mR;
+              const plotH = gcH - mT - mB;
+
+              const gcVals = Array.from({ length: currentDay }, (_, i) => 3 * Math.pow(1.01, i + 1));
+              const gcMinV = gcVals[0];
+              const gcMaxV = gcVals[gcVals.length - 1];
+              const gcRange = Math.max(gcMaxV - gcMinV, 0.01);
+
+              const pts = gcVals.map((v, i) => ({
+                x: mL + (gcVals.length > 1 ? (i / (gcVals.length - 1)) * plotW : plotW / 2),
+                y: mT + plotH - ((v - gcMinV) / gcRange) * plotH,
+              }));
+              const lastPt = pts[pts.length - 1];
+
+              return (
+                <Svg
+                  key="gc-mini"
+                  width={gcW}
+                  height={gcH}
+                  style={{ position: 'absolute', top: gcTop, left: gcLeft }}
+                >
+                  {/* L-shaped axis */}
+                  <Line x1={mL} y1={mT} x2={mL} y2={mT + plotH}
+                    stroke="rgba(255,255,255,0.35)" strokeWidth={0.5} />
+                  <Line x1={mL} y1={mT + plotH} x2={mL + plotW} y2={mT + plotH}
+                    stroke="rgba(255,255,255,0.35)" strokeWidth={0.5} />
+                  {/* Growth curve line */}
+                  {gcVals.length > 1 && (
+                    <Polyline
+                      points={pts.map(p => `${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(' ')}
+                      fill="none"
+                      stroke="rgba(255,255,255,0.7)"
+                      strokeWidth={0.8}
+                    />
+                  )}
+                  {/* Latest point — red */}
+                  <Circle cx={lastPt.x} cy={lastPt.y} r={gcW * 0.03} fill="#FF3333" />
+                </Svg>
+              );
+            })()}
           </View>
         );
       })()}
@@ -4229,8 +4335,7 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     paddingHorizontal: 8,
     paddingTop: 16,
-    paddingBottom: 16,
-    justifyContent: 'center',
+    paddingBottom: 32,
   },
   calHeader: {
     flexDirection: 'row',
