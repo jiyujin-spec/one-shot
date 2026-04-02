@@ -3430,53 +3430,118 @@ Email: ristu.japan@gmail.com`;
               ...textShadow,
             }}>{habitStr}</Text>
 
-            {/* ── Growth curve mini-graph (lower-right) ── */}
+            {/* ── Growth curve full graph (lower center-right, HISTORY style) ── */}
             {currentDay > 0 && (() => {
-              const gcW    = barH * 0.55;
-              const gcH    = barH * 0.48;
-              const gcLeft = canvasW - hPad - gcW;
-              const gcTop  = (canvasH - barH) + (barH - gcH) / 2;
+              // Full HISTORY-style graph spanning center-to-right of lower bar
+              const gcW    = canvasW - hPad - canvasW * 0.40;
+              const gcH    = barH * 0.80;
+              const gcLeft = canvasW * 0.40;
+              const gcTop  = lowerBarTopY + (barH - gcH) / 2;
 
-              const mL = gcW * 0.12, mB = gcH * 0.12, mR = gcW * 0.06, mT = gcH * 0.08;
+              const mL = gcW * 0.068;
+              const mB = gcH * 0.17;
+              const mR = gcW * 0.025;
+              const mT = gcH * 0.06;
               const plotW = gcW - mL - mR;
               const plotH = gcH - mT - mB;
 
-              // X-axis extends slightly past current day to hint at future growth
-              const xMax = currentDay + 7;
               const gcVals = Array.from({ length: currentDay }, (_, i) => 3 * Math.pow(1.01, i + 1));
-              const gcMinV = gcVals[0] ?? 3.0;
-              const gcMaxV = gcVals[gcVals.length - 1] ?? 3.0;
-              const gcRange = Math.max(gcMaxV - gcMinV, 0.01);
+              const curVal = gcVals[gcVals.length - 1] ?? 3.0;
 
-              const pts = gcVals.map((v, i) => ({
-                x: mL + ((i + 1) / xMax) * plotW,
-                y: mT + plotH - ((v - gcMinV) / gcRange) * plotH,
-              }));
+              // X range: extend to next milestone for future whitespace
+              const milestones = [30, 60, 90, 180, 365];
+              const xMax = milestones.find(m => m > currentDay) ?? Math.ceil(currentDay * 1.5 / 30) * 30;
+
+              // Y range: snap to 0.5 steps
+              const gcMinV = 3.0;
+              const gcMaxV = Math.ceil(curVal / 0.5) * 0.5;
+              const gcRange = Math.max(gcMaxV - gcMinV, 0.1);
+
+              const xToSvg = (day: number) => mL + (day / xMax) * plotW;
+              const yToSvg = (v: number) => mT + plotH - ((v - gcMinV) / gcRange) * plotH;
+
+              const pts = gcVals.map((v, i) => ({ x: xToSvg(i + 1), y: yToSvg(v) }));
               const lastPt = pts[pts.length - 1];
+
+              // Y labels: 0.5-step increments
+              const yLabels: number[] = [];
+              for (let yv = gcMinV; yv <= gcMaxV + 0.001; yv += 0.5) {
+                yLabels.push(parseFloat(yv.toFixed(1)));
+              }
+
+              // X labels: DAY 1, intermediate DAY 10s, current day
+              const xLabelDays: number[] = [1];
+              for (let d = 10; d < xMax; d += 10) {
+                if (d < currentDay) xLabelDays.push(d);
+              }
+              if (!xLabelDays.includes(currentDay)) xLabelDays.push(currentDay);
+
+              const labelFS = Math.max(gcW * 0.028, 5.5);
+              const dotR    = gcW * 0.014;
 
               return (
                 <Svg
-                  key="gc-mini"
+                  key="gc-full"
                   width={gcW}
                   height={gcH}
                   style={{ position: 'absolute', top: gcTop, left: gcLeft }}
                 >
-                  {/* L-shaped axis — brighter for visibility */}
+                  {/* Y-axis dotted guide lines + labels */}
+                  {yLabels.map(yv => {
+                    const ly = yToSvg(yv);
+                    return (
+                      <React.Fragment key={`yg-${yv}`}>
+                        <Line
+                          x1={mL} y1={ly} x2={mL + plotW} y2={ly}
+                          stroke="rgba(255,255,255,0.1)"
+                          strokeWidth={0.5}
+                          strokeDasharray="3,4"
+                        />
+                        <SvgText
+                          x={mL - 3} y={ly + labelFS * 0.38}
+                          fontSize={labelFS}
+                          fill="rgba(255,255,255,0.5)"
+                          fontFamily="Courier"
+                          textAnchor="end"
+                        >{yv.toFixed(1)}</SvgText>
+                      </React.Fragment>
+                    );
+                  })}
+                  {/* Y axis */}
                   <Line x1={mL} y1={mT} x2={mL} y2={mT + plotH}
-                    stroke="rgba(255,255,255,0.6)" strokeWidth={0.8} />
+                    stroke="rgba(255,255,255,0.5)" strokeWidth={1.2} />
+                  {/* X axis */}
                   <Line x1={mL} y1={mT + plotH} x2={mL + plotW} y2={mT + plotH}
-                    stroke="rgba(255,255,255,0.6)" strokeWidth={0.8} />
-                  {/* Growth curve line — thicker and brighter */}
-                  {gcVals.length > 1 && (
+                    stroke="rgba(255,255,255,0.5)" strokeWidth={1.2} />
+                  {/* X-axis labels */}
+                  {xLabelDays.map(d => {
+                    const lx = xToSvg(d);
+                    const isCurrentDay = d === currentDay;
+                    return (
+                      <React.Fragment key={`xl-${d}`}>
+                        <Line x1={lx} y1={mT + plotH} x2={lx} y2={mT + plotH + 3}
+                          stroke="rgba(255,255,255,0.4)" strokeWidth={0.5} />
+                        <SvgText
+                          x={lx} y={mT + plotH + labelFS + 2}
+                          fontSize={labelFS}
+                          fill={isCurrentDay ? 'rgba(255,51,51,0.9)' : 'rgba(255,255,255,0.45)'}
+                          fontFamily="Courier"
+                          textAnchor="middle"
+                        >{`DAY ${d}`}</SvgText>
+                      </React.Fragment>
+                    );
+                  })}
+                  {/* Growth curve */}
+                  {pts.length > 1 && (
                     <Polyline
                       points={pts.map(p => `${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(' ')}
                       fill="none"
                       stroke="rgba(255,255,255,0.9)"
-                      strokeWidth={1.2}
+                      strokeWidth={1.8}
                     />
                   )}
-                  {/* Latest point — red dot (current position, not at right edge) */}
-                  <Circle cx={lastPt.x} cy={lastPt.y} r={gcW * 0.03} fill="#FF3333" />
+                  {/* Latest point — red dot */}
+                  <Circle cx={lastPt.x} cy={lastPt.y} r={dotR} fill="#FF3333" />
                 </Svg>
               );
             })()}
