@@ -2309,13 +2309,13 @@ export default function Page() {
           const gcVals   = Array.from({ length: streak }, (_, i) => 3 * Math.pow(1.01, i + 1));
           const curVal   = gcVals[gcVals.length - 1];
 
-          // X-axis extends beyond current streak to show future growth space
-          const milestones = [30, 60, 90, 180, 365];
-          const xMax = milestones.find(m => m > streak) ?? Math.ceil(streak * 1.5 / 30) * 30;
+          // X-axis: 1.5× future buffer — current day at ~40%, future fills remaining 60%
+          const futureBuffer = Math.max(Math.ceil(streak * 1.5 / 5) * 5, 10);
+          const xMax = streak + futureBuffer;
 
-          // Y-axis: round min/max to nearest 0.5 for clean labels
-          const gcMinV  = 3.0;  // formula always starts near 3.0
-          const gcMaxV  = Math.ceil(curVal / 0.5) * 0.5;
+          // Y-axis: scale to predicted value at xMax so current position stays near center
+          const gcMinV  = 3.0;
+          const gcMaxV  = Math.ceil(3 * Math.pow(1.01, xMax) / 0.5) * 0.5;
           const gcRange = Math.max(gcMaxV - gcMinV, 0.1);
 
           // Margins: extra left for Y-axis labels
@@ -2323,29 +2323,35 @@ export default function Page() {
           const plotW = chartW - mL - mR;
           const plotH = chartH - mT - mB;
 
-          // Data points scaled to extended X-axis range
-          const pts = gcVals.map((v, i) => ({
-            x: mL + ((i + 1) / xMax) * plotW,
-            y: mT + plotH - ((v - gcMinV) / gcRange) * plotH,
-          }));
+          const xToSvg = (day: number) => mL + (day / xMax) * plotW;
+          const yToSvg = (v: number)   => mT + plotH - ((v - gcMinV) / gcRange) * plotH;
+
+          // Solid line: past data (DAY 1 → current)
+          const pts = gcVals.map((v, i) => ({ x: xToSvg(i + 1), y: yToSvg(v) }));
           const lastPt = pts[pts.length - 1];
 
-          // Y-axis label values (0.5 steps within visible range)
-          const yStep = 0.5;
+          // Dashed line: future prediction (current → xMax), sampled for perf
+          const futureStep = Math.max(1, Math.floor((xMax - streak) / 80));
+          const futurePts: {x: number; y: number}[] = [];
+          for (let day = streak; day <= xMax; day += futureStep) {
+            futurePts.push({ x: xToSvg(day), y: yToSvg(3 * Math.pow(1.01, day)) });
+          }
+          if (futurePts.length === 0 || futurePts[futurePts.length - 1].x < xToSvg(xMax) - 0.5) {
+            futurePts.push({ x: xToSvg(xMax), y: yToSvg(3 * Math.pow(1.01, xMax)) });
+          }
+
+          // Y-axis labels (0.5-step increments)
           const yLabels: number[] = [];
-          for (let yv = gcMinV; yv <= gcMaxV + 0.001; yv += yStep) {
+          for (let yv = gcMinV; yv <= gcMaxV + 0.001; yv += 0.5) {
             yLabels.push(parseFloat(yv.toFixed(1)));
           }
 
-          // X-axis label positions: DAY 1, intermediate milestones, current day
+          // X-axis labels: DAY 1, every 10 days (past only), current day (red)
           const xLabelDays: number[] = [1];
-          // Add intermediate labels every 10 days (up to xMax)
-          for (let d = 10; d < xMax; d += 10) {
-            if (d < streak) xLabelDays.push(d);
+          for (let d = 10; d < streak; d += 10) {
+            xLabelDays.push(d);
           }
           if (!xLabelDays.includes(streak)) xLabelDays.push(streak);
-          const xLabelX = (day: number) => mL + (day / xMax) * plotW;
-          const yLabelY = (yv: number) => mT + plotH - ((yv - gcMinV) / gcRange) * plotH;
 
           return (
             <View style={{ paddingHorizontal: 16, marginTop: 24, marginBottom: 16 }}>
@@ -2358,17 +2364,15 @@ export default function Page() {
               <Svg width={chartW} height={chartH}>
                 {/* Y-axis guide lines (dotted) and labels */}
                 {yLabels.map(yv => {
-                  const ly = yLabelY(yv);
+                  const ly = yToSvg(yv);
                   return (
                     <React.Fragment key={`yg-${yv}`}>
-                      {/* Dotted grid line */}
                       <Line
                         x1={mL} y1={ly} x2={mL + plotW} y2={ly}
                         stroke="rgba(255,255,255,0.1)"
                         strokeWidth={0.5}
                         strokeDasharray="3,4"
                       />
-                      {/* Y-axis label */}
                       <SvgText
                         x={mL - 4} y={ly + 3}
                         fontSize={7} fill="rgba(255,255,255,0.45)"
@@ -2385,7 +2389,7 @@ export default function Page() {
                   stroke="rgba(255,255,255,0.35)" strokeWidth={0.8} />
                 {/* X-axis labels */}
                 {xLabelDays.map(d => {
-                  const lx = xLabelX(d);
+                  const lx = xToSvg(d);
                   const isCurrentDay = d === streak;
                   return (
                     <React.Fragment key={`xl-${d}`}>
@@ -2400,7 +2404,7 @@ export default function Page() {
                     </React.Fragment>
                   );
                 })}
-                {/* Growth line */}
+                {/* Solid growth line: DAY 1 → current (white solid) */}
                 {streak > 1 && (
                   <Polyline
                     points={pts.map(p => `${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(' ')}
@@ -2409,7 +2413,17 @@ export default function Page() {
                     strokeWidth={1.8}
                   />
                 )}
-                {/* Latest point — red dot (current position, not at right edge) */}
+                {/* Dashed future prediction: current → xMax (white dashed) */}
+                {futurePts.length > 1 && (
+                  <Polyline
+                    points={futurePts.map(p => `${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(' ')}
+                    fill="none"
+                    stroke="rgba(255,255,255,0.9)"
+                    strokeWidth={1.8}
+                    strokeDasharray="6,5"
+                  />
+                )}
+                {/* Current position — red dot */}
                 <Circle cx={lastPt.x} cy={lastPt.y} r={4} fill="#FF3333" />
               </Svg>
             </View>
@@ -3321,6 +3335,9 @@ Email: ristu.japan@gmail.com`;
         const bArm   = canvasW * (144 / 1080);
         const bStroke = canvasW * (9 / 1080);
 
+        // Left text area width — prevents overflow into graph area
+        const leftTextW = canvasW * 0.36 - hPad;
+
         const textShadow = {
           textShadowColor: 'rgba(0,0,0,0.65)' as const,
           textShadowOffset: { width: 1, height: 1 },
@@ -3415,27 +3432,33 @@ Email: ristu.japan@gmail.com`;
             }}>{dayStr}</Text>
 
             {/* ── Lower bar ── */}
-            {/* Timestamp */}
-            <Text style={{
-              position: 'absolute', top: lowerTsY, left: hPad,
-              fontSize: lowerTsFS, color: '#fff',
-              fontFamily: 'BebasNeue-Regular',
-              ...textShadow,
-            }}>{lowerTs}</Text>
-            {/* "HABIT: NAME" */}
-            <Text style={{
-              position: 'absolute', top: habitY, left: hPad,
-              fontSize: habitFS, color: '#fff',
-              fontFamily: 'BebasNeue-Regular',
-              ...textShadow,
-            }}>{habitStr}</Text>
+            {/* Timestamp — constrained to left text area */}
+            <Text
+              numberOfLines={1}
+              style={{
+                position: 'absolute', top: lowerTsY, left: hPad,
+                width: leftTextW,
+                fontSize: lowerTsFS, color: '#fff',
+                fontFamily: 'BebasNeue-Regular',
+                ...textShadow,
+              }}>{lowerTs}</Text>
+            {/* "HABIT: NAME" — constrained to left text area */}
+            <Text
+              numberOfLines={1}
+              style={{
+                position: 'absolute', top: habitY, left: hPad,
+                width: leftTextW,
+                fontSize: habitFS, color: '#fff',
+                fontFamily: 'BebasNeue-Regular',
+                ...textShadow,
+              }}>{habitStr}</Text>
 
-            {/* ── Growth curve full graph (lower center-right, HISTORY style) ── */}
+            {/* ── Growth curve full graph (lower right, starts after left text area) ── */}
             {currentDay > 0 && (() => {
-              // Full HISTORY-style graph spanning center-to-right of lower bar
-              const gcW    = canvasW - hPad - canvasW * 0.40;
+              // Graph starts immediately right of text area (leftTextW + hPad gap)
+              const gcLeft = hPad + leftTextW + hPad * 0.5;
+              const gcW    = canvasW - gcLeft - hPad * 0.5;
               const gcH    = barH * 0.80;
-              const gcLeft = canvasW * 0.40;
               const gcTop  = lowerBarTopY + (barH - gcH) / 2;
 
               const mL = gcW * 0.068;
@@ -3448,20 +3471,31 @@ Email: ristu.japan@gmail.com`;
               const gcVals = Array.from({ length: currentDay }, (_, i) => 3 * Math.pow(1.01, i + 1));
               const curVal = gcVals[gcVals.length - 1] ?? 3.0;
 
-              // X range: extend to next milestone for future whitespace
-              const milestones = [30, 60, 90, 180, 365];
-              const xMax = milestones.find(m => m > currentDay) ?? Math.ceil(currentDay * 1.5 / 30) * 30;
+              // X-axis: 1.5× future buffer — current day at ~40%, future fills remaining 60%
+              const futureBuffer = Math.max(Math.ceil(currentDay * 1.5 / 5) * 5, 10);
+              const xMax = currentDay + futureBuffer;
 
-              // Y range: snap to 0.5 steps
+              // Y-axis: scale to predicted value at xMax so current position stays near center
               const gcMinV = 3.0;
-              const gcMaxV = Math.ceil(curVal / 0.5) * 0.5;
+              const gcMaxV = Math.ceil(3 * Math.pow(1.01, xMax) / 0.5) * 0.5;
               const gcRange = Math.max(gcMaxV - gcMinV, 0.1);
 
               const xToSvg = (day: number) => mL + (day / xMax) * plotW;
               const yToSvg = (v: number) => mT + plotH - ((v - gcMinV) / gcRange) * plotH;
 
+              // Solid line: past data (DAY 1 → current)
               const pts = gcVals.map((v, i) => ({ x: xToSvg(i + 1), y: yToSvg(v) }));
               const lastPt = pts[pts.length - 1];
+
+              // Dashed line: future prediction (current → xMax), sampled for perf
+              const futureStep = Math.max(1, Math.floor((xMax - currentDay) / 80));
+              const futurePts: {x: number; y: number}[] = [];
+              for (let day = currentDay; day <= xMax; day += futureStep) {
+                futurePts.push({ x: xToSvg(day), y: yToSvg(3 * Math.pow(1.01, day)) });
+              }
+              if (futurePts.length === 0 || futurePts[futurePts.length - 1].x < xToSvg(xMax) - 0.5) {
+                futurePts.push({ x: xToSvg(xMax), y: yToSvg(3 * Math.pow(1.01, xMax)) });
+              }
 
               // Y labels: 0.5-step increments
               const yLabels: number[] = [];
@@ -3469,10 +3503,10 @@ Email: ristu.japan@gmail.com`;
                 yLabels.push(parseFloat(yv.toFixed(1)));
               }
 
-              // X labels: DAY 1, intermediate DAY 10s, current day
+              // X labels: DAY 1, every 10 days (past only), current day (red)
               const xLabelDays: number[] = [1];
-              for (let d = 10; d < xMax; d += 10) {
-                if (d < currentDay) xLabelDays.push(d);
+              for (let d = 10; d < currentDay; d += 10) {
+                xLabelDays.push(d);
               }
               if (!xLabelDays.includes(currentDay)) xLabelDays.push(currentDay);
 
@@ -3531,7 +3565,7 @@ Email: ristu.japan@gmail.com`;
                       </React.Fragment>
                     );
                   })}
-                  {/* Growth curve */}
+                  {/* Solid growth line: DAY 1 → current (white solid) */}
                   {pts.length > 1 && (
                     <Polyline
                       points={pts.map(p => `${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(' ')}
@@ -3540,7 +3574,17 @@ Email: ristu.japan@gmail.com`;
                       strokeWidth={1.8}
                     />
                   )}
-                  {/* Latest point — red dot */}
+                  {/* Dashed future prediction: current → xMax (white dashed) */}
+                  {futurePts.length > 1 && (
+                    <Polyline
+                      points={futurePts.map(p => `${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(' ')}
+                      fill="none"
+                      stroke="rgba(255,255,255,0.9)"
+                      strokeWidth={1.8}
+                      strokeDasharray="6,5"
+                    />
+                  )}
+                  {/* Current position — red dot */}
                   <Circle cx={lastPt.x} cy={lastPt.y} r={dotR} fill="#FF3333" />
                 </Svg>
               );
