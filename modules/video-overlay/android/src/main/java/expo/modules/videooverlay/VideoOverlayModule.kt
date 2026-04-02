@@ -163,17 +163,6 @@ class VideoOverlayModule : Module() {
     } catch (e: Exception) {
       Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
     }
-    val spaceMonoBold: Typeface = try {
-      Typeface.createFromAsset(context.assets, "fonts/SpaceMono-Bold.ttf")
-    } catch (e: Exception) {
-      Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-    }
-    val spaceMonoRegular: Typeface = try {
-      Typeface.createFromAsset(context.assets, "fonts/SpaceMono-Regular.ttf")
-    } catch (e: Exception) {
-      Typeface.DEFAULT
-    }
-
     // ── Overlay paint factories ────────────────────────────────────────────
     fun textPaint(tf: Typeface, size: Float) = Paint(Paint.ANTI_ALIAS_FLAG).apply {
       textSize  = size
@@ -182,25 +171,18 @@ class VideoOverlayModule : Module() {
       setShadowLayer(4f, 1f, 1f, Color.argb(160, 0, 0, 0))
     }
     val bracketPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-      color       = Color.WHITE
+      color       = Color.argb(179, 255, 255, 255)  // 70% white (lens-finder feel)
       strokeWidth = 2f
       style       = Paint.Style.STROKE
       strokeCap   = Paint.Cap.SQUARE
-      setShadowLayer(4f, 1f, 1f, Color.argb(160, 0, 0, 0))
     }
     val darkPaint = Paint().apply {
       color = Color.argb(97, 0, 0, 0)   // ~38% black for exposure -0.7 EV
       style = Paint.Style.FILL
     }
-    val dotPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-      color = Color.rgb(255, 13, 13)
-      style = Paint.Style.FILL
-      setShadowLayer(4f, 1f, 1f, Color.argb(160, 0, 0, 0))
-    }
 
     // ── Font sizes (for 1080×1920, 420 px bars) ───────────────────────────
     val logoFS    = 72f
-    val upperTsFS = 46f
     val dayFS     = (BAR_H * 0.55f)    // ≈ 231
     val habitFS   = 76f
     val lowerTsFS = 52f
@@ -251,45 +233,93 @@ class VideoOverlayModule : Module() {
       canvas.drawPath(brPath, bracketPaint)
 
       // ── UPPER BAR ─────────────────────────────────────────────────────
-      val logoTopY = BAR_H * 0.22f   // ≈ 92 px from top
-      val dotSize  = logoFS * 0.95f
+      // "ONE SHOT" in BebasNeue — wide kerning, Y-center aligned with DAY
 
-      // Red dot
-      val dotCx = hPad + dotSize / 2f
-      val dotCy = logoTopY + logoFS / 2f
-      canvas.drawCircle(dotCx, dotCy, dotSize / 2f, dotPaint)
-
-      // "ne shot"
-      val neShotPaint = textPaint(spaceMonoBold, logoFS)
-      val neShotX     = hPad + dotSize + logoFS * 0.2f
-      val neShotBaseline = logoTopY + logoFS * 0.85f  // approx baseline
-      canvas.drawText("ne shot", neShotX, neShotBaseline, neShotPaint)
-
-      // Upper timestamp
-      val upperTsPaint    = textPaint(spaceMonoRegular, upperTsFS)
-      val upperTsBaseline = logoTopY + logoFS + 10f + upperTsFS * 0.85f
-      canvas.drawText(upperTimestamp, hPad, upperTsBaseline, upperTsPaint)
-
-      // "DAY 015" — right-aligned, vertically centred in upper bar
-      val dayPaint = textPaint(bebasTypeface, dayFS)
-      val dayW     = dayPaint.measureText(dayStr)
-      val dayX     = OUT_W - hPad - dayW
-      val dayBaseline = BAR_H / 2f + dayFS * 0.35f  // approx vertical centre
+      // DAY — right-aligned, vertically centred in upper bar
+      val dayPaint    = textPaint(bebasTypeface, dayFS)
+      val dayW        = dayPaint.measureText(dayStr)
+      val dayX        = OUT_W - hPad - dayW
+      val dayBaseline = BAR_H / 2f + dayFS * 0.35f
       canvas.drawText(dayStr, dayX, dayBaseline, dayPaint)
 
+      // "ONE SHOT" — Bebas Neue, wide letter spacing (≈0.15em), same Y center as DAY
+      val logoPaint = textPaint(bebasTypeface, logoFS).apply { letterSpacing = 0.15f }
+      val logoBaseline = BAR_H / 2f + logoFS * 0.35f
+      canvas.drawText("ONE SHOT", hPad, logoBaseline, logoPaint)
+
       // ── LOWER BAR ─────────────────────────────────────────────────────
-      val barBottom = OUT_H.toFloat()
-      val bPad      = BAR_H * 0.20f   // ≈ 84 px from bottom
+      // Both lines LEFT-aligned, stacked vertically, centred together in bar.
+      // Right side is free for the growth curve graph.
+      val barTop    = (BAR_H + OUT_W).toFloat()  // 1500
+      val barCenterY = barTop + BAR_H / 2f        // 1710
 
-      // "HABIT: NAME" — second line (lower)
-      val habitPaint    = textPaint(spaceMonoBold, habitFS)
-      val habitBaseline = barBottom - bPad
-      canvas.drawText(habitStr, hPad, habitBaseline, habitPaint)
+      // Approx text block height: each Paint baseline is ~0.85× fontSize above top
+      val twoLineH  = lowerTsFS + 14f + habitFS   // gap of 14 between lines
+      val lowerTsBaseline = barCenterY - twoLineH / 2f + lowerTsFS * 0.85f
+      val habitBaseline   = lowerTsBaseline + 14f + habitFS * 0.85f + lowerTsFS * 0.15f
 
-      // Timestamp — first line (above HABIT)
-      val lowerTsPaint    = textPaint(spaceMonoRegular, lowerTsFS)
-      val lowerTsBaseline = habitBaseline - habitFS * 0.2f - lowerTsFS
+      val lowerTsPaint = textPaint(bebasTypeface, lowerTsFS)
+      val habitPaint   = textPaint(bebasTypeface, habitFS)
       canvas.drawText(lowerTimestamp, hPad, lowerTsBaseline, lowerTsPaint)
+      canvas.drawText(habitStr,       hPad, habitBaseline,   habitPaint)
+
+      // ── GROWTH CURVE (lower-right) ──────────────────────────────────────
+      val gcW   = BAR_H * 0.55f
+      val gcH   = BAR_H * 0.48f
+      val gcX   = OUT_W - hPad - gcW
+      val gcTop2 = barTop + (BAR_H - gcH) / 2f
+
+      val gcML = gcW * 0.12f; val gcMB = gcH * 0.12f
+      val gcMR = gcW * 0.06f; val gcMT = gcH * 0.08f
+      val gcPlotW = gcW - gcML - gcMR
+      val gcPlotH = gcH - gcMT - gcMB
+
+      val gcVals  = (1..currentDay).map { d -> 3.0 * Math.pow(1.01, d.toDouble()) }
+      val gcMinV  = gcVals.first()
+      val gcMaxV  = gcVals.last()
+      val gcRange = maxOf(gcMaxV - gcMinV, 0.001)
+
+      // Axis paint
+      val axisPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color       = Color.argb(90, 255, 255, 255)
+        strokeWidth = 0.5f
+        style       = Paint.Style.STROKE
+      }
+
+      // L-shaped axis
+      val axisPath = Path().apply {
+        moveTo(gcX + gcML, gcTop2 + gcMT)
+        lineTo(gcX + gcML, gcTop2 + gcMT + gcPlotH)
+        lineTo(gcX + gcML + gcPlotW, gcTop2 + gcMT + gcPlotH)
+      }
+      canvas.drawPath(axisPath, axisPaint)
+
+      // Curve line
+      val curvePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color       = Color.argb(179, 255, 255, 255)  // 70% white
+        strokeWidth = 1.0f
+        style       = Paint.Style.STROKE
+        strokeCap   = Paint.Cap.ROUND
+        strokeJoin  = Paint.Join.ROUND
+      }
+      if (currentDay > 1) {
+        val curvePath = Path()
+        gcVals.forEachIndexed { i, v ->
+          val px = gcX + gcML + (i.toFloat() / (gcVals.size - 1)) * gcPlotW
+          val py = gcTop2 + gcMT + gcPlotH - ((v - gcMinV) / gcRange).toFloat() * gcPlotH
+          if (i == 0) curvePath.moveTo(px, py) else curvePath.lineTo(px, py)
+        }
+        canvas.drawPath(curvePath, curvePaint)
+      }
+
+      // Latest point — red dot
+      val lastDotPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.rgb(255, 51, 51)
+        style = Paint.Style.FILL
+      }
+      val dotX2 = gcX + gcML + (if (currentDay > 1) gcPlotW else gcPlotW / 2f)
+      val dotY2 = gcTop2 + gcMT + gcPlotH - ((gcMaxV - gcMinV) / gcRange).toFloat() * gcPlotH
+      canvas.drawCircle(dotX2, dotY2, gcW * 0.03f, lastDotPaint)
 
       return canvas9x16
     }
