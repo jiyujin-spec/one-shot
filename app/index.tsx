@@ -299,6 +299,8 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     preview_expiry_hint: 'この動画は明日消えます — 今すぐシェアして記録を残そう',
     guide_card_storage_title: '動画の保存ルール',
     guide_card_storage_body: '動画はアプリ内に当日のみ保存されます。翌日のアプリ起動時に自動削除されます。\n\n記録を残したいときは、当日中にInstagramやTikTokにシェアしてください。\nシェアした投稿が、あなたの継続の証になります。',
+    guide_free_trial_title: '無料体験について',
+    guide_free_trial_body: 'One Shotは新規登録の方に7日間の無料体験をご提供します。\n\n無料体験の確認後すぐにサブスクリプションが開始されますが、7日間の体験期間中は一切課金されません。\n\n体験終了後は選択したプランで自動的に更新されます。\n・月額プラン: ¥500 / 月\n・年額プラン: ¥5,000 / 年\n\n課金を避けるには、体験終了の24時間前までに解約してください。\n\n解約方法:\niPhoneの設定 → Apple ID → サブスクリプション',
   },
   en: {
     meta_description: 'One video a day. Build the habit. Leave the record.',
@@ -429,6 +431,8 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     preview_expiry_hint: 'This video disappears tomorrow — share now to keep it',
     guide_card_storage_title: 'Video storage',
     guide_card_storage_body: 'Videos are stored in the app for today only and automatically deleted on your next launch.\n\nTo preserve your record, share to Instagram or TikTok before the day ends.\nYour post is your proof of work.',
+    guide_free_trial_title: 'Free Trial',
+    guide_free_trial_body: 'One Shot offers a 7-day free trial for new subscribers.\n\nYour subscription begins immediately after confirming your free trial. You will NOT be charged during the 7-day trial period.\n\nAfter the trial ends, your subscription automatically renews at the selected price:\n・Monthly: ¥500 / month\n・Annual: ¥5,000 / year\n\nTo avoid being charged, cancel at least 24 hours before the trial ends.\n\nCancel anytime via:\niPhone Settings → Apple ID → Subscriptions',
   },
 };
 
@@ -2914,6 +2918,7 @@ export default function Page() {
             { title: t('guide_card4_title'), body: t('guide_card4_body') },
             { title: t('guide_card5_title'), body: t('guide_card5_body') },
             { title: t('guide_rule_10day_title'), body: t('guide_rule_10day_body') },
+            { title: t('guide_free_trial_title'), body: t('guide_free_trial_body') },
           ].map((card, i) => (
             <View key={i} style={[styles.guideCard, card.highlight && styles.guideCardHighlight]}>
               <Text style={[styles.guideCardTitle, card.highlight && styles.guideCardTitleHighlight]}>{card.title}</Text>
