@@ -20,6 +20,8 @@ import {
   ActivityIndicator,
   Image,
   Linking,
+  Animated,
+  Easing,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -42,6 +44,7 @@ import * as FileSystem from 'expo-file-system';
 import * as Notifications from 'expo-notifications';
 import * as StoreReview from 'expo-store-review';
 import * as Font from 'expo-font';
+import * as Haptics from 'expo-haptics';
 // Build 27: expo-web-browser (v55) は expo 51 のネイティブ層に存在しないため
 // Linking.openURL に置き換えて ExpoWebBrowser ネイティブモジュール依存を排除する。
 // expo-web-browser import removed
@@ -659,6 +662,14 @@ export default function Page() {
 
   const toastTimer = useRef<any>(null);
 
+  // ── Graph animation state (History screen) ──────────────────────────────────
+  // graphAnimRef: Animated.Value 0→1 (linear, quad-in easing applied in listener)
+  // graphAnimStep: 現在アニメーション中の描画済み日数 (0 = 未描画, streak = 完了)
+  // graphShowFuture: true になった瞬間に将来予測破線を表示
+  const graphAnimRef = useRef(new Animated.Value(0));
+  const [graphAnimStep, setGraphAnimStep] = useState(0);
+  const [graphShowFuture, setGraphShowFuture] = useState(false);
+
   // ── Font loading ────────────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -682,6 +693,71 @@ export default function Page() {
       });
     } catch {}
   }, []);
+
+  // ── History graph animation ─────────────────────────────────────────────────
+  // HISTORY 画面に遷移するたびに成長曲線アニメーションを再生する。
+  // ・赤い点が DAY 1 → 現在地へ Quad In 加速しながら移動
+  // ・白い実線が赤い点に追従してリアルタイムに伸びる
+  // ・現在地到達と同時に白い破線（将来予測）をパッと表示
+  // ・移動中は Light ハプティクスを等間隔で発火（トトトトトッ）
+  // ・到達時は Heavy ハプティクスを1回発火（ドン！）
+  useEffect(() => {
+    if (screen !== 'history' || appState.streak === 0) return;
+
+    const streak = appState.streak;
+
+    // リセット
+    graphAnimRef.current.stopAnimation();
+    graphAnimRef.current.setValue(0);
+    setGraphAnimStep(0);
+    setGraphShowFuture(false);
+
+    // ハプティクス発火間隔: streak が大きいほど粗くなるが最大 15 発
+    const hapticInterval = Math.max(1, Math.ceil(streak / 15));
+    // 重複発火防止用（クロージャ内の可変カウンタ）
+    let lastFiredStep = -1;
+    let lastSetStep = -1;
+
+    const listenerId = graphAnimRef.current.addListener(({ value }) => {
+      // Quad In: value は 0→1 (linear) → step は加速感あり
+      const step = Math.min(Math.round(value * streak), streak);
+      // 同じ step での再描画をスキップ（パフォーマンス最適化）
+      if (step === lastSetStep) return;
+      lastSetStep = step;
+      setGraphAnimStep(step);
+
+      // 移動中ハプティクス（等間隔 Light）
+      if (step > 0 && step < streak) {
+        const hapticBucket = Math.floor(step / hapticInterval);
+        const lastBucket   = Math.floor(lastFiredStep / hapticInterval);
+        if (hapticBucket > lastBucket) {
+          lastFiredStep = step;
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+        }
+      }
+    });
+
+    Animated.timing(graphAnimRef.current, {
+      toValue: 1,
+      duration: 1350,
+      easing: Easing.in(Easing.quad),  // 最初ゆっくり → 後半爆速
+      useNativeDriver: false,
+    }).start(({ finished }) => {
+      graphAnimRef.current.removeListener(listenerId);
+      if (finished) {
+        setGraphAnimStep(streak);
+        setGraphShowFuture(true);
+        // 到達ハプティクス（Heavy: ドン！）
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy).catch(() => {});
+      }
+    });
+
+    return () => {
+      graphAnimRef.current.removeListener(listenerId);
+      graphAnimRef.current.stopAnimation();
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [screen, appState.streak]);
 
   // ── Translation helper ──────────────────────────────────────────────────────
 
@@ -2325,9 +2401,14 @@ export default function Page() {
           const xToSvg = (day: number) => mL + (day / xMax) * plotW;
           const yToSvg = (v: number)   => mT + plotH - ((v - gcMinV) / gcRange) * plotH;
 
-          // Solid line: past data (DAY 1 → current)
+          // 全 streak 日分の座標（アニメーションのスライスに使う）
           const pts = gcVals.map((v, i) => ({ x: xToSvg(i + 1), y: yToSvg(v) }));
-          const lastPt = pts[pts.length - 1];
+
+          // アニメーション進行に応じて描画する点数を絞り込む
+          // graphAnimStep = 0 → 未描画, graphAnimStep = streak → 完了
+          const clampedStep = Math.min(Math.max(graphAnimStep, 0), streak);
+          const animPts    = pts.slice(0, clampedStep);
+          const animLastPt = animPts.length > 0 ? animPts[animPts.length - 1] : null;
 
           // Dashed line: future prediction (current → xMax), sampled for perf
           const futureStep = Math.max(1, Math.floor((xMax - streak) / 80));
@@ -2403,17 +2484,17 @@ export default function Page() {
                     </React.Fragment>
                   );
                 })}
-                {/* Solid growth line: DAY 1 → current (white solid) */}
-                {streak > 1 && (
+                {/* 白い実線: DAY 1 → アニメーション現在地（リアルタイムに伸びる） */}
+                {animPts.length > 1 && (
                   <Polyline
-                    points={pts.map(p => `${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(' ')}
+                    points={animPts.map(p => `${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(' ')}
                     fill="none"
                     stroke="rgba(255,255,255,0.9)"
                     strokeWidth={1.8}
                   />
                 )}
-                {/* Dashed future prediction: current → xMax (white dashed) */}
-                {futurePts.length > 1 && (
+                {/* 白い破線（将来予測）: 現在地到達の瞬間にパッと表示 */}
+                {graphShowFuture && futurePts.length > 1 && (
                   <Polyline
                     points={futurePts.map(p => `${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(' ')}
                     fill="none"
@@ -2422,8 +2503,10 @@ export default function Page() {
                     strokeDasharray="6,5"
                   />
                 )}
-                {/* Current position — red dot */}
-                <Circle cx={lastPt.x} cy={lastPt.y} r={4} fill="#FF3333" />
+                {/* 赤い点: アニメーション中は現在の描画先端を追う */}
+                {animLastPt && (
+                  <Circle cx={animLastPt.x} cy={animLastPt.y} r={4} fill="#FF3333" />
+                )}
               </Svg>
             </View>
           );
