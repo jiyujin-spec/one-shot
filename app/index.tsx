@@ -24,6 +24,7 @@ import {
   Easing,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { ICloudKV } from 'icloud-kv-store';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { CameraView, CameraType, useCameraPermissions } from 'expo-camera';
 import * as MediaLibrary from 'expo-media-library';
@@ -794,7 +795,10 @@ export default function Page() {
   const saveAppState = useCallback(async (newState: AppState) => {
     try {
       // Build 7: schema_version を付与して v3 キーに保存
-      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({ schema_version: SCHEMA_VERSION, ...newState }));
+      const json = JSON.stringify({ schema_version: SCHEMA_VERSION, ...newState });
+      await AsyncStorage.setItem(STORAGE_KEY, json);
+      ICloudKV.setItem(STORAGE_KEY, json);
+      ICloudKV.synchronize();
     } catch {
       // silent
     }
@@ -1135,6 +1139,13 @@ export default function Page() {
           if (rawLang === 'en' || rawLang === 'ja') {
             savedLang = rawLang;
             setLang(rawLang);
+          } else {
+            // ローカルになければ iCloud から復元
+            const iCloudLang = ICloudKV.getItem(LANG_KEY);
+            if (iCloudLang === 'en' || iCloudLang === 'ja') {
+              savedLang = iCloudLang;
+              setLang(iCloudLang as Lang);
+            }
           }
         } catch (e) {
           console.error('[Init] Failed to load language setting:', e);
@@ -1157,6 +1168,14 @@ export default function Page() {
               const parsed = JSON.parse(rawV2);
               loaded = { ...defaultState, ...parsed };
               console.log('[Build7] State migrated from v2 to v3');
+            } else {
+              // ローカルデータなし → iCloud から復元（機種変更対応）
+              const iCloudRaw = ICloudKV.getItem(STORAGE_KEY);
+              if (iCloudRaw) {
+                const { schema_version: _sv, ...parsed } = JSON.parse(iCloudRaw);
+                loaded = { ...defaultState, ...parsed };
+                console.log('[iCloud] AppState restored from iCloud KV Store');
+              }
             }
           }
           // Ensure rcUserID
@@ -1219,13 +1238,21 @@ export default function Page() {
               });
 
               // v3 形式で永続化
-              AsyncStorage.setItem(
-                RECORDS_KEY,
-                JSON.stringify({ schema_version: SCHEMA_VERSION, records: loadedRecords })
-              ).catch(() => {});
+              const migratedJson = JSON.stringify({ schema_version: SCHEMA_VERSION, records: loadedRecords });
+              AsyncStorage.setItem(RECORDS_KEY, migratedJson).catch(() => {});
+              ICloudKV.setItem(RECORDS_KEY, migratedJson);
+              ICloudKV.synchronize();
               console.log('[Build7] Records migration to v3 complete');
+            } else {
+              // ローカルデータなし → iCloud から復元（機種変更対応）
+              const iCloudRaw = ICloudKV.getItem(RECORDS_KEY);
+              if (iCloudRaw) {
+                const stored = JSON.parse(iCloudRaw) as { schema_version: number; records: RecordEntry[] };
+                loadedRecords = Array.isArray(stored.records) ? stored.records : [];
+                console.log('[iCloud] Records restored from iCloud KV Store');
+              }
             }
-            // recRawV2 もなければ loadedRecords は [] のまま（新規インストール）
+            // recRawV2 もなければ iCloud もなければ loadedRecords は [] のまま（新規インストール）
           }
         } catch (e) {
           console.error('[Init] Failed to load records, using empty array:', e);
@@ -1328,10 +1355,10 @@ export default function Page() {
 
   useEffect(() => {
     if (!isLoading) {
-      AsyncStorage.setItem(
-        RECORDS_KEY,
-        JSON.stringify({ schema_version: SCHEMA_VERSION, records })
-      ).catch(() => {});
+      const json = JSON.stringify({ schema_version: SCHEMA_VERSION, records });
+      AsyncStorage.setItem(RECORDS_KEY, json).catch(() => {});
+      ICloudKV.setItem(RECORDS_KEY, json);
+      ICloudKV.synchronize();
     }
   }, [records, isLoading]);
 
@@ -1733,6 +1760,8 @@ export default function Page() {
   const switchLang = useCallback((l: Lang) => {
     setLang(l);
     AsyncStorage.setItem(LANG_KEY, l).catch(() => {});
+    ICloudKV.setItem(LANG_KEY, l);
+    ICloudKV.synchronize();
   }, []);
 
   // ── Reset all ───────────────────────────────────────────────────────────────
@@ -1749,6 +1778,10 @@ export default function Page() {
             STORAGE_KEY, RECORDS_KEY, LANG_KEY,
             LEGACY_STORAGE_KEY, LEGACY_RECORDS_KEY,
           ]);
+          ICloudKV.removeItem(STORAGE_KEY);
+          ICloudKV.removeItem(RECORDS_KEY);
+          ICloudKV.removeItem(LANG_KEY);
+          ICloudKV.synchronize();
           setAppState(defaultState);
           setRecords([]);
           setScreen('onboarding');

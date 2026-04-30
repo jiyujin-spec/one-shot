@@ -1,0 +1,8 @@
+{
+  "name": "icloud-kv-store",
+  "version": "1.0.0",
+  "description": "NSUbiquitousKeyValueStore wrapper for One Shot iCloud backup",
+  "main": "src/index",
+  "types": "src/index",
+  "private": true
+}

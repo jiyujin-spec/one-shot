@@ -14,6 +14,12 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.jin.oneshot",
+      "usesIcloudStorage": true,
+      "iCloudContainerIdentifier": "iCloud.com.jin.oneshot",
+      "entitlements": {
+        "com.apple.developer.icloud-container-identifiers": ["iCloud.com.jin.oneshot"],
+        "com.apple.developer.ubiquity-kvstore-identifier": "$(TeamIdentifierPrefix)com.jin.oneshot"
+      },
       "buildNumber": "32",
       "icon": "./assets/images/icon.png",
       "infoPlist": {
@@ -54,6 +60,7 @@
       "expo-dev-client",
       "expo-router",
       "./modules/video-overlay/plugin",
+      "./modules/icloud-kv-store/plugin",
       [
         "expo-camera",
         {

@@ -42,7 +42,8 @@
     "react-native-screens": "3.31.1",
     "react-native-svg": "15.2.0",
     "react-native-view-shot": "3.8.0",
-    "video-overlay": "file:./modules/video-overlay"
+    "video-overlay": "file:./modules/video-overlay",
+    "icloud-kv-store": "file:./modules/icloud-kv-store"
   },
   "devDependencies": {
     "@babel/core": "^7.24.0",
