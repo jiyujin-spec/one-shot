@@ -27,6 +27,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ICloudKV } from 'icloud-kv-store';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { CameraView, CameraType, useCameraPermissions } from 'expo-camera';
+import { PinchGestureHandler, State as GestureState } from 'react-native-gesture-handler';
+import type { PinchGestureHandlerGestureEvent, PinchGestureHandlerStateChangeEvent } from 'react-native-gesture-handler';
 import * as MediaLibrary from 'expo-media-library';
 import * as Sharing from 'expo-sharing';
 import { Feather, Ionicons } from '@expo/vector-icons';
@@ -573,16 +575,22 @@ async function scheduleDailyNotification(timeStr: string, title: string, body: s
 // CameraView を React.memo でラップし、親の state 変化による再レンダリングを防ぐ
 // countdown/isRecording が変わっても CameraView 自体は再マウントされない → フリッカー解消
 
-const StableCameraView = React.memo(({ cameraRef, facing, mode }: {
+const StableCameraView = React.memo(({ cameraRef, facing, mode, enableTorch, flash, zoom }: {
   cameraRef: RefObject<CameraView>;
   facing: CameraType;
   mode: 'video' | 'picture';
+  enableTorch: boolean;
+  flash: 'on' | 'off';
+  zoom: number;
 }) => (
   <CameraView
     ref={cameraRef}
     style={styles.camera}
     facing={facing}
     mode={mode}
+    enableTorch={enableTorch}
+    flash={flash}
+    zoom={zoom}
   />
 ));
 
@@ -624,6 +632,9 @@ export default function Page() {
   const [recSecs, setRecSecs] = useState<5 | 10>(5);
   const recSecsRef = useRef<5 | 10>(5);
   const [isRecording, setIsRecording] = useState(false);
+  const [flashOn, setFlashOn] = useState(false);
+  const [zoom, setZoom] = useState(0);
+  const zoomBaseRef = useRef(0);
   const [countdown, setCountdown] = useState<number | null>(null);       // 撮影前 3-2-1
   const [recordingCountdown, setRecordingCountdown] = useState<number | null>(null); // 録画中残り秒数
   const [capturedUri, setCapturedUri] = useState<string | null>(null);
@@ -2196,12 +2207,30 @@ export default function Page() {
     return (
       <View style={styles.cameraContainer}>
 
-        {/* StableCameraView: React.memo でラップ → フリッカーなし */}
-        <StableCameraView
-          cameraRef={cameraRef}
-          facing={facing}
-          mode={camMode === 'video' ? 'video' : 'picture'}
-        />
+        {/* StableCameraView: React.memo でラップ → フリッカーなし
+            PinchGestureHandler でピンチズームを制御（ビデオ・写真モード共通、録画中も有効）*/}
+        <PinchGestureHandler
+          onGestureEvent={(e: PinchGestureHandlerGestureEvent) => {
+            const next = Math.max(0, Math.min(0.5, zoomBaseRef.current + (e.nativeEvent.scale - 1) * 0.3));
+            setZoom(next);
+          }}
+          onHandlerStateChange={(e: PinchGestureHandlerStateChangeEvent) => {
+            if (e.nativeEvent.state === GestureState.BEGAN) {
+              zoomBaseRef.current = zoom;
+            }
+          }}
+        >
+          <View style={StyleSheet.absoluteFill}>
+            <StableCameraView
+              cameraRef={cameraRef}
+              facing={facing}
+              mode={camMode === 'video' ? 'video' : 'picture'}
+              enableTorch={camMode === 'video' && flashOn && facing === 'back'}
+              flash={camMode === 'photo' && flashOn && facing === 'back' ? 'on' : 'off'}
+              zoom={zoom}
+            />
+          </View>
+        </PinchGestureHandler>
 
         {/* 事前カウントダウン: 大きな白い数字（image_3 通り）*/}
         {countdown !== null && (
@@ -2235,17 +2264,26 @@ export default function Page() {
           </View>
         )}
 
-        {/* トップバー: 左=×（閉じる）、右=フリップ */}
+        {/* トップバー: 左=×（閉じる）、右=フラッシュ + フリップ */}
         <View style={styles.camTopBar}>
           <TouchableOpacity style={styles.camTopBtnFlat} onPress={() => setScreen('home')}>
             <Ionicons name="close" size={28} color="#fff" />
           </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.camTopBtnFlat}
-            onPress={() => setFacing(f => f === 'front' ? 'back' : 'front')}
-          >
-            <Ionicons name="camera-reverse-outline" size={26} color="#fff" />
-          </TouchableOpacity>
+          <View style={styles.camTopRightGroup}>
+            <TouchableOpacity
+              style={[styles.camTopBtnFlat, facing === 'front' && { opacity: 0.3 }]}
+              onPress={() => setFlashOn(v => !v)}
+              disabled={facing === 'front'}
+            >
+              <Ionicons name="flash" size={24} color={flashOn ? '#FFD60A' : '#FFFFFF'} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.camTopBtnFlat}
+              onPress={() => setFacing(f => f === 'front' ? 'back' : 'front')}
+            >
+              <Ionicons name="camera-reverse-outline" size={26} color="#fff" />
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* ボトムエリア: モードタブ + シャッター行 */}
@@ -4356,6 +4394,10 @@ const styles = StyleSheet.create({
     height: 44,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  camTopRightGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
 
   // ボトムエリア

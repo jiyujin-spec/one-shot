@@ -3,6 +3,7 @@ import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 // ─── Build 28: console.error log accumulator (dev-only) ──────────────────────
 // Captures console.error calls for the ErrorBoundary debug panel.
@@ -167,11 +168,13 @@ const styles = StyleSheet.create({
 
 export default function RootLayout() {
   return (
-    <AppErrorBoundary>
-      <SafeAreaProvider>
-        <StatusBar style="light" backgroundColor="#000" translucent />
-        <Stack screenOptions={{ headerShown: false }} />
-      </SafeAreaProvider>
-    </AppErrorBoundary>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <AppErrorBoundary>
+        <SafeAreaProvider>
+          <StatusBar style="light" backgroundColor="#000" translucent />
+          <Stack screenOptions={{ headerShown: false }} />
+        </SafeAreaProvider>
+      </AppErrorBoundary>
+    </GestureHandlerRootView>
   );
 }
